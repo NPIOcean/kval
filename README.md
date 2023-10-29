@@ -15,3 +15,4 @@ Just starting up, envisioning the following submodules:
 - `calc`: Various useful function
 - `util`: Various backend support functions 
 
+Private for now, shoudl make public once there starts to be actual useful stuff here. 
