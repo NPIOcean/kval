@@ -4,16 +4,29 @@
 CNV parsing functions.
 '''
 
-def _read_column_data_pandas():
+import pandas as pd
+import xarray as xr
+
+def _read_column_data_pandas(startline):
     '''
-    Reads the columnar data to 
+    Reads columnar data from a single .cnv to a pandas array.
+
+    TBD: 
+     - Standardize variable names and attributes. 
+     - Add relevant attributes from header
+
     '''
+    da = pd.read_csv(fn, header = hd['hdr_end_line']+1,
+                 delim_whitespace=True,
+                 names = hd['col_names'])
 
 
 def read_header(cnvfile):
     '''
     Reads a SBE .cnv (or .hdr, .btl) file and returns a dictionary with various
     metadata parameters extracted from the header. 
+
+    TBD: Grab instrument serial numbers.
     '''
     
     with open(cnvfile, 'r') as f:
@@ -63,16 +76,25 @@ def read_header(cnvfile):
             # At the end of the SENSORS section: read the history lines
             if '</Sensors>' in line:
                 start_read_history = True
-                
+
+
             if start_read_history:
                 hdict['SBEproc_hist'] += [line] 
-            
+
+
             # Read the line containing the END string
             # (and stop reading the file after that)
             if '*END*' in line:
                 hdict['hdr_end_line'] = n_line
                 break
 
+        # Remove the first ('</Sensors>') and last ('*END*') lines from the SBE history string.
+        hdict['SBEproc_hist'] = hdict['SBEproc_hist'] [1:-1]
+             
+        return hdict
+
+
+#
 
 ### UTILITY FUNCTIONS
 
@@ -122,7 +144,6 @@ def _nmea_time_to_datetime(mon, da, yr, hms):
     
     ['Jan', '05', '2021', '15:58:23']  --> Timestamp('2021-01-05 15:58:23')
     '''
-    nmea_time_str = ' '.join(nmea_time_split)
-    nmea_time_dt = pd.to_datetime(nmea_time_str, format = '%b %d %Y %H:%M:%S')
+    nmea_time_dt = pd.to_datetime(f'{mon} {da} {yr} {hms}')
     
     return nmea_time_dt
