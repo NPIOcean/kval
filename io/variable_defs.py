@@ -1,6 +1,8 @@
 '''
 VARIABLE_DEFS.PY
 
+!!INCOMPLETE!!
+
 Contains information used to standardize variable namings:
 
 - Mapping from SBE names (e.g. "prDM" -> "PRES", 't090C' -> 'TEMP1')
@@ -9,14 +11,7 @@ Contains information used to standardize variable namings:
 
 '''
 
-# Standard 
-var_map = {
-    'prDM':{'PRES', '', 'dbar'
-    't090C':{'TEMP',
-    't190C':{'TEMP2',
-    ''
 
-}
 
 
 
