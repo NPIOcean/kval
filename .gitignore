@@ -1,13 +1,11 @@
 #### Øyvind's:
 
 *.pyc
+building
 
 
 #### Defaults:
 
-
-
-io/*.ipynb
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

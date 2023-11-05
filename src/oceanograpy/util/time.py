@@ -34,9 +34,7 @@ def start_end_times_to_duration(start_time, end_time):
     *TBW*
 
     Calculate time difference beetween two timestamps
-    and convert to ISO8601:
-    
-        P[YYYY]-[MM]-[DD]T[hh]:[mm]:[ss]
+    and convert to ISO8601 (P[YYYY]-[MM]-[DD]T[hh]:[mm]:[ss])
     '''
 
     pass
