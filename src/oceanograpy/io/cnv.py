@@ -1,7 +1,9 @@
 ### OceanograPy.io.cnv.py ###
 
 '''
-CNV parsing functions.
+CNV parsing.
+
+Including pressure binning -> does that belong here or elsewhere? 
 '''
 
 import pandas as pd
@@ -9,7 +11,7 @@ import xarray as xr
 import numpy as np
 from oceanograpy.io import _variable_defs as vardef
 import matplotlib.pyplot as plt
-
+import re
 
 
 def read_cnv(cnvfile, 
@@ -36,7 +38,7 @@ def read_cnv(cnvfile,
     header_info = read_header(cnvfile)
 
     ds = _read_column_data_xr(cnvfile, header_info)
-    ds = _assign_nice_names(ds)
+    ds = _update_variables(ds, cnvfile)
     ds = _convert_time(ds, header_info)
     ds0 = ds.copy()
 
@@ -195,6 +197,8 @@ def _inspect_downcast(ds, ds0, start_scan=None, end_scan=None):
     ax.grid(alpha = 0.5)
     plt.show()
 
+
+
 def _apply_flag(ds):
     '''
     Applies the *flag* value assigned by the SBE processing.
@@ -205,6 +209,8 @@ def _apply_flag(ds):
     ds = ds.where(ds.SBE_FLAG==0, drop = True)      
 
     return ds
+
+
 
 def _remove_upcast(ds):
     '''
@@ -247,22 +253,50 @@ def _read_column_data_xr(cnvfile, header_info):
 
     return ds
 
-def _assign_nice_names(ds):
+
+
+def _update_variables(ds, cnvfile):
     '''
-    Take a Dataset and update the header names from SBE names (e.g. 't090C')
-    to more standardized name (e.g., 'TEMP1'). Also assign the appropriate units 
-    in the "units" attribute.
+    Take a Dataset and 
+    - Update the header names from SBE names (e.g. 't090C')
+      to more standardized name (e.g., 'TEMP1'). 
+    - Assign the appropriate units and standard_name as attributes.
+    - Assign sensor serial number(s) and/or calibration date(s)
+      where available.
+
+    What to look for is specified in _variable_defs.py
+    -> Will update dictionaries in there as we encounter differently
+       formatted files.
     '''
     
+    sensor_info = read_sensor_info(cnvfile)
+
     for old_name in ds.keys():
         old_name_cap = old_name.upper()
         if old_name_cap in vardef.SBE_name_map:
-            new_name = vardef.SBE_name_map[old_name_cap]['name']
-            unit = vardef.SBE_name_map[old_name_cap]['units']
+
+            var_dict = vardef.SBE_name_map[old_name_cap]
+
+            new_name = var_dict['name']
+            unit = var_dict['units']
             ds = ds.rename({old_name:new_name})
             ds[new_name].attrs['units'] = unit
 
+            if 'sensors' in var_dict:
+                sensor_SNs = []
+                sensor_caldates = []
+
+                for sensor in var_dict['sensors']:
+                    sensor_SNs += [sensor_info[sensor]['SN']]
+                    sensor_caldates += [sensor_info[sensor]['cal_date']]
+
+                ds[new_name].attrs['sensor_serial_number'] = (
+                    ', '.join(sensor_SNs))
+
+                ds[new_name].attrs['sensor_calibration_date'] = (
+                    ', '.join(sensor_caldates)) 
     return ds
+
 
 
 def read_header(cnvfile):
@@ -343,6 +377,94 @@ def read_header(cnvfile):
         return hdict
 
 
+def read_sensor_info(cnvfile, verbose = False):
+    '''
+    Look through the header for information about sensors:
+        - Serial numbers
+        - Calibration dates  
+    '''
+
+    sensor_dict = {}
+
+    # Define stuff we want to remove from strings
+    drop_str_patterns = ['<.*?>', '\n', ' NPI']
+    drop_str_pattern_comb = '|'.join(drop_str_patterns)
+
+    with open(cnvfile, 'r') as f:
+        look_sensor = False
+
+        # Loop through header lines 
+        for n_line, line in enumerate(f.readlines()):
+
+            # When encountering a <sensor> flag: 
+            # Begin looking for instrument info
+            if '<sensor' in line:
+                # Set initial flags
+                look_sensor = True
+                sensor_header_line = n_line+1
+                store_sensor_info = False
+
+            if look_sensor:
+                # Look for an entry corresponding to the sensor in the 
+                # _sensor_info_dict (prescribed) dictionary
+                # If found: read info. If not: Ignore.
+                if n_line == sensor_header_line:
+                    for sensor_str, var_key in vardef.sensor_info_dict.items():
+                        if sensor_str in line:
+                            store_sensor_info = True
+                            var_key_sensor = var_key
+                    
+                    # Print if verbose
+                    shline = line.replace('#     <!-- ', '').replace('\n', '')
+                    (print(f'\nRead from: {var_key_sensor} ({shline})') 
+                    if verbose else None)
+
+                
+                if store_sensor_info:
+                    # Grab instrument serial number
+                    if '<SerialNumber>' in line:
+                        rind_sn = line.rindex('<SerialNumber>')+14
+
+                        SN_instr = re.sub(drop_str_pattern_comb, '', 
+                                               line[rind_sn:])
+                       # SN_instr = (line[rind_sn:]
+                       #             .replace('</SerialNumber>', '')
+                       #             .replace('\n', '')
+                       #             .replace(' NPI', ''))
+                    # Grab calibration date
+                    if '<CalibrationDate>' in line:
+                        rind_cd = line.rindex('<CalibrationDate>')+17
+                        cal_date_instr = (line[rind_cd:]
+                                    .replace('</CalibrationDate>', '')
+                                    .replace('\n', ''))
+            
+            # When encountering a <sensor> flag: 
+            # Stop looking for instrument info and store
+            # in dictionary
+            if '</sensor>' in line:
+
+                # Store to dictionary
+                if look_sensor and store_sensor_info:
+                    sensor_dict[var_key_sensor] = {
+                        'SN':SN_instr,
+                        'cal_date':cal_date_instr
+                    }
+
+                # Print if verbose
+                (print(f'SN: {SN_instr}  // cal date: {cal_date_instr}+n',
+                       f'Stop reading from {var_key_sensor} (save: {store_sensor_info})') 
+                if verbose else None)
+
+                # Reset flags
+                look_sensor, var_key_sensor, = False, None
+                SN_instr, cal_date_instr = None, None
+
+
+            # Stop reading after the END string
+            if '*END*' in line:
+                return sensor_dict
+
+    
 
 
 #
