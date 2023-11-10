@@ -12,27 +12,58 @@ import numpy as np
 from oceanograpy.io import _variable_defs as vardef
 import matplotlib.pyplot as plt
 import re
+from typing import Optional
 
-
-def read_cnv(cnvfile, 
-             apply_flags = True, 
-             remove_upcast = True,
-             inspect_plot = False,
-             start_scan = None,
-             end_scan = None):
+def read_cnv(cnvfile: str,
+             apply_flags: Optional[bool] = True,
+             profile: Optional[str] = 'downcast',
+             inspect_plot: Optional[bool] = False,
+             start_scan: Optional[int] = None,
+             end_scan: Optional[int] = None) -> xr.Dataset:
     '''
-    Read a .cnv file to netCDF. 
+    Reads CTD data and metadata from a .cnv file into a more handy format.
+  
+    Parameters
+    ----------
+    cnvfile: str
+        Path to a .cnv file containing the data 
 
-    Both some info from the header and the column data.
+    apply_flags: bool, optional 
+        If True, flags (from the SBE *flag* column) are applied as NaNs across
+        all variables (recommended). Default is True.
+     
+     profile: str, optional
+        Specify the profile type. Options are ['upcast', 'downcast', 'none'].
 
-    Transfer variable names, time, etc from native format to our preferred
-    format.
+        inspect_plot : bool, optional
+            Return a plot of the whole pressure time series, showing the part of the profile 
+            we extracted (useful for inspecting up/downcast extraction and SBE flags).
+            Default is False.
 
-    TBD:
-    - Better docs
-    - Add other metadata from header
+        start_scan : int, optional
+            Manually specify the scan at which to start the profile (in *addition* to profile 
+            detection and flags). Default is None.
+
+        end_scan : int, optional
+            Manually specify the scan at which to end the profile (in *addition* to profile 
+            detection and flags). Default is None.
+     
+
+    Returns
+    -------
+    xarray.Dataset
+        A dataset containing CTD data and associated attributes.
+
+    TO DO
+    ----- 
+    - Better docs 
     - Apply to some other datasets for testing
-    - pyTests?
+        - Maybe also moored sensors/TSG? (or should those be separate?)
+    - Figure out whether to make a split between this and a separate processing
+      module (e.g. binning, chopping, concatenation)
+    - Tests
+        - Make a test_ctd_data.cnv file with mock values and use pytest
+
     '''
 
     header_info = read_header(cnvfile)
@@ -49,8 +80,10 @@ def read_cnv(cnvfile,
         ds.attrs['SBE flags applied'] = False
 
 
-    if remove_upcast:
-        ds = _remove_upcast(ds)
+    if profile in ['upcast', 'downcast', 'dncast']:
+        ds = _remove_up_dncast(ds, keep = profile)
+    else:
+        ds.attrs['profile_direction'] = 'All good data'
 
     if start_scan:
         ds = _remove_start_scan(ds, start_scan)
@@ -58,7 +91,7 @@ def read_cnv(cnvfile,
         ds = _remove_end_scan(ds, end_scan)
 
     if inspect_plot:
-        _inspect_downcast(ds, ds0, start_scan, end_scan)
+        _inspect_extracted(ds, ds0, start_scan, end_scan)
 
     return ds
 
@@ -131,6 +164,14 @@ def bin_to_pressure(ds, dp = 1):
     return ds_binned
 
 
+def combine_binned():
+    '''
+    Read netCDF of CTD data read from cnv and binned using ocanograpy.io.cnv, and
+    combine into on single file. 
+    '''
+    pass
+
+
 
 def _convert_time(ds, header_info, epoch = '1970-01-01'):
     '''
@@ -142,7 +183,6 @@ def _convert_time(ds, header_info, epoch = '1970-01-01'):
 
     (_DSE: time since epoch)
     '''
-    
 
     start_time_DSE = ((header_info['start_time'] 
                                     - pd.Timestamp(epoch))
@@ -152,8 +192,9 @@ def _convert_time(ds, header_info, epoch = '1970-01-01'):
 
     TIME_ELAPSED_DSE = start_time_DSE + elapsed_time_days
 
-    ds['TIME_ELAPSED'] = TIME_ELAPSED_DSE
-    ds.TIME_ELAPSED.attrs['units'] = f'Days since {epoch} 00:00:00'
+    ds['TIME'] = TIME_ELAPSED_DSE
+    ds.TIME.attrs['units'] = f'Days since {epoch} 00:00:00'
+    ds = ds.drop('TIME_ELAPSED')
 
     return ds
 
@@ -175,7 +216,7 @@ def _remove_end_scan(ds, end_scan):
     return ds
 
 
-def _inspect_downcast(ds, ds0, start_scan=None, end_scan=None):
+def _inspect_extracted(ds, ds0, start_scan=None, end_scan=None):
     '''
     Plot the pressure tracks showing the portion extracted after 
     and/or removing upcast.
@@ -183,9 +224,9 @@ def _inspect_downcast(ds, ds0, start_scan=None, end_scan=None):
 
     fig, ax = plt.subplots(figsize = (10, 6))
 
-
     ax.plot(ds0.scan_count, ds0.PRES, '.k', ms = 3, label = 'All scans')
     ax.plot(ds.scan_count, ds.PRES, '.r', ms = 4, label ='Extracted for use')
+
     if start_scan:
         ax.axvline(start_scan, ls = '--', zorder = 0, label = 'start_scan')
     if end_scan:
@@ -212,9 +253,15 @@ def _apply_flag(ds):
 
 
 
-def _remove_upcast(ds):
+def _remove_up_dncast(ds, keep = 'downcast'):
     '''
-    
+    Takes a ctd Dataframe and returns a subset containing only either the
+    ucast or downcast.
+
+    Note:
+    Very basic algorithm right now - just removing everything before/after the
+    pressure max and relying on SBE flaggig for the rest.
+    -> will likely have to replace with something more sophisticated. 
     '''
     # Index of max pressure, taken as "end of downcast"
     max_pres_index = int(ds.PRES.argmax().data)
@@ -222,16 +269,26 @@ def _remove_upcast(ds):
     # If the max index is a single value following invalid values,
     # we interpret it as the start of the upcast and use the preceding 
     # point as the "end of upcast index" 
-    print()
     if (ds.scan_count[max_pres_index] 
         - ds.scan_count[max_pres_index-1]) > 1:
         
         max_pres_index -= 1
 
-    # Remove everything after pressure max
-    ds = ds.isel({'scan_count':slice(None, max_pres_index+1)})
+    if keep == 'upcast':
+        # Remove everything *after* pressure max
+        ds = ds.isel({'scan_count':slice(max_pres_index+1, None)})
+        ds.attrs['profile_direction'] = 'upcast'
+
+    elif keep in ['dncast', 'downcast']:
+        # Remove everything *before* pressure max
+        ds = ds.isel({'scan_count':slice(None, max_pres_index+1)})
+        ds.attrs['profile_direction'] = 'downcast'
+
+    else:
+        raise Exception('"keep" must be either "upcast" or "dncast"') 
 
     return ds
+
 
 def _read_column_data_xr(cnvfile, header_info):
     '''
@@ -465,9 +522,6 @@ def read_sensor_info(cnvfile, verbose = False):
                 return sensor_dict
 
     
-
-
-#
 
 ### UTILITY FUNCTIONS
 
