@@ -9,7 +9,7 @@ def datetime_to_ISO8601(time_dt, zone = 'Z'):
     (see https://wiki.esipfed.org/Attribute_Convention_for_Data_Discovery_1-3)
     '''
 
-    time_fmt = f'%Y-%M-%dT%H:%M:%S{zone}'
+    time_fmt = f'%Y-%m-%dT%H:%M:%S{zone}'
     iso8601_time = time_dt.strftime(time_fmt)
 
     return iso8601_time

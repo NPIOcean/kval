@@ -10,6 +10,8 @@ import pandas as pd
 import xarray as xr
 import numpy as np
 from oceanograpy.io import _variable_defs as vardef
+from oceanograpy.util import time
+
 import matplotlib.pyplot as plt
 import re
 from typing import Optional
@@ -56,6 +58,9 @@ def read_cnv(cnvfile: str,
 
     TO DO
     ----- 
+    - Checking and testing
+    - Assign sensor metadata as variable attributes
+    - Testing (why did a TIME coordinate appear for some files?)
     - Better docs 
     - Apply to some other datasets for testing
         - Maybe also moored sensors/TSG? (or should those be separate?)
@@ -67,11 +72,17 @@ def read_cnv(cnvfile: str,
     '''
 
     header_info = read_header(cnvfile)
-
     ds = _read_column_data_xr(cnvfile, header_info)
     ds = _update_variables(ds, cnvfile)
     ds = _convert_time(ds, header_info)
+    ds.attrs['history'] = header_info['start_history']
+    ds = _read_SBE_proc_steps(ds, header_info)
     ds0 = ds.copy()
+
+
+    sensor_dict = _read_sensor_info(cnvfile, verbose = False):
+
+    sensor_dict 
 
     if apply_flags:
         ds = _apply_flag(ds)
@@ -96,84 +107,23 @@ def read_cnv(cnvfile: str,
     return ds
 
 
-
-def bin_to_pressure(ds, dp = 1):
-    '''
-    Apply pressure binning into bins of *dp* dbar.
-
-    Reproducing the SBE algorithm as documented in:
-    https://www.seabird.com/cms-portals/seabird_com/
-    cms/documents/training/Module13_AdvancedDataProcessing.pdf
-
-    (See page 13 for the formula used)
-
-    Equivalent to this in SBE terms
-    # binavg_bintype = decibars
-    # binavg_binsize = *dp*
-    # binavg_excl_bad_scans = yes
-    # binavg_skipover = 0
-    # binavg_omit = 0
-    # binavg_min_scans_bin = 1
-    # binavg_max_scans_bin = 2147483647
-    # binavg_surface_bin = no, min = 0.000, max = 0.000, value = 0.000
-    '''
-
-    # Tell xarray to conserve attributes across operations
-    # (we will set this value back to whatever it was after the calculation)
-    _keep_attr_value = xr.get_options()['keep_attrs']
-    xr.set_options(keep_attrs=True)
-
-    # Define the bins over which to average
-    pmax = float(ds.PRES.max())
-    pmax_bound = np.floor(pmax-dp/2)+dp/2
-
-    pmin = float(ds.PRES.min())
-    pmin_bound = np.floor(pmin+dp/2)-dp/2
-
-    p_bounds = np.arange(pmin_bound, pmax_bound+1e-9, dp) 
-    p_centre = np.arange(pmin_bound, pmax_bound, dp)+dp/2
-
-    # Pressure averaged 
-    ds_pavg = ds.groupby_bins('PRES', bins = p_bounds).mean()
-        
-    # Get pressure *binned* according to formula on page 13 in SBEs module 13 document
-    # = not bin *average* but *linear estimate of variable at bin pressure*
-    # (in practice a small but difference)
-
-    ds_curr = ds_pavg.isel({'PRES_bins':slice(1, None)})
-    ds_prev = ds_pavg.isel({'PRES_bins':slice(None, -1)})
-    # Must assign the same coordinates in order to be able to matrix multiply
-    ds_prev.coords['PRES_bins'] =  ds_curr.PRES_bins
-
-    p_target = p_centre[slice(1, None)]
-    _numerator = ds_pavg.diff('PRES_bins')*(p_target - ds_prev.PRES)
-    _denominator = ds_pavg.PRES.diff('PRES_bins')
-
-    ds_binned = _numerator/_denominator + ds_prev
-
-
-    # Replace the PRES_bins coordinate and dimension
-    # with PRES
-    ds_binned = (ds_binned
-        .swap_dims({'PRES_bins':'PRES'})
-        .drop_vars('PRES_bins'))
-
-    # Set xarray option "keep_attrs" back to whatever it was
-    xr.set_options(keep_attrs=_keep_attr_value)
-
-    return ds_binned
-
-
-def combine_binned():
-    '''
-    Read netCDF of CTD data read from cnv and binned using ocanograpy.io.cnv, and
-    combine into on single file. 
-    '''
-    pass
-
-
-
 def _convert_time(ds, header_info, epoch = '1970-01-01'):
+    '''
+    Convert time either from julian days (timeJ) or from  time elapsed
+     in seconds (timeS). 
+    '''
+
+    if 'TIME_ELAPSED' in ds.keys():
+        ds = _convert_time_from_elapsed(ds, header_info, epoch = epoch)
+    elif 'timeJ' in ds.keys():
+        ds = _convert_time_from_juld(ds, header_info, epoch = epoch)
+    else:
+        raise Warning('Failed to extract time info (no timeS or timeJ in source)')
+    
+    return ds
+
+
+def _convert_time_from_elapsed(ds, header_info, epoch = '1970-01-01'):
     '''
     Convert TIME_ELAPSED (sec)
     to TIME (days since 1970-01-01)
@@ -198,6 +148,29 @@ def _convert_time(ds, header_info, epoch = '1970-01-01'):
 
     return ds
 
+
+def _convert_time_from_juld(ds, header_info, epoch = '1970-01-01'):
+    '''
+    Convert TIME_ELAPSED (sec)
+    to TIME (days since 1970-01-01)
+    
+    Only sensible reference I could fnd is here;
+    https://search.r-project.org/CRAN/refmans/oce/html/read.ctd.sbe.html
+
+    (_DSE: time since epoch)
+    '''
+
+    year_start = header_info['start_time'].replace(month=1, day=1, 
+                        hour=0, minute=0, second=0)
+    time_stamp = pd.to_datetime(ds.timeJ-1, origin=year_start, unit='D', 
+                        yearfirst=True, ).round('1s')    
+    time_stamp_epoch = ((time_stamp- pd.Timestamp(epoch))
+                                    / pd.to_timedelta(1, unit='D'))
+    ds['TIME'] = time_stamp_epoch
+    ds.TIME.attrs['units'] = f'Days since {epoch} 00:00:00'
+    ds = ds.drop('timeJ')
+
+    return ds
 
 
 def _remove_start_scan(ds, start_scan):
@@ -239,7 +212,6 @@ def _inspect_extracted(ds, ds0, start_scan=None, end_scan=None):
     plt.show()
 
 
-
 def _apply_flag(ds):
     '''
     Applies the *flag* value assigned by the SBE processing.
@@ -256,7 +228,7 @@ def _apply_flag(ds):
 def _remove_up_dncast(ds, keep = 'downcast'):
     '''
     Takes a ctd Dataframe and returns a subset containing only either the
-    ucast or downcast.
+    upcast or downcast.
 
     Note:
     Very basic algorithm right now - just removing everything before/after the
@@ -302,7 +274,7 @@ def _read_column_data_xr(cnvfile, header_info):
 
     '''
     df = pd.read_csv(cnvfile, header = header_info['hdr_end_line']+1,
-                 delim_whitespace=True,
+                 delim_whitespace=True, encoding = 'latin-1',
                  names = header_info['col_names'])
     
     # Convert to xarray DataFrame
@@ -364,7 +336,7 @@ def read_header(cnvfile):
     TBD: Grab instrument serial numbers.
     '''
     
-    with open(cnvfile, 'r') as f:
+    with open(cnvfile, 'r', encoding = 'latin-1') as f:
 
         # Empty dictionary: Will fill these parameters up as we go
         hkeys = ['col_nums', 'col_names', 'col_longnames', 'SN_info', 
@@ -400,11 +372,10 @@ def read_header(cnvfile):
                 hdict['start_time'] = (
                     _nmea_time_to_datetime(*line.split()[3:7]))
 
-            # Read serial numbers
-            if ' SN' in line:
-                sn_info_str = ' '.join(line.split()[1:])
-                hdict['SN_info'] += [sn_info_str]
-
+                hdict['start_history'] = (
+                    hdict['start_time'].strftime('%Y-%m-%d')
+                    + ': Start of data collection.')
+                
             # Read moon pool info
             if 'Skuteside' in line:
                 mp_str = line.split()[-1]
@@ -417,10 +388,8 @@ def read_header(cnvfile):
             if '</Sensors>' in line:
                 start_read_history = True
 
-
             if start_read_history:
                 hdict['SBEproc_hist'] += [line] 
-
 
             # Read the line containing the END string
             # (and stop reading the file after that)
@@ -430,11 +399,12 @@ def read_header(cnvfile):
 
         # Remove the first ('</Sensors>') and last ('*END*') lines from the SBE history string.
         hdict['SBEproc_hist'] = hdict['SBEproc_hist'] [1:-1]
-             
+        hdict['cnvfile'] = cnvfile
+
         return hdict
 
 
-def read_sensor_info(cnvfile, verbose = False):
+def _read_sensor_info(cnvfile, verbose = False):
     '''
     Look through the header for information about sensors:
         - Serial numbers
@@ -447,7 +417,7 @@ def read_sensor_info(cnvfile, verbose = False):
     drop_str_patterns = ['<.*?>', '\n', ' NPI']
     drop_str_pattern_comb = '|'.join(drop_str_patterns)
 
-    with open(cnvfile, 'r') as f:
+    with open(cnvfile, 'r', encoding = 'latin-1') as f:
         look_sensor = False
 
         # Loop through header lines 
@@ -522,6 +492,184 @@ def read_sensor_info(cnvfile, verbose = False):
                 return sensor_dict
 
     
+
+def _read_SBE_proc_steps(ds, header_info):
+    '''
+    '''
+    SBElines = header_info['SBEproc_hist']
+
+    dmy_fmt = '%Y-%m-%d'
+
+    sbe_proc_str = ['SBE SOFTWARE PROCESSING STEPS (extracted'
+                    ' from .cnv file header)', ' '*110]
+
+    for line in SBElines:
+        # Get processing date
+        if 'datcnv_date' in line:
+            proc_date_str = re.search(r'(\w{3} \d{2} \d{4} \d{2}:\d{2}:\d{2})',
+                                line).group(1)
+            proc_date = pd.to_datetime(proc_date_str) 
+            proc_date_ISO8601 = time.datetime_to_ISO8601(proc_date) 
+            proc_date_dmy = proc_date.strftime(dmy_fmt)
+            history_str = (f'{proc_date_dmy}: Processed using'
+                            ' SBE software (details in "SBE_processing").')
+
+        # Get input file names (without paths)
+        if 'datcnv_in' in line:
+            hex_fn = re.search(r'\\([^\\]+\.HEX)', line.upper()).group(1)
+            xmlcon_fn = re.search(r'\\([^\\]+\.XMLCON)', line.upper()).group(1)
+            src_files_raw = f'{hex_fn}, {xmlcon_fn}'
+            sbe_proc_str += [f'- Raw data read from {hex_fn}, {xmlcon_fn}.']
+
+        # SBE processing details
+        # Get skipover scans
+        if 'datcnv_skipover' in line:
+            skipover_scans = int(re.search(r'= (\d+)', line).group(1))
+            if skipover_scans != 0:
+                sbe_proc_str += [f'- Skipped over {skipover_scans} initial scans.']
+
+        # Get ox hysteresis correction 
+        if 'datcnv_ox_hysteresis_correction' in line:
+            ox_hyst_yn = re.search(r'= (\w+)', line).group(1)
+            if ox_hyst_yn == 'yes':
+                sbe_proc_str += [f'- Oxygen hysteresis correction applied.']
+
+        # Get ox tau correction 
+        if 'datcnv_ox_tau_correction' in line:
+            ox_hyst_yn = re.search(r'= (\w+)', line).group(1)
+            if ox_hyst_yn == 'yes':
+                sbe_proc_str += [f'- Oxygen tau correction applied.']
+
+        # Get low pass filter details
+        if 'filter_low_pass_tc_A' in line:
+            lp_A = float(re.search(r' = (\d+\.\d+)', line).group(1))
+        if 'filter_low_pass_tc_B' in line:
+            lp_B = float(re.search(r' = (\d+\.\d+)', line).group(1))
+        if 'filter_low_pass_A_vars' in line:
+            try:
+                lp_vars_A = re.search(r' = (.+)$', line).group(1).split()
+                sbe_proc_str += [f'- Low-pass filter with time constant {lp_A}'
+                    + f' seconds applied to: {" ".join(lp_vars_A)}.']
+            except: 
+                print('FYI: Looks like filter A was not applied to any variables.')
+        if 'filter_low_pass_B_vars' in line:
+            try:
+                lp_vars_B = re.search(r' = (.+)$', line).group(1).split()
+                sbe_proc_str += [f'- Low-pass filter with time constant {lp_B}'
+                    + f' seconds applied to: {" ".join(lp_vars_B)}.']
+            except:
+                print('FYI: Looks like filter A was not applied to any variables.')
+
+        # Get cell thermal mass correction details 
+        if 'celltm_alpha' in line:
+            celltm_alpha = re.search(r'= (.+)$', line).group(1)
+        if 'celltm_tau' in line:
+            celltm_tau= re.search(r'= (.+)$', line).group(1)
+        if 'celltm_temp_sensor_use_for_cond' in line:
+            celltm_sensors = re.search(r'= (.+)$', line).group(1)
+            sbe_proc_str += ['- Cell thermal mass correction applied to conductivity' 
+                 f' from sensors: [{celltm_sensors}]. ',
+                 f'   > Parameters ALPHA: [{celltm_alpha}], TAU: [{celltm_tau}].']
+
+        # Get loop edit details
+        if 'loopedit_minVelocity' in line:
+            loop_minvel = re.search(r'= (\d+(\.\d+)?)', line).group(1)                
+        if 'loopedit_surfaceSoak' in line and float(loop_minvel)>0:
+            loop_ss_mindep = re.search(r'minDepth = (\d+(\.\d+)?)', line).group(1)
+            loop_ss_maxdep = re.search(r'maxDepth = (\d+(\.\d+)?)', line).group(1)
+            loop_ss_deckpress = re.search(r'useDeckPress = (\d+(\.\d+)?)', line).group(1)
+            if loop_ss_deckpress=='0':
+                loop_ss_deckpress_str = 'No'
+            else:
+                loop_ss_deckpress_str = 'Yes'
+        if 'loopedit_excl_bad_scans' in line and float(loop_minvel)>0:
+            loop_excl_bad_scans = re.search(r'= (.+)', line).group(1)
+            if loop_excl_bad_scans == 'yes':
+                loop_excl_str = 'Bad scans excluded'
+            else:
+                loop_excl_str = 'Bad scans not excluded'
+            sbe_proc_str += ['- Loop editing applied.',
+                 (f'   > Parameters: Minimum velocity (ms-1): {loop_minvel}, '
+                  f'Soak depth range (m): {loop_ss_mindep} to {loop_ss_maxdep}, '
+                  + f'\n   > {loop_excl_str}. '
+                  + f'Deck pressure offset: {loop_ss_deckpress_str}.')]
+
+        # Get wild edit details
+        if 'wildedit_date' in line:
+            sbe_proc_str += ['- Wild editing applied.']
+        if 'wildedit_vars' in line:
+            we_vars = re.search(r' = (.+)$', line).group(1).split()
+            sbe_proc_str += [f'   > Applied to variables: {" ".join(we_vars)}.']
+        if 'wildedit_pass1_nstd' in line:
+            we_pass1 = float(re.search(r' = (\d+\.\d+)', line).group(1))
+        if 'wildedit_pass2_nstd' in line:
+            we_pass2 = float(re.search(r' = (\d+\.\d+)', line).group(1))
+        if 'wildedit_pass2_mindelta' in line:
+            we_mindelta = float(re.search(r' = (\d+\.\d+)', line).group(1))
+        if 'wildedit_npoint' in line:
+            we_npoint = float(re.search(r' = (\d+)', line).group(1))
+            sbe_proc_str += [(f'   > Parameters: n_std (first pass): {we_pass1}, '
+                f'n_std (second pass): {we_pass2}, min_delta: {we_mindelta},\n'
+                f'   > # points per test: {we_npoint}.')]
+
+        # Get align CTD details
+        if 'alignctd_adv' in line:
+            # Find all matches in the string
+            matches = re.findall(r'(\w+)\s+([0-9.]+)', line)
+            # Rerutn a list of tuples with (variable, advance time in seconds)
+            align_tuples = [(key, float(value)) for key, value in matches]
+            sbe_proc_str += ['- Misalignment correction applied.']
+            sbe_proc_str += [f'   > Parameters [variable (advance time, sec)]:']
+            align_str = []
+            for align_tuple in align_tuples:
+                align_str += [f'{align_tuple[0]} ({align_tuple[1]})'] 
+            sbe_proc_str += [f'   > {", ".join(align_str)}']
+
+        # Get bin averaging details
+        if 'binavg_bintype' in line:
+            bin_unit = re.search(r' = (.+)$', line).group(1)
+        if 'binavg_binsize' in line:
+            bin_size = re.search(r' = (.+)$', line).group(1)
+        if 'binavg_excl_bad_scans' in line:
+            binavg_excl_bad_scans = re.search(r'= (.+)', line)
+            if binavg_excl_bad_scans == 'yes':
+                binavg_excl_str = 'Bad scans excluded'
+            else:
+                binavg_excl_str = 'Bad scans not excluded'
+        if 'binavg_skipover' in line:
+            bin_skipover = re.search(r' = (.+)$', line).group(1)
+            if bin_skipover != 0:
+                bin_skipover_str = f', skipped over {bin_skipover} initial scans'
+            else:
+                bin_skipover = ''
+        if 'binavg_surface_bin' in line:
+            surfbin_yn = re.search(r'surface_bin = (.+)$', line).group(1).split()
+            if surfbin_yn != 'yes':
+                surfbin_str = '(No surface bin)'
+            else:
+                surfbin_params = re.search(
+                    r'yes, (.+)$', line).group(1).split().upper()
+                surfbin_str = f'Surface bin parameters: {surfbin_params}'
+            sbe_proc_str += [f'- Bin averaged ({bin_size} {bin_unit}).']
+            sbe_proc_str += [f'   > {binavg_excl_str}{bin_skipover_str}.']
+            sbe_proc_str += [f'   > {surfbin_str}.']
+
+
+
+
+
+        # binavg_surface_bin = yes, min = 0.000, max = 2.000, value = 0.000
+
+# binavg_skipover = 0
+# binavg_surface_bin = yes, min = 0.000, max = 2.000, value = 0.000
+
+
+    ds.attrs['SBE_processing'] = '\n'.join(sbe_proc_str)
+    ds.attrs['SBE_processing_date'] = proc_date_ISO8601
+    ds.attrs['history'] += f'\n{history_str}'
+    ds.attrs['source_files'] = src_files_raw
+
+    return ds
 
 ### UTILITY FUNCTIONS
 
