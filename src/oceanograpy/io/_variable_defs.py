@@ -39,9 +39,9 @@ SBE_name_map = {
               'sensors':['oxy_sensor_1']},
     'SBOX1ML/L': {'name': 'DOXY2', 'units': 'mL l-1',
               'sensors':['oxy_sensor_2']},
-    'SBOX0V': {'name': 'OXYV1', 'units': 'volt',
+    'SBEOX0V': {'name': 'OXYV1', 'units': 'volt',
               'sensors':['oxy_sensor_1']},
-    'SBOX1V': {'name': 'OXYV2', 'units': 'volt',
+    'SBEOX1V': {'name': 'OXYV2', 'units': 'volt',
               'sensors':['oxy_sensor_2']},
     'WETCDOM': {'name': 'CDOM1', 'units': 'mg m-3',
               'sensors':['cdom_sensor_1']},
@@ -56,6 +56,8 @@ SBE_name_map = {
     'FLECO-AFL1': {'name': 'CHLA2', 'units': 'mg m-3',
               'sensors':['chla_sensor_2']},
     'AVGSVCM': {'name': 'SVEL_AVG', 'units': 'm s-1'},
+    'DEPSM': {'name': 'DEPTH', 'units': 'm'},
+
     'SVCM': {'name': 'SVEL', 'units': 'm s-1'},
     'SAL00': {'name': 'PSAL1', 'units': '1', 
               'sensors':['temp_sensor_1', 'cndc_sensor_1']},
@@ -70,7 +72,7 @@ SBE_name_map = {
 }
 
 
-var_attrs_cf = {
+var_attrs = {
     'PROFILE': {
         'long_name': 'Profile number in dataset (see PROFILE_ID for station/cast)',
     },
@@ -92,6 +94,7 @@ var_attrs_cf = {
         'standard_name': 'sea_water_practical_salinity',
         'units': '',
         'long_name': 'practical salinity',
+        
     },
     'CNDC': {
         'standard_name': 'sea_water_electrical_conductivity',
@@ -103,6 +106,12 @@ var_attrs_cf = {
         'units': 'dbar',
         'long_name': 'pressure',
         'positive':'down',
+    },
+    'DEPTH': {
+    'standard_name': 'depth',
+    'units': 'm',
+    'long_name': 'Depth in salt water',
+    'positive':'down',
     },
     'TIME': {
         'standard_name': 'time',
@@ -131,6 +140,9 @@ sensor_info_dict = {
     'Conductivity, 2 -->':'cndc_sensor_2',
     'Pressure, Digiquartz with TC -->':'pres_sensor',
     'Oxygen, SBE 43 -->':'oxy_sensor_1',
+    'Oxygen, SBE 43, 2 -->':'oxy_sensor_2',
+    'sbeox0V: Oxygen raw, SBE 43 -->':'oxy_sensor_1',
+    'sbeox1V: Oxygen raw, SBE 43, 2 -->':'oxy_sensor_1',
     'Fluorometer, WET Labs ECO-AFL/FL -->':'chla_sensor_1',
     'Transmissometer, WET Labs C-Star -->':'attn_sensor_1',
     'Fluorometer, WET Labs ECO CDOM -->':'cdom_sensor_1',

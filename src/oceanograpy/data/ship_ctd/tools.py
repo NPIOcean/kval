@@ -85,7 +85,7 @@ def bin_to_pressure(ds, dp = 1):
 
 def combine_binned():
     '''
-    Read netCDF of CTD data read from cnv and binned using ocanograpy.io.cnv,
+    Read netCDF of CTD data read from cnv and binned using oceanograpy.io.cnv,
     and combine into on single file. 
     '''
     pass

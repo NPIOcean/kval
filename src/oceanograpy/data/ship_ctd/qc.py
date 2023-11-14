@@ -18,3 +18,18 @@ Dataset editing:
 - Metadata handling
 
 '''
+
+def edit_thr(ds, var, min = None, max = None):
+    '''
+    - Apply mask based on levels.
+    - Add history attributes on variable level.
+    - Preserve in processing history string.
+    '''
+
+    pass
+
+def edit_outliers():
+    '''
+    Shoudl at the very least do what Pauls mat-functions do.
+    '''
+    pass

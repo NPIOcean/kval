@@ -11,7 +11,7 @@ import xarray as xr
 import numpy as np
 from oceanograpy.io import _variable_defs as vardef
 from oceanograpy.util import time
-
+import glob2
 import matplotlib.pyplot as plt
 import re
 from typing import Optional
@@ -59,9 +59,9 @@ def read_cnv(cnvfile: str,
     TO DO
     ----- 
     - Checking and testing
-    - Assign sensor metadata as variable attributes
-    - Testing (why did a TIME coordinate appear for some files?)
-    - Better docs 
+    - Better docs (esp a good docstring for the read_cnv function!)
+    - Look into *axis* (T, Z, X, Y) - is this necessary?
+    - Look into cf_role and feature type (s this a trajectoryprofile)
     - Apply to some other datasets for testing
         - Maybe also moored sensors/TSG? (or should those be separate?)
     - Figure out whether to make a split between this and a separate processing
@@ -76,19 +76,17 @@ def read_cnv(cnvfile: str,
     ds = _update_variables(ds, cnvfile)
     ds = _convert_time(ds, header_info)
     ds.attrs['history'] = header_info['start_history']
+    
     ds = _read_SBE_proc_steps(ds, header_info)
     ds0 = ds.copy()
 
 
-    sensor_dict = _read_sensor_info(cnvfile, verbose = False):
-
-    sensor_dict 
 
     if apply_flags:
         ds = _apply_flag(ds)
-        ds.attrs['SBE flags applied'] = True
+        ds.attrs['SBE flags applied'] = 'yes'
     else:
-        ds.attrs['SBE flags applied'] = False
+        ds.attrs['SBE flags applied'] = 'no'
 
 
     if profile in ['upcast', 'downcast', 'dncast']:
@@ -103,6 +101,23 @@ def read_cnv(cnvfile: str,
 
     if inspect_plot:
         _inspect_extracted(ds, ds0, start_scan, end_scan)
+
+    ds = _add_attrs(ds, header_info)
+
+    now_str = pd.Timestamp.now().strftime('%Y-%m-%d')
+    ds.attrs['history'] += f'\n{now_str}: Post-processing.'
+
+    return ds
+
+
+def _add_attrs(ds, header_info):
+    '''
+    Add the following as attributes if they are available:
+    ship, cruise, station.
+    '''
+    for key in ['ship', 'cruise', 'station']:
+        if key in header_info:
+            ds.attrs[key] = header_info[key]
 
     return ds
 
@@ -126,7 +141,7 @@ def _convert_time(ds, header_info, epoch = '1970-01-01'):
 def _convert_time_from_elapsed(ds, header_info, epoch = '1970-01-01'):
     '''
     Convert TIME_ELAPSED (sec)
-    to TIME (days since 1970-01-01)
+    to TIME_SAMPLE (days since 1970-01-01)
     
     Only sensible reference I could fnd is here;
     https://search.r-project.org/CRAN/refmans/oce/html/read.ctd.sbe.html
@@ -140,10 +155,10 @@ def _convert_time_from_elapsed(ds, header_info, epoch = '1970-01-01'):
     
     elapsed_time_days = ds.TIME_ELAPSED/86400
 
-    TIME_ELAPSED_DSE = start_time_DSE + elapsed_time_days
+    time_stamp_DSE = start_time_DSE + elapsed_time_days
 
-    ds['TIME'] = TIME_ELAPSED_DSE
-    ds.TIME.attrs['units'] = f'Days since {epoch} 00:00:00'
+    ds['TIME_SAMPLE'] = time_stamp_DSE
+    ds.TIME_SAMPLE.attrs['units'] = f'Days since {epoch} 00:00:00'
     ds = ds.drop('TIME_ELAPSED')
 
     return ds
@@ -164,10 +179,11 @@ def _convert_time_from_juld(ds, header_info, epoch = '1970-01-01'):
                         hour=0, minute=0, second=0)
     time_stamp = pd.to_datetime(ds.timeJ-1, origin=year_start, unit='D', 
                         yearfirst=True, ).round('1s')    
-    time_stamp_epoch = ((time_stamp- pd.Timestamp(epoch))
+    time_stamp_DSE = ((time_stamp- pd.Timestamp(epoch))
                                     / pd.to_timedelta(1, unit='D'))
-    ds['TIME'] = time_stamp_epoch
-    ds.TIME.attrs['units'] = f'Days since {epoch} 00:00:00'
+
+    ds['TIME_SAMPLE'] = (('scan_count'), time_stamp_DSE)
+    ds.TIME_SAMPLE.attrs['units'] = f'Days since {epoch} 00:00:00'
     ds = ds.drop('timeJ')
 
     return ds
@@ -224,6 +240,124 @@ def _apply_flag(ds):
     return ds
 
 
+def join_cruise(nc_files, bins_dbar = 1, verbose = False):
+    '''
+    Takes a number of cnv profiles, pressure bins them if necessary,
+    and joins the profiles into one single file.  
+
+    Inputs:
+
+    nc_files: string, list
+        A dictionary containing either:
+        1. A path to the location of individual profiles, 
+           e. g. 'path/to/files/'. 
+        2. A list containing xr.Datasets with the individual profiles. 
+        
+    '''
+
+    ### PREPARE INPUTS
+    # Grab the input data on the form of a list of xr.Datasets
+
+    # (1) Load all from path if we are given a path.
+    if isinstance(nc_files, str):
+        if nc_files.endswith('/'):
+            nc_files = nc_files[:-1]
+        file_list = glob2.glob(f'{nc_files}/*.nc')
+
+        # Note: We don't decode CF since we want time as a numerical variable.
+        ns_input = [xr.open_dataset(file, decode_cf=False) for file in file_list]
+        n_profs = len(ns_input)
+        
+        valid_nc_files = True
+        if verbose:
+            print(f'Loaded {n_profs} profiles from netcdf files: {file_list}')
+
+    # (2) Load from list of xr.Datasets if that is what we are given.
+    elif isinstance(nc_files, list):
+        if all(isinstance(nc_file, xr.Dataset) for nc_file in nc_files):
+            ns_input = nc_files
+            n_profs = len(ns_input)
+            valid_nc_files = True
+            if verbose:
+                print(f'Loaded {n_profs} profiles from list of Datasets.')
+        else:
+            valid_nc_files = False
+    else:
+        valid_nc_files = False
+
+    
+    # Raise an exception if we don't have either (1) or (2)
+    if valid_nc_files == False:
+        raise Exception('''            
+            Input *nc_files* invalid. Must be either:
+            1. A path to the location of individual profiles,
+               e.g. "path/to/files/" --or--
+            2. A list containing xr.Datasets with the individual profiles,
+               e.g. [d1, d2] with d1, d2 being xr.Datasets.
+                        ''')
+
+    ### BINNING
+    # If unbinned: bin data
+    if any(n_input.binned == 'no' for n_input in ns_input):
+        if verbose:
+            print(f'Binning all profiles to {bins_dbar} dbar.')
+        ns_binned = [bin_to_pressure(n_input, bins_dbar)
+                     for n_input in ns_input] 
+    else: 
+        # replace this with using the warnings module?
+        print('NOTE: Input data already binned -> using preexisting binning.')
+        ns_binned = ns
+    
+
+    ### JOINING PROFILES TO ONE DATASET
+    #  Concatenation loop.
+    # - Assigning a TIME dimension based on average of measurement time (TIME_SAMPLE)
+    # - Also adding a STATION variable if we have a station attribute
+    # - Add a CRUISE variable 
+
+    first = True
+    
+    for n in ns_binned:
+        if first:
+            N = n.assign_coords({'TIME':[n.TIME_SAMPLE.mean()]})
+            N.TIME.attrs = {'units' : n.TIME_SAMPLE.units,
+                            'standard_name' : 'time',
+                            'long_name':'Average time of measurement'}
+            first = False
+
+            if 'station' in N.attrs:
+                N['STATION'] = xr.DataArray([N.station], dims='TIME', coords={'TIME': N['TIME']})
+
+        else:
+            n = n.assign_coords({'TIME':[N.TIME_SAMPLE.mean()]})
+
+            if 'station' in n.attrs:
+                n['STATION'] = xr.DataArray([n.station], dims='TIME', coords={'TIME': n['TIME']})
+
+            N = xr.concat([N, n], dim = 'TIME')
+
+
+    ### FINAL TOUCHES AND EXPORTS
+
+    # Transpose so that variables are structured like (TIME, PRES) rather than
+    # (PRES, TIME). Convenient when plotting etc.
+    N = N.transpose() 
+
+    # Add some metadata to the STATION variable
+    if 'STATION' in N.data_vars:
+        del N.attrs['station']
+        N['STATION'].attrs = {'long_name' : 'CTD station ID',
+                              'cf_role':'profile_id'}
+    # Add a cruise variable
+    N['CRUISE'] = ((), N.cruise, {'long_name':'Cruise ID', 'cf_role':'trajectory_id'}) 
+
+    # Set the featureType attribute
+    N.attrs['featureType'] = 'TrajectoryProfile'
+
+
+    return N
+    
+
 
 def _remove_up_dncast(ds, keep = 'downcast'):
     '''
@@ -279,6 +413,7 @@ def _read_column_data_xr(cnvfile, header_info):
     
     # Convert to xarray DataFrame
     ds = xr.Dataset(df).rename({'dim_0':'scan_count'})
+    ds.attrs['binned'] = 'no'
 
     return ds
 
@@ -298,7 +433,7 @@ def _update_variables(ds, cnvfile):
        formatted files.
     '''
     
-    sensor_info = read_sensor_info(cnvfile)
+    sensor_info = _read_sensor_info(cnvfile)
 
     for old_name in ds.keys():
         old_name_cap = old_name.upper()
@@ -354,8 +489,13 @@ def read_header(cnvfile):
 
             # Read the column header info (which variable is in which data column)
             if '# name' in line:
+                # Read column number
                 hdict['col_nums'] += [int(line.split()[2])]
-                hdict['col_names'] += [line.split()[4].replace(':', '')]
+                # Read column header
+                col_name = line.split()[4].replace(':', '')
+                col_name = col_name.replace('/', '_') #  "/" in varnames not allowed in netcdf 
+                hdict['col_names'] += [col_name]
+                # Read column longname
                 hdict['col_longnames'] += [' '.join(line.split()[5:])]            
 
             # Read NMEA lat/lon/time
@@ -375,7 +515,17 @@ def read_header(cnvfile):
                 hdict['start_history'] = (
                     hdict['start_time'].strftime('%Y-%m-%d')
                     + ': Start of data collection.')
-                
+
+            # Read cruise/ship/station/bottom depth/operator if available
+            if '** CRUISE' in line.upper():
+                hdict['cruise'] = line[(line.rfind(': ')+2):].replace('\n','')
+            if '** STATION' in line.upper():
+                hdict['station'] = line[(line.rfind(': ')+2):].replace('\n','')
+            if '** SHIP' in line.upper():
+                hdict['ship'] = line[(line.rfind(': ')+2):].replace('\n','')
+            if '** BOTTOM DEPTH' in line.upper():
+                hdict['station'] = line[(line.rfind(': ')+2):].replace('\n','')
+
             # Read moon pool info
             if 'Skuteside' in line:
                 mp_str = line.split()[-1]
@@ -402,6 +552,79 @@ def read_header(cnvfile):
         hdict['cnvfile'] = cnvfile
 
         return hdict
+
+
+
+
+def bin_to_pressure(ds, dp = 1):
+    '''
+    Apply pressure binning into bins of *dp* dbar.
+    Reproducing the SBE algorithm as documented in:
+    https://www.seabird.com/cms-portals/seabird_com/
+    cms/documents/training/Module13_AdvancedDataProcessing.pdf
+    # Provides not a bin *average* but a*linear estimate of variable at bin
+    pressure* (in practice a small but noteiceable difference)
+    (See page 13 for the formula used)
+    No surface bin included.
+    Equivalent to this in SBE terms (I think)
+    # binavg_bintype = decibars
+    # binavg_binsize = *dp*
+    # binavg_excl_bad_scans = yes
+    # binavg_skipover = 0
+    # binavg_omit = 0
+    # binavg_min_scans_bin = 1
+    # binavg_max_scans_bin = 2147483647
+    # binavg_surface_bin = no, min = 0.000, max = 0.000, value = 0.000
+    '''
+
+    # Tell xarray to conserve attributes across operations
+    # (we will set this value back to whatever it was after the calculation)
+    _keep_attr_value = xr.get_options()['keep_attrs']
+    xr.set_options(keep_attrs=True)
+
+    # Define the bins over which to average
+    pmax = float(ds.PRES.max())
+    pmax_bound = np.floor(pmax-dp/2)+dp/2
+
+    pmin = float(ds.PRES.min())
+    pmin_bound = np.floor(pmin+dp/2)-dp/2
+
+    p_bounds = np.arange(pmin_bound, pmax_bound+1e-9, dp) 
+    p_centre = np.arange(pmin_bound, pmax_bound, dp)+dp/2
+
+    # Pressure averaged 
+    ds_pavg = ds.groupby_bins('PRES', bins = p_bounds).mean()
+
+    # Get pressure *binned* according to formula on page 13 in SBEs module 13 document
+
+    ds_curr = ds_pavg.isel({'PRES_bins':slice(1, None)})
+    ds_prev = ds_pavg.isel({'PRES_bins':slice(None, -1)})
+    # Must assign the same coordinates in order to be able to matrix multiply
+    ds_prev.coords['PRES_bins'] =  ds_curr.PRES_bins
+
+    p_target = p_centre[slice(1, None)]
+    _numerator = ds_pavg.diff('PRES_bins')*(p_target - ds_prev.PRES)
+    _denominator = ds_pavg.PRES.diff('PRES_bins')
+
+    ds_binned = _numerator/_denominator + ds_prev
+
+
+    # Replace the PRES_bins coordinate and dimension
+    # with PRES
+    ds_binned = (ds_binned
+        .swap_dims({'PRES_bins':'PRES'})
+        .drop_vars('PRES_bins'))
+    
+    ds_binned.attrs['binned'] = f'{dp} dbar'
+
+    # Set xarray option "keep_attrs" back to whatever it was
+    xr.set_options(keep_attrs=_keep_attr_value)
+
+    return ds_binned
+
+
+
+
 
 
 def _read_sensor_info(cnvfile, verbose = False):
@@ -495,13 +718,22 @@ def _read_sensor_info(cnvfile, verbose = False):
 
 def _read_SBE_proc_steps(ds, header_info):
     '''
+    Parse the information about SBE processing steps from the cnv header into 
+    a more easily readable format and storing the information as the global
+    variable *SBE_processing*.
+
+    Also:
+    - Adds a *SBE_processing_date* global variable (is this useful?)
+    - Adds a *source_files* variable with the names of the .hex, .xmlcon,
+      and .cnv files
+    - Appends SBE processing history line to the *history* attribute.
     '''
     SBElines = header_info['SBEproc_hist']
 
     dmy_fmt = '%Y-%m-%d'
 
     sbe_proc_str = ['SBE SOFTWARE PROCESSING STEPS (extracted'
-                    ' from .cnv file header)', ' '*110]
+                    ' from .cnv file header):',]
 
     for line in SBElines:
         # Get processing date
@@ -653,21 +885,15 @@ def _read_SBE_proc_steps(ds, header_info):
             sbe_proc_str += [f'- Bin averaged ({bin_size} {bin_unit}).']
             sbe_proc_str += [f'   > {binavg_excl_str}{bin_skipover_str}.']
             sbe_proc_str += [f'   > {surfbin_str}.']
+            SBE_binned = f'{bin_size} {bin_unit} (SBE software)'
+        else:
+            SBE_binned = 'no'
 
-
-
-
-
-        # binavg_surface_bin = yes, min = 0.000, max = 2.000, value = 0.000
-
-# binavg_skipover = 0
-# binavg_surface_bin = yes, min = 0.000, max = 2.000, value = 0.000
-
-
+    ds.attrs['binned'] = SBE_binned
     ds.attrs['SBE_processing'] = '\n'.join(sbe_proc_str)
     ds.attrs['SBE_processing_date'] = proc_date_ISO8601
     ds.attrs['history'] += f'\n{history_str}'
-    ds.attrs['source_files'] = src_files_raw
+    ds.attrs['source_files'] = f'{src_files_raw} -> {header_info["cnvfile"]}'
 
     return ds
 
