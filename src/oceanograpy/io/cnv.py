@@ -17,7 +17,7 @@ import re
 from typing import Optional
 import warnings
 from tqdm.notebook import tqdm 
-
+import cftime
 
 def read_cnv(cnvfile: str,
              apply_flags: Optional[bool] = True,
@@ -25,7 +25,8 @@ def read_cnv(cnvfile: str,
              inspect_plot: Optional[bool] = False,
              start_scan: Optional[int] = None,
              end_scan: Optional[int] = None,
-             suppress_time_warning: Optional[int] = None,) -> xr.Dataset:
+             suppress_time_warning: Optional[int] = None, 
+             start_time_NMEA: Optional[bool] = True) -> xr.Dataset:
     '''
     Reads CTD data and metadata from a .cnv file into a more handy format.
   
@@ -58,6 +59,13 @@ def read_cnv(cnvfile: str,
             Don't show a warning if there are no timeJ or timeS fields
             Detault is False.
 
+        start_time_NMEA: bool, optional
+            Choose whether to get start_time attribute from the "NMEA UTC (Time)" 
+            header line. Default is to grab it from the "start_time" line - this
+            is technically correct but typically identical results, and the 
+            "start_time" line can occasionally look funny. If unsure, check your 
+            header! Default is False (= read from "start_time" header line).        
+
     Returns
     -------
     xarray.Dataset
@@ -68,7 +76,6 @@ def read_cnv(cnvfile: str,
     - Checking and testing
     - Better docs (esp a good docstring for the read_cnv function!)
     - Look into *axis* (T, Z, X, Y) - is this necessary?
-    - Look into cf_role and feature type (s this a trajectoryprofile)
     - Apply to some other datasets for testing
         - Maybe also moored sensors/TSG? (or should those be separate?)
     - Figure out whether to make a split between this and a separate processing
@@ -84,8 +91,8 @@ def read_cnv(cnvfile: str,
     ds = _convert_time(ds, header_info, 
                        suppress_time_warning = suppress_time_warning)
     ds.attrs['history'] = header_info['start_history']
-    ds.attrs['start_time'] = time.datetime_to_ISO8601(
-                            header_info['start_time'])
+    ds = _add_start_time(ds, header_info, 
+                             start_time_NMEA = start_time_NMEA)
 
     ds = _read_SBE_proc_steps(ds, header_info)
     ds0 = ds.copy()
@@ -119,15 +126,65 @@ def read_cnv(cnvfile: str,
 
     return ds
 
+def _add_start_time(ds, header_info, start_time_NMEA=False):
+    '''
+    Add a start_time attribute.
+
+    Default behavior: 
+        - Use start_time header line
+    If start_time_NMEA = True:
+        - Use "NMEA UTC" line if present
+        - If not, use start_time
+    
+    Compicated way of doing this because there are some occasional 
+    oddities where e.g. 
+    - The "start_time" line is some times incorrect
+    - The "NMEA UTC" is not always present.
+
+    Important to get right since this is used for assigning
+    a time stamp to profiles. 
+    '''
+
+    if start_time_NMEA:
+        try:
+            ds.attrs['start_time'] = time.datetime_to_ISO8601(
+                            header_info['NMEA_time'])
+            ds.attrs['start_time_source'] = '"NMEA UTC" header line'
+
+        except:
+            try:
+                ds.attrs['start_time'] = time.datetime_to_ISO8601(
+                    header_info['start_time'])
+                ds.attrs['start_time_source'] = '"start_time" header line'
+
+            except:
+                raise Warning('Did not find a start time!'
+                    ' (no "start_time" or NMEA UTC" header lines).')
+    else:
+        ds.attrs['start_time'] = time.datetime_to_ISO8601(
+                            header_info['start_time'])
+        ds.attrs['start_time_source'] = '"start_time" header line'
+
+    return ds
 
 def _add_attrs(ds, header_info):
     '''
-    Add the following as attributes if they are available:
-    ship, cruise, station.
+    Add the following as attributes if they are available from the header:
+
+        ship, cruise, station.
+
+    If we don't have a station, we use the cnv file name base.
     '''
+
     for key in ['ship', 'cruise', 'station']:
         if key in header_info:
             ds.attrs[key] = header_info[key]
+
+    if 'station' not in ds.attrs:
+        station_from_filename = (
+            header_info['cnvfile'].replace(
+            '.cnv', '').replace('.CNV', ''))
+        ds.attrs['station'] = station_from_filename
 
     return ds
 
@@ -148,7 +205,7 @@ def _convert_time(ds, header_info, epoch = '1970-01-01',
         ds = _convert_time_from_juld(ds, header_info, epoch = epoch)
     else:
         if not suppress_time_warning:
-            warnings.warn('\nNOTE: Failed to extract sample time info '
+            print('\nNOTE: Failed to extract sample time info '
                       '(no timeS or timeJ in .cnv file).'
                       '\n(Not a big problem, the start_time '
                       'can be used to assign a profile time).')
@@ -344,11 +401,19 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
 
     first = True
 
+    # Keeping track of these as we want to replace them with a date *range*
+    post_proc_times = []
+    SBE_proc_times = []
+
     prog_bar_msg_3 = f'Joining profiles together'
 
     for n in tqdm(ns_binned, prog_bar_msg_3):
-        if first:
 
+        sbe_timestamp, proc_timestamp = _dates_from_history(n)
+        post_proc_times += [proc_timestamp]
+        SBE_proc_times += [sbe_timestamp]
+
+        if first:
             if 'TIME_SAMPLE' in n:
                 N = n.assign_coords({'TIME':[n.TIME_SAMPLE.mean()]})
                 N.TIME.attrs = {'units' : n.TIME_SAMPLE.units,
@@ -360,6 +425,11 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
                 N.TIME.attrs = {'units' : f'Days since {epoch} 00:00',
                                 'standard_name' : 'time',
                                 'long_name':'Start time of profile'}
+                
+            # Want to keep track of whether we use different 
+            # start_time sources
+            start_time_source = n.start_time_source
+            different_start_time_sources = False
             first = False
 
             if 'station' in N.attrs:
@@ -377,7 +447,11 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
             if 'station' in n.attrs:
                 n['STATION'] = xr.DataArray([n.station], dims='TIME', coords={'TIME': n['TIME']})
 
+            if n.start_time_source != start_time_source:
+                different_start_time_sources = True
+
             N = xr.concat([N, n], dim = 'TIME')
+
 
 
     ### FINAL TOUCHES AND EXPORTS
@@ -389,22 +463,45 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     if 'STATION' in N.data_vars:
         N['STATION'].attrs = {'long_name' : 'CTD station ID',
                               'cf_role':'profile_id'}
-        
+    
+    # Warn the user if we used different sources for profile start time
+    if different_start_time_sources:
+        print('\nThe start_time variable was read from different '
+            'header lines for different profiles. This likely means that '
+            'your .cnv files were formatted differently through the cruise. '
+            'This is probably fine, but it is a good idea to sanity check '
+            ' the TIME field.')
+
     # Add a cruise variable
     if 'cruise' in N.attrs:
         cruise = N.cruise
     else:
         cruise = '!! CRUISE !!'
-        warnings.warn('No cruise ID found in the dataset. Remember to assign!'
-                      '-> ds = cnv.set_cruise(ds, "cruisename").')
-
+        
+        print('\nNo cruise ID found in the dataset. Remember to assign!'
+                      '\n-> ds = cnv.set_cruise(ds, "cruisename").')
     N['CRUISE'] =  xr.DataArray(cruise, dims=())
     N['CRUISE'].attrs = {'long_name':'Cruise ID', 'cf_role':'trajectory_id'}
+
+    # Generalize (insert "e.g.") in attributes with specific file names 
+    N.attrs['source_files'] = f"E.g. {N.attrs['source_files']}"
+    SBEproc_file_ind = N.SBE_processing.rfind('Raw data read from ')+19
+    N.attrs['SBE_processing'] = (N.SBE_processing[:SBEproc_file_ind]
+                + 'e.g. ' + N.SBE_processing[SBEproc_file_ind:])
+
+    # Add date *ranges* to the history entries if we have different dates
+    N = _replace_history_dates_with_ranges(N, post_proc_times, SBE_proc_times)
+
+    # Delete some non-useful attributes
+    del N.attrs['SBE_processing_date']
+    del N.attrs['start_time_source']
 
     # Set the featureType attribute
     N.attrs['featureType'] = 'TrajectoryProfile'
 
-
+    # Sort chronologically
+    N = N.sortby('TIME')
+    
     return N
     
 def set_cruise(D, cruise_string):
@@ -576,7 +673,7 @@ def read_header(cnvfile):
 
                 hdict['start_history'] = (
                     hdict['start_time'].strftime('%Y-%m-%d')
-                    + ': Start of data collection.')
+                    + ': Data collection.')
 
             # Read cruise/ship/station/bottom depth/operator if available
             if '** CRUISE' in line.upper():
@@ -611,7 +708,10 @@ def read_header(cnvfile):
 
         # Remove the first ('</Sensors>') and last ('*END*') lines from the SBE history string.
         hdict['SBEproc_hist'] = hdict['SBEproc_hist'] [1:-1]
-        hdict['cnvfile'] = cnvfile
+
+        # Assign the file name without the directory path
+
+        hdict['cnvfile'] = cnvfile[cnvfile.rfind('/')+1:]
 
         return hdict
 
@@ -686,8 +786,20 @@ def bin_to_pressure(ds, dp = 1):
 
 
 
+def _dates_from_history(ds):
+    '''
+    Grab the dates of 1) SBE processing and 2) Post-processing from the
+    "history" attribute.
+    '''
+    sbe_pattern = r"(\d{4}-\d{2}-\d{2}): Processed using SBE software"
+    sbe_time_match_str = re.search(sbe_pattern, ds.history).group(1)
+    sbe_timestamp = pd.Timestamp(sbe_time_match_str)
+    
+    proc_pattern = r"(\d{4}-\d{2}-\d{2}): Post-processing"
+    proc_time_match_str = re.search(proc_pattern, ds.history).group(1)
+    proc_timestamp = pd.Timestamp(proc_time_match_str)
 
-
+    return sbe_timestamp, proc_timestamp
 
 def _read_sensor_info(cnvfile, verbose = False):
     '''
@@ -955,7 +1067,7 @@ def _read_SBE_proc_steps(ds, header_info):
     ds.attrs['SBE_processing'] = '\n'.join(sbe_proc_str)
     ds.attrs['SBE_processing_date'] = proc_date_ISO8601
     ds.attrs['history'] += f'\n{history_str}'
-    ds.attrs['source_files'] = f'{src_files_raw} -> {header_info["cnvfile"]}'
+    ds.attrs['source_files'] = f'{src_files_raw} -> {header_info["cnvfile"].upper()}'
 
     return ds
 
@@ -1010,3 +1122,50 @@ def _nmea_time_to_datetime(mon, da, yr, hms):
     nmea_time_dt = pd.to_datetime(f'{mon} {da} {yr} {hms}')
     
     return nmea_time_dt
+
+
+def _common_string(str1, str2):
+    '''
+    Return the "common denominator" string with changing characters 
+    replaced with X. 
+
+    E.g.: _common_string('hello there', 'hellu thare')
+          -> 'hellX thXre
+    '''
+    min_length = min(len(str1), len(str2))
+    common_str = ''.join([char if char == str2[i] else 'X' for i, 
+                    char in enumerate(str1)])
+
+    return common_str
+
+
+def _replace_history_dates_with_ranges(D, post_proc_times, SBE_proc_times):
+    '''
+    When joining files: Change the history strng to show time *ranges*,
+    e.g. 
+       2017-09-24: Data collection
+    -> 2017-09-24 to 2017-09-24: Data collection
+    '''
+    ppr_min, ppr_max = np.min(post_proc_times), np.max(post_proc_times)
+    sbe_min, sbe_max = np.min(SBE_proc_times), np.max(SBE_proc_times)
+    ctd_min, ctd_max = D.TIME.min(), D.TIME.max()
+
+    date_fmt = '%Y-%m-%d'
+
+    if ctd_max>ctd_min:
+        ctd_range = (
+            f'{cftime.num2date(ctd_min, D.TIME.units).strftime(date_fmt)}'
+            f' to {cftime.num2date(ctd_max, D.TIME.units).strftime(date_fmt)}')
+        D.attrs['history'] = ctd_range + D.history[10:] 
+
+    if sbe_max>sbe_min:
+        sbe_range = f'{sbe_min.strftime(date_fmt)} to {sbe_max.strftime(date_fmt)}'
+        rind = D.history.find(': Processed using SBE')
+        D.attrs['history'] = D.history[:rind-10] + sbe_range + D.attrs['history'][rind:]
+
+    if ppr_max>ppr_min:
+        ppr_range = f'{ppr_min.strftime(date_fmt)} to {ppr_max.strftime(date_fmt)}'
+        rind = D.history.find(': Post-processing.')
+        D.attrs['history'] = D.history[:rind-10] + ppr_range + D.attrs['history'][rind:]
+        
+    return D
