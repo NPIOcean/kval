@@ -15,13 +15,17 @@ import glob2
 import matplotlib.pyplot as plt
 import re
 from typing import Optional
+import warnings
+from tqdm.notebook import tqdm 
+
 
 def read_cnv(cnvfile: str,
              apply_flags: Optional[bool] = True,
              profile: Optional[str] = 'downcast',
              inspect_plot: Optional[bool] = False,
              start_scan: Optional[int] = None,
-             end_scan: Optional[int] = None) -> xr.Dataset:
+             end_scan: Optional[int] = None,
+             suppress_time_warning: Optional[int] = None,) -> xr.Dataset:
     '''
     Reads CTD data and metadata from a .cnv file into a more handy format.
   
@@ -50,6 +54,9 @@ def read_cnv(cnvfile: str,
             Manually specify the scan at which to end the profile (in *addition* to profile 
             detection and flags). Default is None.
      
+        suppress_time_warning: bool, optional
+            Don't show a warning if there are no timeJ or timeS fields
+            Detault is False.
 
     Returns
     -------
@@ -74,9 +81,12 @@ def read_cnv(cnvfile: str,
     header_info = read_header(cnvfile)
     ds = _read_column_data_xr(cnvfile, header_info)
     ds = _update_variables(ds, cnvfile)
-    ds = _convert_time(ds, header_info)
+    ds = _convert_time(ds, header_info, 
+                       suppress_time_warning = suppress_time_warning)
     ds.attrs['history'] = header_info['start_history']
-    
+    ds.attrs['start_time'] = time.datetime_to_ISO8601(
+                            header_info['start_time'])
+
     ds = _read_SBE_proc_steps(ds, header_info)
     ds0 = ds.copy()
 
@@ -122,10 +132,14 @@ def _add_attrs(ds, header_info):
     return ds
 
 
-def _convert_time(ds, header_info, epoch = '1970-01-01'):
+def _convert_time(ds, header_info, epoch = '1970-01-01', 
+                  suppress_time_warning = False):
     '''
     Convert time either from julian days (timeJ) or from  time elapsed
      in seconds (timeS). 
+
+    suppress_time_warning: Don't show a warning if there are no 
+    timeJ or timeS fields (useful for loops etc).
     '''
 
     if 'TIME_ELAPSED' in ds.keys():
@@ -133,8 +147,11 @@ def _convert_time(ds, header_info, epoch = '1970-01-01'):
     elif 'timeJ' in ds.keys():
         ds = _convert_time_from_juld(ds, header_info, epoch = epoch)
     else:
-        raise Warning('Failed to extract time info (no timeS or timeJ in source)')
-    
+        if not suppress_time_warning:
+            warnings.warn('\nNOTE: Failed to extract sample time info '
+                      '(no timeS or timeJ in .cnv file).'
+                      '\n(Not a big problem, the start_time '
+                      'can be used to assign a profile time).')
     return ds
 
 
@@ -240,7 +257,8 @@ def _apply_flag(ds):
     return ds
 
 
-def join_cruise(nc_files, bins_dbar = 1, verbose = False):
+def join_cruise(nc_files, bins_dbar = 1, verbose = True,
+                epoch = '1970-01-01'):
     '''
     Takes a number of cnv profiles, pressure bins them if necessary,
     and joins the profiles into one single file.  
@@ -252,12 +270,16 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = False):
         1. A path to the location of individual profiles, 
            e. g. 'path/to/files/'. 
         2. A list containing xr.Datasets with the individual profiles. 
+
+    epoch: Only necessary to specify here if there is no TIME_SAMPLE
+           field in the data files. (In that case, we assign time based on 
+           the profile start time, and need to know the epoch) 
+           
         
     '''
 
     ### PREPARE INPUTS
     # Grab the input data on the form of a list of xr.Datasets
-
     # (1) Load all from path if we are given a path.
     if isinstance(nc_files, str):
         if nc_files.endswith('/'):
@@ -265,7 +287,10 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = False):
         file_list = glob2.glob(f'{nc_files}/*.nc')
 
         # Note: We don't decode CF since we want time as a numerical variable.
-        ns_input = [xr.open_dataset(file, decode_cf=False) for file in file_list]
+        prog_bar_msg_1 = 'Loading profiles from netcdf files'
+        ns_input = []
+        for file in tqdm(file_list, desc=prog_bar_msg_1):
+            ns_input += [xr.open_dataset(file, decode_cf=False)]
         n_profs = len(ns_input)
         
         valid_nc_files = True
@@ -299,14 +324,16 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = False):
     ### BINNING
     # If unbinned: bin data
     if any(n_input.binned == 'no' for n_input in ns_input):
-        if verbose:
-            print(f'Binning all profiles to {bins_dbar} dbar.')
-        ns_binned = [bin_to_pressure(n_input, bins_dbar)
-                     for n_input in ns_input] 
+  
+        prog_bar_msg_2 = f'Binning all profiles to {bins_dbar} dbar'
+        
+        ns_binned = []
+        for n_input in tqdm(ns_input, desc = prog_bar_msg_2):
+            ns_binned += [bin_to_pressure(n_input, bins_dbar)] 
     else: 
         # replace this with using the warnings module?
         print('NOTE: Input data already binned -> using preexisting binning.')
-        ns_binned = ns
+        ns_binned = ns_input
     
 
     ### JOINING PROFILES TO ONE DATASET
@@ -316,20 +343,36 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = False):
     # - Add a CRUISE variable 
 
     first = True
-    
-    for n in ns_binned:
+
+    prog_bar_msg_3 = f'Joining profiles together'
+
+    for n in tqdm(ns_binned, prog_bar_msg_3):
         if first:
-            N = n.assign_coords({'TIME':[n.TIME_SAMPLE.mean()]})
-            N.TIME.attrs = {'units' : n.TIME_SAMPLE.units,
-                            'standard_name' : 'time',
-                            'long_name':'Average time of measurement'}
+
+            if 'TIME_SAMPLE' in n:
+                N = n.assign_coords({'TIME':[n.TIME_SAMPLE.mean()]})
+                N.TIME.attrs = {'units' : n.TIME_SAMPLE.units,
+                                'standard_name' : 'time',
+                                'long_name':'Average time of measurement'}
+            else:
+                start_time_num = time.ISO8601_to_datenum(n.attrs['start_time'])
+                N = n.assign_coords({'TIME':[start_time_num]})
+                N.TIME.attrs = {'units' : f'Days since {epoch} 00:00',
+                                'standard_name' : 'time',
+                                'long_name':'Start time of profile'}
             first = False
 
             if 'station' in N.attrs:
-                N['STATION'] = xr.DataArray([N.station], dims='TIME', coords={'TIME': N['TIME']})
+                station = N.station
+                del N.attrs['station']
+                N['STATION'] = xr.DataArray([station], dims='TIME', coords={'TIME': N['TIME']})
 
         else:
-            n = n.assign_coords({'TIME':[N.TIME_SAMPLE.mean()]})
+            if 'TIME_SAMPLE' in n:
+                n = n.assign_coords({'TIME':[N.TIME_SAMPLE.mean()]})
+            else:
+                start_time_num = time.ISO8601_to_datenum(n.attrs['start_time'])
+                n = n.assign_coords({'TIME':[start_time_num]})
 
             if 'station' in n.attrs:
                 n['STATION'] = xr.DataArray([n.station], dims='TIME', coords={'TIME': n['TIME']})
@@ -338,18 +381,25 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = False):
 
 
     ### FINAL TOUCHES AND EXPORTS
-
     # Transpose so that variables are structured like (TIME, PRES) rather than
     # (PRES, TIME). Convenient when plotting etc.
     N = N.transpose() 
 
     # Add some metadata to the STATION variable
     if 'STATION' in N.data_vars:
-        del N.attrs['station']
         N['STATION'].attrs = {'long_name' : 'CTD station ID',
                               'cf_role':'profile_id'}
+        
     # Add a cruise variable
-    N['CRUISE'] = ((), N.cruise, {'long_name':'Cruise ID', 'cf_role':'trajectory_id'}) 
+    if 'cruise' in N.attrs:
+        cruise = N.cruise
+    else:
+        cruise = '!! CRUISE !!'
+        warnings.warn('No cruise ID found in the dataset. Remember to assign!'
+                      '-> ds = cnv.set_cruise(ds, "cruisename").')
+
+    N['CRUISE'] =  xr.DataArray(cruise, dims=())
+    N['CRUISE'].attrs = {'long_name':'Cruise ID', 'cf_role':'trajectory_id'}
 
     # Set the featureType attribute
     N.attrs['featureType'] = 'TrajectoryProfile'
@@ -357,6 +407,17 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = False):
 
     return N
     
+def set_cruise(D, cruise_string):
+    '''
+    Assign a value to the CRUISE variable in a joined 
+    CTD dataset D.
+
+    E.g.:  D = cnv.set_cruise(D, 'cruisename') 
+    '''
+    cr_attrs = D.CRUISE.attrs
+    D['CRUISE'] = cruise_string
+    D['CRUISE'].attrs = cr_attrs 
+    return D
 
 
 def _remove_up_dncast(ds, keep = 'downcast'):
@@ -414,6 +475,7 @@ def _read_column_data_xr(cnvfile, header_info):
     # Convert to xarray DataFrame
     ds = xr.Dataset(df).rename({'dim_0':'scan_count'})
     ds.attrs['binned'] = 'no'
+
 
     return ds
 
