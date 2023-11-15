@@ -23,21 +23,23 @@ SBE_name_map = { # Note: replace / with _  !
               'sensors':['temp_sensor_1']},
     'T190C': {'name': 'TEMP2', 'units': 'degree_Celsius', 
               'sensors':['temp_sensor_2']},
+    'T4990C': {'name': 'TEMP1', 'units': 'degree_Celsius', 
+              'sensors':['temp_sensor_1']},
     'C0S_M': {'name': 'CNDC1', 'units': 'S m-1',
               'sensors':['cndc_sensor_1']},
     'C1S_M': {'name': 'CNDC2', 'units': 'S m-1',
               'sensors':['cndc_sensor_2']},
-    'SBOX0MM_KG': {'name': 'DOXY1', 'units': 'micromol kg-1',
+    'SBEOX0MM_KG': {'name': 'DOXY1', 'units': 'micromol kg-1',
               'sensors':['oxy_sensor_1']},
-    'SBOX1MM_KG': {'name': 'DOXY2', 'units': 'micromol kg-1',
+    'SBEOX1MM_KG': {'name': 'DOXY2', 'units': 'micromol kg-1',
               'sensors':['oxy_sensor_2']},
-    'SBOX0ML_L': {'name': 'DOXY1', 'units': 'mL l-1',
+    'SBEOX0ML_L': {'name': 'DOXY1', 'units': 'mL l-1',
               'sensors':['oxy_sensor_1']},
-    'SBOX1ML_L': {'name': 'DOXY2', 'units': 'mL l-1',
+    'SBEOX1ML_L': {'name': 'DOXY2', 'units': 'mL l-1',
               'sensors':['oxy_sensor_2']},
     'SBEOX0MG/L': {'name': 'DOXY1', 'units': 'mg l-1',
               'sensors':['oxy_sensor_1']},
-    'SBOX1ML/L': {'name': 'DOXY2', 'units': 'mL l-1',
+    'SBOX1MG/L': {'name': 'DOXY2', 'units': 'mg l-1',
               'sensors':['oxy_sensor_2']},
     'SBEOX0V': {'name': 'OXYV1', 'units': 'volt',
               'sensors':['oxy_sensor_1']},
@@ -57,12 +59,17 @@ SBE_name_map = { # Note: replace / with _  !
               'sensors':['chla_sensor_2']},
     'AVGSVCM': {'name': 'SVEL_AVG', 'units': 'm s-1'},
     'DEPSM': {'name': 'DEPTH', 'units': 'm'},
-
+    'SIGMA-É00': {'name': 'SIGTH1', 'units': 'kg m-3',
+                  'sensors':['temp_sensor_1', 'cndc_sensor_1']},
+    'SIGMA-É11': {'name': 'SIGTH2', 'units': 'kg m-3',
+                  'sensors':['temp_sensor_2', 'cndc_sensor_2']},
     'SVCM': {'name': 'SVEL', 'units': 'm s-1'},
     'SAL00': {'name': 'PSAL1', 'units': '1', 
               'sensors':['temp_sensor_1', 'cndc_sensor_1']},
     'SAL11': {'name': 'PSAL2', 'units': '1',
               'sensors':['temp_sensor_2', 'cndc_sensor_2']},
+
+    'ALTM': {'name': 'ALTI', 'units': 'm'},
     'LATITUDE': {'name': 'LATITUDE_SAMPLE', 'units': 'degree_north'},
     'LONGITUDE': {'name': 'LONGITUDE_SAMPLE', 'units': 'degree_east'},
     'SCAN': {'name': 'SCAN', 'units': 'counts'},
@@ -133,7 +140,7 @@ var_attrs = {
 }
 
 
-### INSTRUMENT CONFIURATION KEYS ###
+### INSTRUMENT CONFIGURATION KEYS ###
 
 sensor_info_dict = {
     'Temperature -->':'temp_sensor_1',
@@ -141,6 +148,7 @@ sensor_info_dict = {
     'Conductivity -->':'cndc_sensor_1',
     'Conductivity, 2 -->':'cndc_sensor_2',
     'Pressure, Digiquartz with TC -->':'pres_sensor',
+    'Count, Pressure, Strain Gauge -->':'pres_sensor',
     'Oxygen, SBE 43 -->':'oxy_sensor_1',
     'Oxygen, SBE 43, 2 -->':'oxy_sensor_2',
     'sbeox0V: Oxygen raw, SBE 43 -->':'oxy_sensor_1',

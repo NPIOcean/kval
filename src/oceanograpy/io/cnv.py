@@ -31,7 +31,8 @@ def read_cnv(cnvfile: str,
              start_time_NMEA: Optional[bool] = True,
              lat: Optional[float] = None,
              lon: Optional[float] = None,
-             station: Optional[str] = None,) -> xr.Dataset:
+             station: Optional[str] = None,
+             station_from_filename: Optional[bool] = False,) -> xr.Dataset:
     '''
     Reads CTD data and metadata from a .cnv file into a more handy format.
     (I.e. an xarray Dataframe with any potentially useful metadata we can 
@@ -41,7 +42,7 @@ def read_cnv(cnvfile: str,
        need more metadata not found in the file for that). This should be
        a very good start, however.
 
-    -> Profiles are assigned the coordinates ['scan_count'], or if 
+    -> Profiles are assigned the coordinates ['scan_count'], or, if 
        time_dim is set to True, ['scan_count', 'TIME'], where TIME
        is one-dimensional.
        
@@ -49,8 +50,6 @@ def read_cnv(cnvfile: str,
        the join_cruise() function. For this, we need to set time_dim=True
        when using read_cnv().
 
-
-  
     Parameters
     ----------
     cnvfile: str
@@ -103,7 +102,11 @@ def read_cnv(cnvfile: str,
         Option to specify station manually. Otherwise: extracting from 
         'station line' if available and from the cnv file name if not.
     
-    
+    station_from_filename [bool], optional
+        Option to read the station name from the file name, e.g. "STA001"
+        fom a file "STA001.cnv". Otherwise we try to grab it from the header.
+        Default is False.
+
     Returns
     -------
     xarray.Dataset
@@ -130,12 +133,16 @@ def read_cnv(cnvfile: str,
     ds = _convert_time(ds, header_info, 
                        suppress_time_warning = suppress_time_warning)
     ds.attrs['history'] = header_info['start_history']
-    ds = _add_header_attrs(ds, header_info)
+    ds = _add_header_attrs(ds, header_info, station_from_filename)
     ds = _add_start_time(ds, header_info, 
                              start_time_NMEA = start_time_NMEA)
     ds = _read_SBE_proc_steps(ds, header_info)
 
+    if ds.binned != 'no':
+        ds = _change_dims_scan_to_pres(ds)
 
+    ds0 = ds.copy()
+    
     if apply_flags:
         ds = _apply_flag(ds)
         ds.attrs['SBE flags applied'] = 'yes'
@@ -147,9 +154,10 @@ def read_cnv(cnvfile: str,
             suppress_latlon_warning= suppress_latlon_warning)
 
     if profile in ['upcast', 'downcast', 'dncast']:
-        ds = _remove_up_dncast(ds, keep = profile)
+        if ds.binned == 'no':
+            ds = _remove_up_dncast(ds, keep = profile)
     else:
-        ds.attrs['profile_direction'] = 'All good data'
+        ds.attrs['profile_direction'] = 'All available good data'
 
     if start_scan:
         ds = _remove_start_scan(ds, start_scan)
@@ -187,6 +195,9 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
            the profile start time, and need to know the epoch) 
         
     '''
+
+
+
 
     ### PREPARE INPUTS
     # Grab the input data on the form of a list of xr.Datasets
@@ -234,22 +245,20 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     ### BINNING
     # If unbinned: bin data
     if any(n_input.binned == 'no' for n_input in ns_input):
-  
         prog_bar_msg_2 = f'Binning all profiles to {bins_dbar} dbar'
         
         ns_binned = []
         for n_input in tqdm(ns_input, desc = prog_bar_msg_2):
             ns_binned += [bin_to_pressure(n_input, bins_dbar)] 
     else: 
-        # replace this with using the warnings module?
-        print('NOTE: Input data already binned -> using preexisting binning.')
+        print('NOTE: It seems the input data already binned ->'
+              ' using preexisting binning.')
+        # Change profile dimension from scan_count to PRES
+
         ns_binned = ns_input
     
-
     ### JOINING PROFILES TO ONE DATASET
     #  Concatenation loop.
-    # - Assigning a TIME dimension based on average of measurement time (TIME_SAMPLE)
-    # - Also adding a STATION variable if we have a station attribute
     # - Add a CRUISE variable 
 
     first = True
@@ -273,19 +282,61 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
             start_time_source = n.start_time_source
             different_start_time_sources = False
             first = False
-
         else:
-
             if n.start_time_source != start_time_source:
                 different_start_time_sources = True
             N = xr.concat([N, n], dim = 'TIME')
 
 
 
+    ### CHECK IF ANY SENSORS CHANGED
+    # Modify metadata if they did
+    for varnm in list(N.data_vars) + ['PRES']:
+        caldates, sns, units, stations = [], [], [], []
+
+        for n in nc_files:
+            stations += [n.STATION.values[0]]
+            for _list, _attr  in zip([caldates, sns, ],
+                ['sensor_calibration_date', 'sensor_serial_number',]):
+                if varnm in n.keys():
+                    if _attr in n[varnm].attrs:
+                        _list += [n[varnm].attrs[_attr]]
+                    else:
+                        _list += [None]
+                else:
+                    _list += [None]
+
+        sns_filtered = np.array([value for value in sns if value is not None])
+        sns_unique = unique_entries = list(set(sns_filtered))
+        caldates_filtered = np.array([value for value in caldates if value is not None])
+        caldates_unique = unique_entries = list(set(caldates_filtered))
+        
+        if len(sns_unique)==2:
+            if 'comment' in N[varnm].attrs:
+                comment_0 = N[varnm].comment
+            else:
+                comment_0 = ''
+            N[varnm].attrs['comment'] = comment_0 + ' Sensors changed underway.'
+            where_sensor_A = np.array(stations)[np.array(sns)==sns_unique[0]]
+            where_sensor_B = np.array(stations)[np.array(sns)==sns_unique[1]]
+            N[varnm].attrs['stations_A'] = ', '.join(where_sensor_A)
+            N[varnm].attrs['stations_B'] = ', '.join(where_sensor_B)
+            N[varnm].attrs['sensor_calibration_date'] = (
+                f'A: {caldates_unique[0]}, B: {caldates_unique[1]}') 
+            N[varnm].attrs['sensor_serial_number'] = (
+                f'A: {sns_unique[0]}, B: {sns_unique[1]}') 
+
     ### FINAL TOUCHES AND EXPORTS
+    
     # Transpose so that variables are structured like (TIME, PRES) rather than
     # (PRES, TIME). Convenient when plotting etc.
     N = N.transpose() 
+
+
+    # Sort chronologically
+    N = N.sortby('TIME')
+    
+
 
     # Add some metadata to the STATION variable
     if 'STATION' in N.data_vars:
@@ -327,9 +378,6 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     # Set the featureType attribute
     N.attrs['featureType'] = 'TrajectoryProfile'
 
-    # Sort chronologically
-    N = N.sortby('TIME')
-    
     return N
     
 
@@ -482,13 +530,15 @@ def read_header(cnvfile):
             
             # If no NMEA lat/lon: Look for "** Latitude/Longitude"
             # (for some poorly structured .cnv files)
-            if '** LATITUDE' in line.upper():
+            if '** LATITUDE' in line.upper() and isinstance(
+                hdict['latitude'], list):
                 if len(hdict['latitude']) == 0:
                     lat_value = _decdeg_from_line(line)
                     if lat_value:
                         hdict['latitude'] = lat_value
 
-            if '** LONGITUDE' in line.upper():
+            if '** LONGITUDE' in line.upper()and isinstance(
+                hdict['longitude'], list):
                 if len(hdict['longitude']) == 0:
                     lon_value= _decdeg_from_line(line)
                     if lon_value:
@@ -566,8 +616,8 @@ def _read_column_data_xr(cnvfile, header_info):
     
     # Convert to xarray DataFrame
     ds = xr.Dataset(df).rename({'dim_0':'scan_count'})
-    ds.attrs['binned'] = 'no'
-
+    # Will update "binning" later if we discover that it is binned 
+    ds.attrs['binned'] = 'no' 
 
     return ds
 
@@ -703,7 +753,6 @@ def _add_latlon_variables(ds, suppress_latlon_warning = False):
 
     missing = False
 
-
     if 'latitude' in ds.attrs:
         if ds.latitude: # If not "None"
             lat_value = ds.latitude
@@ -757,7 +806,7 @@ def _add_latlon_variables(ds, suppress_latlon_warning = False):
     return ds
 
 
-def _add_header_attrs(ds, header_info):
+def _add_header_attrs(ds, header_info, station_from_filename = False):
     '''
     Add the following as attributes if they are available from the header:
 
@@ -766,6 +815,7 @@ def _add_header_attrs(ds, header_info):
     If the attribute is already assigned, we don't change it 
 
     If we don't have a station, we use the cnv file name base.
+    (can be forced by setting station_from_filename = True)
     '''
     for key in ['ship', 'cruise', 'station', 'latitude', 'longitude']:
 
@@ -773,7 +823,7 @@ def _add_header_attrs(ds, header_info):
 
             ds.attrs[key] = header_info[key]
 
-    if 'station' not in ds.attrs:
+    if 'station' not in ds.attrs or station_from_filename:
         station_from_filename = (
             header_info['cnvfile'].replace(
             '.cnv', '').replace('.CNV', ''))
@@ -872,6 +922,7 @@ def _update_variables(ds, cnvfile):
 
     for old_name in ds.keys():
         old_name_cap = old_name.upper()
+
         if old_name_cap in vardef.SBE_name_map:
 
             var_dict = vardef.SBE_name_map[old_name_cap]
@@ -894,6 +945,7 @@ def _update_variables(ds, cnvfile):
 
                 ds[new_name].attrs['sensor_calibration_date'] = (
                     ', '.join(sensor_caldates)) 
+
     return ds
 
 def _read_sensor_info(cnvfile, verbose = False):
@@ -983,7 +1035,16 @@ def _read_sensor_info(cnvfile, verbose = False):
             if '*END*' in line:
                 return sensor_dict
 
-    
+def _change_dims_scan_to_pres(ds):
+    '''
+    Change coordinate / dimension from scan_count to 
+    PRES. A good idea for pressure binned data (bad idea otherwise).
+    '''
+    ds = ds.set_coords('PRES')
+    ds = ds.swap_dims({'scan_count': 'PRES'})
+    ds = ds.drop('scan_count')
+
+    return ds
 
 def _read_SBE_proc_steps(ds, header_info):
     '''
@@ -1155,10 +1216,10 @@ def _read_SBE_proc_steps(ds, header_info):
             sbe_proc_str += [f'   > {binavg_excl_str}{bin_skipover_str}.']
             sbe_proc_str += [f'   > {surfbin_str}.']
             SBE_binned = f'{bin_size} {bin_unit} (SBE software)'
-        else:
-            SBE_binned = 'no'
 
-    ds.attrs['binned'] = SBE_binned
+    try:
+        ds.attrs['binned'] = SBE_binned
+    except: pass
     ds.attrs['SBE_processing'] = '\n'.join(sbe_proc_str)
     ds.attrs['SBE_processing_date'] = proc_date_ISO8601
     ds.attrs['history'] += f'\n{history_str}'
