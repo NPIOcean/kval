@@ -27,7 +27,11 @@ def read_cnv(cnvfile: str,
              start_scan: Optional[int] = None,
              end_scan: Optional[int] = None,
              suppress_time_warning: Optional[int] = None, 
-             start_time_NMEA: Optional[bool] = True) -> xr.Dataset:
+             suppress_latlon_warning: Optional[int] = None, 
+             start_time_NMEA: Optional[bool] = True,
+             lat: Optional[float] = None,
+             lon: Optional[float] = None,
+             station: Optional[str] = None,) -> xr.Dataset:
     '''
     Reads CTD data and metadata from a .cnv file into a more handy format.
   
@@ -64,6 +68,10 @@ def read_cnv(cnvfile: str,
         Don't show a warning if there are no timeJ or timeS fields
         Detault is False.
 
+    suppress_latlon_warning: bool, optional
+        Don't show a warning if there is no lat/lon information.
+        Detault is False.
+
     start_time_NMEA: bool, optional
         Choose whether to get start_time attribute from the "NMEA UTC (Time)" 
         header line. Default is to grab it from the "start_time" line - this
@@ -71,6 +79,15 @@ def read_cnv(cnvfile: str,
         "start_time" line can occasionally look funny. If unsure, check your 
         header! Default is False (= read from "start_time" header line).        
 
+    lat, lon: [float, bool], optional
+        Option to specify latitude/longitude manually. (E.g. if there is no lat/lon 
+        info in the header or variables).
+
+    station [str, bool], optional
+        Option to specify station manually. Otherwise: extracting from 
+        'station line' if available and from the cnv file name if not.
+    
+    
     Returns
     -------
     xarray.Dataset
@@ -93,17 +110,15 @@ def read_cnv(cnvfile: str,
     header_info = read_header(cnvfile)
     ds = _read_column_data_xr(cnvfile, header_info)
     ds = _update_variables(ds, cnvfile)
+    ds = _assign_specified_lat_lon_station(ds, lat, lon, station)
     ds = _convert_time(ds, header_info, 
                        suppress_time_warning = suppress_time_warning)
     ds.attrs['history'] = header_info['start_history']
+    ds = _add_header_attrs(ds, header_info)
     ds = _add_start_time(ds, header_info, 
                              start_time_NMEA = start_time_NMEA)
     ds = _read_SBE_proc_steps(ds, header_info)
-  #  ds0 = ds.copy()
 
-
-    if time_dim:
-        ds = _add_time_dim_profile(ds)
 
     if apply_flags:
         ds = _apply_flag(ds)
@@ -111,6 +126,9 @@ def read_cnv(cnvfile: str,
     else:
         ds.attrs['SBE flags applied'] = 'no'
 
+    if time_dim:
+        ds = _add_time_dim_profile(ds, 
+            suppress_latlon_warning= suppress_latlon_warning)
 
     if profile in ['upcast', 'downcast', 'dncast']:
         ds = _remove_up_dncast(ds, keep = profile)
@@ -125,47 +143,10 @@ def read_cnv(cnvfile: str,
     if inspect_plot:
         _inspect_extracted(ds, ds0, start_scan, end_scan)
 
-    ds = _add_attrs(ds, header_info)
-
     now_str = pd.Timestamp.now().strftime('%Y-%m-%d')
     ds.attrs['history'] += f'\n{now_str}: Post-processing.'
 
     return ds
-
-
-
-def _add_time_dim_profile(ds, epoch = '1970-01-01', 
-                          time_source = 'sample_time'):
-    '''
-    Add a 0-dimensional TIME coordinate to a profile.
-
-    time_source:
-    
-    sample_time:  Average of TIME_SAMPLE varibale (which was calculated 
-                  from timeS or timeJ fields).
-
-    start_time:   Use the start_time field (star of scans). This is extracted
-                  from either the header; either the 'start_time' or 
-                  'NMEA UTC' lines (which of the twois specified in the 
-                  read_cnv() function usng the start_time_NMEA flag).
-    '''
-
-
-    if 'TIME_SAMPLE' in ds:
-        ds = ds.assign_coords({'TIME':[ds.TIME_SAMPLE.mean()]})
-        ds.TIME.attrs = {'units' : ds.TIME_SAMPLE.units,
-            'standard_name' : 'time',
-            'long_name':'Average time of measurement',
-            'SBE_source_variable':ds.TIME_SAMPLE.SBE_source_variable}
-    else:
-        start_time_num = time.ISO8601_to_datenum(ds.attrs['start_time'])
-        ds = ds.assign_coords({'TIME':[start_time_num]})
-        ds.TIME.attrs = {'units' : f'Days since {epoch} 00:00',
-                        'standard_name' : 'time',
-                        'long_name':'Start time of profile',
-                        'comment':f'Source: {ds.start_time_source}'}
-    return ds
-
 
 
 
@@ -384,10 +365,12 @@ def bin_to_pressure(ds, dp = 1):
     Reproducing the SBE algorithm as documented in:
     https://www.seabird.com/cms-portals/seabird_com/
     cms/documents/training/Module13_AdvancedDataProcessing.pdf
-    # Provides not a bin *average* but a*linear estimate of variable at bin
+
+    # Provides not a bin *average* but a *linear estimate of variable at bin
     pressure* (in practice a small but noteiceable difference)
     (See page 13 for the formula used)
     No surface bin included.
+   
     Equivalent to this in SBE terms (I think)
     # binavg_bintype = decibars
     # binavg_binsize = *dp*
@@ -404,25 +387,37 @@ def bin_to_pressure(ds, dp = 1):
     _keep_attr_value = xr.get_options()['keep_attrs']
     xr.set_options(keep_attrs=True)
 
+    # We have to reassign the values of the variables which are not on the
+    # pressure dimension.
+    
+    # Save a copy of the pre-binned data
+    ds0 = ds.copy()
+    # Make a list of variables with only a TIME dimension
+    time_vars = [var_name for var_name, var in ds.variables.items() 
+                 if 'TIME' in var.dims and len(var.dims) == 1]
+    # Make a copy with only the pressure-dimensional variables
+    ds_pres = ds.drop(time_vars)
+
     # Define the bins over which to average
-    pmax = float(ds.PRES.max())
+    pmax = float(ds_pres.PRES.max())
     pmax_bound = np.floor(pmax-dp/2)+dp/2
 
-    pmin = float(ds.PRES.min())
+    pmin = float(ds_pres.PRES.min())
     pmin_bound = np.floor(pmin+dp/2)-dp/2
 
     p_bounds = np.arange(pmin_bound, pmax_bound+1e-9, dp) 
     p_centre = np.arange(pmin_bound, pmax_bound, dp)+dp/2
 
     # Pressure averaged 
-    ds_pavg = ds.groupby_bins('PRES', bins = p_bounds).mean()
+    ds_pavg = ds_pres.groupby_bins('PRES', bins = p_bounds).mean(dim = 'scan_count')
 
     # Get pressure *binned* according to formula on page 13 in SBEs module 13 document
-
     ds_curr = ds_pavg.isel({'PRES_bins':slice(1, None)})
     ds_prev = ds_pavg.isel({'PRES_bins':slice(None, -1)})
     # Must assign the same coordinates in order to be able to matrix multiply
     ds_prev.coords['PRES_bins'] =  ds_curr.PRES_bins
+
+
 
     p_target = p_centre[slice(1, None)]
     _numerator = ds_pavg.diff('PRES_bins')*(p_target - ds_prev.PRES)
@@ -441,6 +436,10 @@ def bin_to_pressure(ds, dp = 1):
 
     # Set xarray option "keep_attrs" back to whatever it was
     xr.set_options(keep_attrs=_keep_attr_value)
+
+    # Add back the non-pressure dimensional variables
+    for time_var in time_vars:
+        ds_binned[time_var] = ds0[time_var] 
 
     return ds_binned
 
@@ -491,6 +490,20 @@ def read_header(cnvfile):
                 nmea_time_split = line.split()[-4:]
                 hdict['NMEA_time'] = _nmea_time_to_datetime(*nmea_time_split)
             
+            # If no NMEA lat/lon: Look for "** Latitude/Longitude"
+            # (for some poorly structured .cnv files)
+            if '** LATITUDE' in line.upper():
+                if len(hdict['latitude']) == 0:
+                    lat_value = _decdeg_from_line(line)
+                    if lat_value:
+                        hdict['latitude'] = lat_value
+
+            if '** LONGITUDE' in line.upper():
+                if len(hdict['longitude']) == 0:
+                    lon_value= _decdeg_from_line(line)
+                    if lon_value:
+                        hdict['longitude'] = lon_value
+                    
             # Read start time
             if 'start_time' in line:
                 hdict['start_time'] = (
@@ -534,8 +547,13 @@ def read_header(cnvfile):
         # Remove the first ('</Sensors>') and last ('*END*') lines from the SBE history string.
         hdict['SBEproc_hist'] = hdict['SBEproc_hist'] [1:-1]
 
-        # Assign the file name without the directory path
+        # Set empty fields to None
+        for hkey in hkeys:
+            if isinstance(hdict[hkey], list):
+                if len(hdict[hkey])==0:
+                    hdict[hkey] = None
 
+        # Assign the file name without the directory path
         hdict['cnvfile'] = cnvfile[cnvfile.rfind('/')+1:]
 
         return hdict
@@ -560,6 +578,22 @@ def _read_column_data_xr(cnvfile, header_info):
     ds = xr.Dataset(df).rename({'dim_0':'scan_count'})
     ds.attrs['binned'] = 'no'
 
+
+    return ds
+
+
+def _assign_specified_lat_lon_station(ds, lat, lon, station):
+    '''
+    Assign values to latitude, longitude, station attributes
+    if specified by the user (not None).
+    '''
+
+    if lat:
+        ds.attrs['latitude'] = lat 
+    if lon:
+        ds.attrs['longitude'] = lon
+    if station:
+        ds.attrs['station'] = station 
 
     return ds
 
@@ -606,17 +640,149 @@ def _add_start_time(ds, header_info, start_time_NMEA=False):
     return ds
 
 
-def _add_attrs(ds, header_info):
+def _add_time_dim_profile(ds, epoch = '1970-01-01', 
+                          time_source = 'sample_time',
+                          suppress_latlon_warning = False):
+    '''
+    Add a 0-dimensional TIME coordinate to a profile.
+    Also adds the 0-d variables STATION, LATITUDE, and LONGITUDE.
+
+    time_source:
+    
+    sample_time:  Average of TIME_SAMPLE varibale (which was calculated 
+                  from timeS or timeJ fields).
+
+    start_time:   Use the start_time field (star of scans). This is extracted
+                  from either the header; either the 'start_time' or 
+                  'NMEA UTC' lines (which of the twois specified in the 
+                  read_cnv() function usng the start_time_NMEA flag).
+    '''
+
+
+    if 'TIME_SAMPLE' in ds:
+        ds = ds.assign_coords({'TIME':[ds.TIME_SAMPLE.mean()]})
+        ds.TIME.attrs = {'units' : ds.TIME_SAMPLE.units,
+            'standard_name' : 'time',
+            'long_name':'Average time of measurement',
+            'SBE_source_variable':ds.TIME_SAMPLE.SBE_source_variable}
+    else:
+        start_time_num = time.ISO8601_to_datenum(ds.attrs['start_time'])
+        ds = ds.assign_coords({'TIME':[start_time_num]})
+        ds.TIME.attrs = {'units' : f'Days since {epoch} 00:00',
+                        'standard_name' : 'time',
+                        'long_name':'Start time of profile',
+                        'comment':f'Source: {ds.start_time_source}'}
+        
+    
+    # Add STATION
+    ds = _add_station_variable(ds)
+    ds = _add_latlon_variables(ds, suppress_latlon_warning)
+    
+    return ds
+
+
+
+def _add_station_variable(ds):
+    '''
+    Adds a 0-d STATION variable to a profile.
+
+    Grabs the value from the station attribute.
+
+    (Requires that a 0-d TIME dimension exists, see 
+    _add_time_dim_profile).
+
+    '''
+
+    station_array = xr.DataArray([ds.station], dims = 'TIME', coords={'TIME': ds.TIME},
+        attrs = {'long_name' : 'CTD station ID',  'cf_role':'profile_id'})
+    ds['STATION'] = station_array
+
+    return ds
+
+
+def _add_latlon_variables(ds, suppress_latlon_warning = False):
+    '''
+    Adds a 0-d STATION variable to a profile.
+
+    Grabs the value from the station attribute.
+
+    (Requires that a 0-d TIME dimension exists, see 
+    _add_time_dim_profile).
+
+    '''
+
+    missing = False
+
+
+    if 'latitude' in ds.attrs:
+        if ds.latitude: # If not "None"
+            lat_value = ds.latitude
+        else:
+            lat_value = np.nan
+            missing = 'latitude'
+
+    elif 'LATITUDE_SAMPLE' in ds:
+        lat_value = ds.LATITUDE_SAMPLE.mean()
+    else:
+        lat_value = np.nan
+        missing = 'latitude'
+
+    lat_array = xr.DataArray([lat_value], dims = 'TIME', 
+        coords={'TIME': ds.TIME},
+        attrs = {'standard_name': 'latitude','units': 'degree_north', 
+                'long_name': 'latitude',}) 
+                
+    ds['LATITUDE'] = lat_array
+
+
+    if 'longitude' in ds.attrs:
+        if ds.longitude: # If not "None"
+            lon_value = ds.longitude
+        else:
+            lon_value = np.nan
+        if missing:
+            missing += ', longitude'
+        else:
+            missing = 'longitude'
+    elif  'LONGITUDE_SAMPLE' in ds:
+        lon_value = ds.LONGITUDE_SAMPLE.mean()
+    else:
+        lon_value = np.nan
+        if missing:
+            missing += ', longitude'
+        else:
+            missing = 'longitude'
+
+    lon_array = xr.DataArray([lon_value], dims = 'TIME', 
+        coords={'TIME': ds.TIME},
+        attrs = {'standard_name': 'longitude','units': 'degree_east', 
+                 'long_name': 'longitude',}) 
+    ds['LONGITUDE'] = lon_array
+
+    if missing and suppress_latlon_warning==False:
+        warn_str = (f'{ds.STATION.values[0]}: Unable to find [{missing}] ' 
+            'in .cnv file \n -> Assigning NaN values.')
+        print(f'NOTE!: {warn_str}')
+        
+
+
+    return ds
+
+
+def _add_header_attrs(ds, header_info):
     '''
     Add the following as attributes if they are available from the header:
 
-        ship, cruise, station.
+        ship, cruise, station, latitude, longitude
+
+    If the attribute is already assigned, we don't change it 
 
     If we don't have a station, we use the cnv file name base.
     '''
+    for key in ['ship', 'cruise', 'station', 'latitude', 'longitude']:
 
-    for key in ['ship', 'cruise', 'station']:
-        if key in header_info:
+        if key in header_info and key not in ds.attrs:
+
             ds.attrs[key] = header_info[key]
 
     if 'station' not in ds.attrs:
@@ -1064,7 +1230,26 @@ def _nmea_time_to_datetime(mon, da, yr, hms):
     
     return nmea_time_dt
 
+def _decdeg_from_line(line):
+    '''
+    From a line line  '** Latitude: 081 16.1347'
+    return decimal degrees, e.g. 81.26891166
 
+    NOTE: This is to parse ad-hoc formatted files. May not work for everything.
+    The default behaviour is to look for NMEA Lat/Lon - this is preferable and
+    should be present in a well formatted header!
+    '''
+    deg_min_str = line[(line.rfind(':')+2):].replace('\n','').split()
+    if len(deg_min_str)==0: # If there is no actual lat/lon string..
+        return None
+    
+    deg = float(deg_min_str[0])
+    min = float(deg_min_str[1])
+    min_decdeg = min/60
+    sign_deg = np.sign(deg)
+    decdeg = deg + sign_deg*min_decdeg
+
+    return decdeg
 
 
 def _replace_history_dates_with_ranges(D, post_proc_times, SBE_proc_times):
