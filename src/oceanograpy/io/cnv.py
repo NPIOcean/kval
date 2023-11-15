@@ -34,6 +34,22 @@ def read_cnv(cnvfile: str,
              station: Optional[str] = None,) -> xr.Dataset:
     '''
     Reads CTD data and metadata from a .cnv file into a more handy format.
+    (I.e. an xarray Dataframe with any potentially useful metadata we can 
+    extract from the .cnv header.)
+    
+    -> This does not mean that the profile is CF/ACDD compliant (we will 
+       need more metadata not found in the file for that). This should be
+       a very good start, however.
+
+    -> Profiles are assigned the coordinates ['scan_count'], or if 
+       time_dim is set to True, ['scan_count', 'TIME'], where TIME
+       is one-dimensional.
+       
+    -> Profiles created using this function can be joined together using
+       the join_cruise() function. For this, we need to set time_dim=True
+       when using read_cnv().
+
+
   
     Parameters
     ----------
@@ -169,7 +185,6 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     epoch: Only necessary to specify here if there is no TIME_SAMPLE
            field in the data files. (In that case, we assign time based on 
            the profile start time, and need to know the epoch) 
-           
         
     '''
 
@@ -252,42 +267,17 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
         SBE_proc_times += [sbe_timestamp]
 
         if first:
-            if 'TIME_SAMPLE' in n:
-                N = n.assign_coords({'TIME':[n.TIME_SAMPLE.mean()]})
-                N.TIME.attrs = {'units' : n.TIME_SAMPLE.units,
-                                'standard_name' : 'time',
-                                'long_name':'Average time of measurement'}
-            else:
-                start_time_num = time.ISO8601_to_datenum(n.attrs['start_time'])
-                N = n.assign_coords({'TIME':[start_time_num]})
-                N.TIME.attrs = {'units' : f'Days since {epoch} 00:00',
-                                'standard_name' : 'time',
-                                'long_name':'Start time of profile'}
-                
+            N = n
             # Want to keep track of whether we use different 
             # start_time sources
             start_time_source = n.start_time_source
             different_start_time_sources = False
             first = False
 
-            if 'station' in N.attrs:
-                station = N.station
-                del N.attrs['station']
-                N['STATION'] = xr.DataArray([station], dims='TIME', coords={'TIME': N['TIME']})
-
         else:
-            if 'TIME_SAMPLE' in n:
-                n = n.assign_coords({'TIME':[N.TIME_SAMPLE.mean()]})
-            else:
-                start_time_num = time.ISO8601_to_datenum(n.attrs['start_time'])
-                n = n.assign_coords({'TIME':[start_time_num]})
-
-            if 'station' in n.attrs:
-                n['STATION'] = xr.DataArray([n.station], dims='TIME', coords={'TIME': n['TIME']})
 
             if n.start_time_source != start_time_source:
                 different_start_time_sources = True
-
             N = xr.concat([N, n], dim = 'TIME')
 
 
@@ -304,11 +294,11 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     
     # Warn the user if we used different sources for profile start time
     if different_start_time_sources:
-        print('\nThe start_time variable was read from different '
-            'header lines for different profiles. This likely means that '
+        print('\nNOTE: The start_time variable was read from different '
+            'header lines for different profiles. \nThis likely means that '
             'your .cnv files were formatted differently through the cruise. '
-            'This is probably fine, but it is a good idea to sanity check '
-            ' the TIME field.')
+            '\nThis is probably fine, but it is a good idea to sanity check '
+            'the TIME field.')
 
     # Add a cruise variable
     if 'cruise' in N.attrs:
@@ -316,7 +306,7 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     else:
         cruise = '!! CRUISE !!'
         
-        print('\nNo cruise ID found in the dataset. Remember to assign!'
+        print('\nNOTE: No cruise ID found in the dataset. Remember to assign!'
                       '\n-> ds = cnv.set_cruise(ds, "cruisename").')
     N['CRUISE'] =  xr.DataArray(cruise, dims=())
     N['CRUISE'].attrs = {'long_name':'Cruise ID', 'cf_role':'trajectory_id'}
@@ -763,9 +753,7 @@ def _add_latlon_variables(ds, suppress_latlon_warning = False):
         warn_str = (f'{ds.STATION.values[0]}: Unable to find [{missing}] ' 
             'in .cnv file \n -> Assigning NaN values.')
         print(f'NOTE!: {warn_str}')
-        
-
-
+    
     return ds
 
 
