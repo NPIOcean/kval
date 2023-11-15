@@ -22,6 +22,7 @@ import cftime
 def read_cnv(cnvfile: str,
              apply_flags: Optional[bool] = True,
              profile: Optional[str] = 'downcast',
+             time_dim: Optional[bool] = False,
              inspect_plot: Optional[bool] = False,
              start_scan: Optional[int] = None,
              end_scan: Optional[int] = None,
@@ -39,32 +40,36 @@ def read_cnv(cnvfile: str,
         If True, flags (from the SBE *flag* column) are applied as NaNs across
         all variables (recommended). Default is True.
      
-     profile: str, optional
+    profile: str, optional
         Specify the profile type. Options are ['upcast', 'downcast', 'none'].
 
-        inspect_plot : bool, optional
-            Return a plot of the whole pressure time series, showing the part of the profile 
-            we extracted (useful for inspecting up/downcast extraction and SBE flags).
-            Default is False.
+    time_dim: bool, optional
+        Choose whether to include a 0-D TIME coordinate. Useful if combining
+        several profiles. Deffault is False.
 
-        start_scan : int, optional
-            Manually specify the scan at which to start the profile (in *addition* to profile 
-            detection and flags). Default is None.
+    inspect_plot : bool, optional
+        Return a plot of the whole pressure time series, showing the part of the profile 
+        we extracted (useful for inspecting up/downcast extraction and SBE flags).
+        Default is False.
 
-        end_scan : int, optional
-            Manually specify the scan at which to end the profile (in *addition* to profile 
-            detection and flags). Default is None.
-     
-        suppress_time_warning: bool, optional
-            Don't show a warning if there are no timeJ or timeS fields
-            Detault is False.
+    start_scan : int, optional
+        Manually specify the scan at which to start the profile (in *addition* to profile 
+        detection and flags). Default is None.
 
-        start_time_NMEA: bool, optional
-            Choose whether to get start_time attribute from the "NMEA UTC (Time)" 
-            header line. Default is to grab it from the "start_time" line - this
-            is technically correct but typically identical results, and the 
-            "start_time" line can occasionally look funny. If unsure, check your 
-            header! Default is False (= read from "start_time" header line).        
+    end_scan : int, optional
+        Manually specify the scan at which to end the profile (in *addition* to profile 
+        detection and flags). Default is None.
+    
+    suppress_time_warning: bool, optional
+        Don't show a warning if there are no timeJ or timeS fields
+        Detault is False.
+
+    start_time_NMEA: bool, optional
+        Choose whether to get start_time attribute from the "NMEA UTC (Time)" 
+        header line. Default is to grab it from the "start_time" line - this
+        is technically correct but typically identical results, and the 
+        "start_time" line can occasionally look funny. If unsure, check your 
+        header! Default is False (= read from "start_time" header line).        
 
     Returns
     -------
@@ -93,11 +98,12 @@ def read_cnv(cnvfile: str,
     ds.attrs['history'] = header_info['start_history']
     ds = _add_start_time(ds, header_info, 
                              start_time_NMEA = start_time_NMEA)
-
     ds = _read_SBE_proc_steps(ds, header_info)
-    ds0 = ds.copy()
+  #  ds0 = ds.copy()
 
 
+    if time_dim:
+        ds = _add_time_dim_profile(ds)
 
     if apply_flags:
         ds = _apply_flag(ds)
@@ -126,192 +132,43 @@ def read_cnv(cnvfile: str,
 
     return ds
 
-def _add_start_time(ds, header_info, start_time_NMEA=False):
-    '''
-    Add a start_time attribute.
 
-    Default behavior: 
-        - Use start_time header line
-    If start_time_NMEA = True:
-        - Use "NMEA UTC" line if present
-        - If not, use start_time
+
+def _add_time_dim_profile(ds, epoch = '1970-01-01', 
+                          time_source = 'sample_time'):
+    '''
+    Add a 0-dimensional TIME coordinate to a profile.
+
+    time_source:
     
-    Compicated way of doing this because there are some occasional 
-    oddities where e.g. 
-    - The "start_time" line is some times incorrect
-    - The "NMEA UTC" is not always present.
+    sample_time:  Average of TIME_SAMPLE varibale (which was calculated 
+                  from timeS or timeJ fields).
 
-    Important to get right since this is used for assigning
-    a time stamp to profiles. 
+    start_time:   Use the start_time field (star of scans). This is extracted
+                  from either the header; either the 'start_time' or 
+                  'NMEA UTC' lines (which of the twois specified in the 
+                  read_cnv() function usng the start_time_NMEA flag).
     '''
 
-    if start_time_NMEA:
-        try:
-            ds.attrs['start_time'] = time.datetime_to_ISO8601(
-                            header_info['NMEA_time'])
-            ds.attrs['start_time_source'] = '"NMEA UTC" header line'
 
-        except:
-            try:
-                ds.attrs['start_time'] = time.datetime_to_ISO8601(
-                    header_info['start_time'])
-                ds.attrs['start_time_source'] = '"start_time" header line'
-
-            except:
-                raise Warning('Did not find a start time!'
-                    ' (no "start_time" or NMEA UTC" header lines).')
+    if 'TIME_SAMPLE' in ds:
+        ds = ds.assign_coords({'TIME':[ds.TIME_SAMPLE.mean()]})
+        ds.TIME.attrs = {'units' : ds.TIME_SAMPLE.units,
+            'standard_name' : 'time',
+            'long_name':'Average time of measurement',
+            'SBE_source_variable':ds.TIME_SAMPLE.SBE_source_variable}
     else:
-        ds.attrs['start_time'] = time.datetime_to_ISO8601(
-                            header_info['start_time'])
-        ds.attrs['start_time_source'] = '"start_time" header line'
-
-    return ds
-
-def _add_attrs(ds, header_info):
-    '''
-    Add the following as attributes if they are available from the header:
-
-        ship, cruise, station.
-
-    If we don't have a station, we use the cnv file name base.
-    '''
-
-    for key in ['ship', 'cruise', 'station']:
-        if key in header_info:
-            ds.attrs[key] = header_info[key]
-
-    if 'station' not in ds.attrs:
-        station_from_filename = (
-            header_info['cnvfile'].replace(
-            '.cnv', '').replace('.CNV', ''))
-        ds.attrs['station'] = station_from_filename
-
+        start_time_num = time.ISO8601_to_datenum(ds.attrs['start_time'])
+        ds = ds.assign_coords({'TIME':[start_time_num]})
+        ds.TIME.attrs = {'units' : f'Days since {epoch} 00:00',
+                        'standard_name' : 'time',
+                        'long_name':'Start time of profile',
+                        'comment':f'Source: {ds.start_time_source}'}
     return ds
 
 
-def _convert_time(ds, header_info, epoch = '1970-01-01', 
-                  suppress_time_warning = False):
-    '''
-    Convert time either from julian days (timeJ) or from  time elapsed
-     in seconds (timeS). 
-
-    suppress_time_warning: Don't show a warning if there are no 
-    timeJ or timeS fields (useful for loops etc).
-    '''
-
-    if 'TIME_ELAPSED' in ds.keys():
-        ds = _convert_time_from_elapsed(ds, header_info, epoch = epoch)
-    elif 'timeJ' in ds.keys():
-        ds = _convert_time_from_juld(ds, header_info, epoch = epoch)
-    else:
-        if not suppress_time_warning:
-            print('\nNOTE: Failed to extract sample time info '
-                      '(no timeS or timeJ in .cnv file).'
-                      '\n(Not a big problem, the start_time '
-                      'can be used to assign a profile time).')
-    return ds
 
 
-def _convert_time_from_elapsed(ds, header_info, epoch = '1970-01-01'):
-    '''
-    Convert TIME_ELAPSED (sec)
-    to TIME_SAMPLE (days since 1970-01-01)
-    
-    Only sensible reference I could fnd is here;
-    https://search.r-project.org/CRAN/refmans/oce/html/read.ctd.sbe.html
-
-    (_DSE: time since epoch)
-    '''
-
-    start_time_DSE = ((header_info['start_time'] 
-                                    - pd.Timestamp(epoch))
-                                    / pd.to_timedelta(1, unit='D'))
-    
-    elapsed_time_days = ds.TIME_ELAPSED/86400
-
-    time_stamp_DSE = start_time_DSE + elapsed_time_days
-
-    ds['TIME_SAMPLE'] = time_stamp_DSE
-    ds.TIME_SAMPLE.attrs['units'] = f'Days since {epoch} 00:00:00'
-    ds = ds.drop('TIME_ELAPSED')
-
-    return ds
-
-
-def _convert_time_from_juld(ds, header_info, epoch = '1970-01-01'):
-    '''
-    Convert TIME_ELAPSED (sec)
-    to TIME (days since 1970-01-01)
-    
-    Only sensible reference I could fnd is here;
-    https://search.r-project.org/CRAN/refmans/oce/html/read.ctd.sbe.html
-
-    (_DSE: time since epoch)
-    '''
-
-    year_start = header_info['start_time'].replace(month=1, day=1, 
-                        hour=0, minute=0, second=0)
-    time_stamp = pd.to_datetime(ds.timeJ-1, origin=year_start, unit='D', 
-                        yearfirst=True, ).round('1s')    
-    time_stamp_DSE = ((time_stamp- pd.Timestamp(epoch))
-                                    / pd.to_timedelta(1, unit='D'))
-
-    ds['TIME_SAMPLE'] = (('scan_count'), time_stamp_DSE)
-    ds.TIME_SAMPLE.attrs['units'] = f'Days since {epoch} 00:00:00'
-    ds = ds.drop('timeJ')
-
-    return ds
-
-
-def _remove_start_scan(ds, start_scan):
-    '''
-    Remove all scans before *start_scan*
-    '''
-    ds = ds.sel({'scan_count':slice(start_scan, None)})
-    return ds
-
-
-def _remove_end_scan(ds, end_scan):
-    '''
-    Remove all scans after *end_scan*
-    '''
-    ds = ds.sel({'scan_count':slice(None, end_scan+1)})
-    return ds
-
-
-def _inspect_extracted(ds, ds0, start_scan=None, end_scan=None):
-    '''
-    Plot the pressure tracks showing the portion extracted after 
-    and/or removing upcast.
-    '''
-
-    fig, ax = plt.subplots(figsize = (10, 6))
-
-    ax.plot(ds0.scan_count, ds0.PRES, '.k', ms = 3, label = 'All scans')
-    ax.plot(ds.scan_count, ds.PRES, '.r', ms = 4, label ='Extracted for use')
-
-    if start_scan:
-        ax.axvline(start_scan, ls = '--', zorder = 0, label = 'start_scan')
-    if end_scan:
-        ax.axvline(end_scan, ls = '--', zorder = 0, label = 'end_scan')
-    ax.set_ylabel('PRES [dbar]')
-    ax.set_xlabel('SCAN COUNTS')
-    ax.legend()
-    ax.invert_yaxis()
-    ax.grid(alpha = 0.5)
-    plt.show()
-
-
-def _apply_flag(ds):
-    '''
-    Applies the *flag* value assigned by the SBE processing.
-
-    -> Remove scans  where flag != 0 
-    
-    '''
-    ds = ds.where(ds.SBE_FLAG==0, drop = True)      
-
-    return ds
 
 
 def join_cruise(nc_files, bins_dbar = 1, verbose = True,
@@ -504,6 +361,9 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     
     return N
     
+
+
+
 def set_cruise(D, cruise_string):
     '''
     Assign a value to the CRUISE variable in a joined 
@@ -515,206 +375,6 @@ def set_cruise(D, cruise_string):
     D['CRUISE'] = cruise_string
     D['CRUISE'].attrs = cr_attrs 
     return D
-
-
-def _remove_up_dncast(ds, keep = 'downcast'):
-    '''
-    Takes a ctd Dataframe and returns a subset containing only either the
-    upcast or downcast.
-
-    Note:
-    Very basic algorithm right now - just removing everything before/after the
-    pressure max and relying on SBE flaggig for the rest.
-    -> will likely have to replace with something more sophisticated. 
-    '''
-    # Index of max pressure, taken as "end of downcast"
-    max_pres_index = int(ds.PRES.argmax().data)
-
-    # If the max index is a single value following invalid values,
-    # we interpret it as the start of the upcast and use the preceding 
-    # point as the "end of upcast index" 
-    if (ds.scan_count[max_pres_index] 
-        - ds.scan_count[max_pres_index-1]) > 1:
-        
-        max_pres_index -= 1
-
-    if keep == 'upcast':
-        # Remove everything *after* pressure max
-        ds = ds.isel({'scan_count':slice(max_pres_index+1, None)})
-        ds.attrs['profile_direction'] = 'upcast'
-
-    elif keep in ['dncast', 'downcast']:
-        # Remove everything *before* pressure max
-        ds = ds.isel({'scan_count':slice(None, max_pres_index+1)})
-        ds.attrs['profile_direction'] = 'downcast'
-
-    else:
-        raise Exception('"keep" must be either "upcast" or "dncast"') 
-
-    return ds
-
-
-def _read_column_data_xr(cnvfile, header_info):
-    '''
-    Reads columnar data from a single .cnv to an xarray Dataset.
-
-    (By way of a pandas DataFrame)
-
-    TBD: 
-     - Standardize variable names and attributes. 
-     - Add relevant attributes from header
-
-    '''
-    df = pd.read_csv(cnvfile, header = header_info['hdr_end_line']+1,
-                 delim_whitespace=True, encoding = 'latin-1',
-                 names = header_info['col_names'])
-    
-    # Convert to xarray DataFrame
-    ds = xr.Dataset(df).rename({'dim_0':'scan_count'})
-    ds.attrs['binned'] = 'no'
-
-
-    return ds
-
-
-
-def _update_variables(ds, cnvfile):
-    '''
-    Take a Dataset and 
-    - Update the header names from SBE names (e.g. 't090C')
-      to more standardized name (e.g., 'TEMP1'). 
-    - Assign the appropriate units and standard_name as attributes.
-    - Assign sensor serial number(s) and/or calibration date(s)
-      where available.
-
-    What to look for is specified in _variable_defs.py
-    -> Will update dictionaries in there as we encounter differently
-       formatted files.
-    '''
-    
-    sensor_info = _read_sensor_info(cnvfile)
-
-    for old_name in ds.keys():
-        old_name_cap = old_name.upper()
-        if old_name_cap in vardef.SBE_name_map:
-
-            var_dict = vardef.SBE_name_map[old_name_cap]
-
-            new_name = var_dict['name']
-            unit = var_dict['units']
-            ds = ds.rename({old_name:new_name})
-            ds[new_name].attrs['units'] = unit
-
-            if 'sensors' in var_dict:
-                sensor_SNs = []
-                sensor_caldates = []
-
-                for sensor in var_dict['sensors']:
-                    sensor_SNs += [sensor_info[sensor]['SN']]
-                    sensor_caldates += [sensor_info[sensor]['cal_date']]
-
-                ds[new_name].attrs['sensor_serial_number'] = (
-                    ', '.join(sensor_SNs))
-
-                ds[new_name].attrs['sensor_calibration_date'] = (
-                    ', '.join(sensor_caldates)) 
-    return ds
-
-
-
-def read_header(cnvfile):
-    '''
-    Reads a SBE .cnv (or .hdr, .btl) file and returns a dictionary with various
-    metadata parameters extracted from the header. 
-
-    TBD: Grab instrument serial numbers.
-    '''
-    
-    with open(cnvfile, 'r', encoding = 'latin-1') as f:
-
-        # Empty dictionary: Will fill these parameters up as we go
-        hkeys = ['col_nums', 'col_names', 'col_longnames', 'SN_info', 
-                 'moon_pool', 'SBEproc_hist', 'hdr_end_line', 
-                 'latitude', 'longitude', 'NMEA_time', 'start_time', ]
-        hdict = {hkey:[] for hkey in hkeys}
-
-        # Flag that will be turned on when we read the SBE history section 
-        start_read_history = False 
-
-        # Go through the header line by line and extract specific information 
-        # when we encounter specific terms dictated by the format  
-        
-        for n_line, line in enumerate(f.readlines()):
-
-            # Read the column header info (which variable is in which data column)
-            if '# name' in line:
-                # Read column number
-                hdict['col_nums'] += [int(line.split()[2])]
-                # Read column header
-                col_name = line.split()[4].replace(':', '')
-                col_name = col_name.replace('/', '_') #  "/" in varnames not allowed in netcdf 
-                hdict['col_names'] += [col_name]
-                # Read column longname
-                hdict['col_longnames'] += [' '.join(line.split()[5:])]            
-
-            # Read NMEA lat/lon/time
-            if 'NMEA Latitude' in line:
-                hdict['latitude'] = _nmea_lat_to_decdeg(*line.split()[-3:])
-            if 'NMEA Longitude' in line:
-                hdict['longitude'] = _nmea_lon_to_decdeg(*line.split()[-3:])
-            if 'NMEA UTC' in line:
-                nmea_time_split = line.split()[-4:]
-                hdict['NMEA_time'] = _nmea_time_to_datetime(*nmea_time_split)
-            
-            # Read start time
-            if 'start_time' in line:
-                hdict['start_time'] = (
-                    _nmea_time_to_datetime(*line.split()[3:7]))
-
-                hdict['start_history'] = (
-                    hdict['start_time'].strftime('%Y-%m-%d')
-                    + ': Data collection.')
-
-            # Read cruise/ship/station/bottom depth/operator if available
-            if '** CRUISE' in line.upper():
-                hdict['cruise'] = line[(line.rfind(': ')+2):].replace('\n','')
-            if '** STATION' in line.upper():
-                hdict['station'] = line[(line.rfind(': ')+2):].replace('\n','')
-            if '** SHIP' in line.upper():
-                hdict['ship'] = line[(line.rfind(': ')+2):].replace('\n','')
-            if '** BOTTOM DEPTH' in line.upper():
-                hdict['station'] = line[(line.rfind(': ')+2):].replace('\n','')
-
-            # Read moon pool info
-            if 'Skuteside' in line:
-                mp_str = line.split()[-1]
-                if mp_str == 'M':
-                    hdict['moon_pool'] = True
-                elif mp_str == 'S':
-                    hdict['moon_pool'] = False
-
-            # At the end of the SENSORS section: read the history lines
-            if '</Sensors>' in line:
-                start_read_history = True
-
-            if start_read_history:
-                hdict['SBEproc_hist'] += [line] 
-
-            # Read the line containing the END string
-            # (and stop reading the file after that)
-            if '*END*' in line:
-                hdict['hdr_end_line'] = n_line
-                break
-
-        # Remove the first ('</Sensors>') and last ('*END*') lines from the SBE history string.
-        hdict['SBEproc_hist'] = hdict['SBEproc_hist'] [1:-1]
-
-        # Assign the file name without the directory path
-
-        hdict['cnvfile'] = cnvfile[cnvfile.rfind('/')+1:]
-
-        return hdict
-
 
 
 
@@ -786,20 +446,301 @@ def bin_to_pressure(ds, dp = 1):
 
 
 
-def _dates_from_history(ds):
-    '''
-    Grab the dates of 1) SBE processing and 2) Post-processing from the
-    "history" attribute.
-    '''
-    sbe_pattern = r"(\d{4}-\d{2}-\d{2}): Processed using SBE software"
-    sbe_time_match_str = re.search(sbe_pattern, ds.history).group(1)
-    sbe_timestamp = pd.Timestamp(sbe_time_match_str)
-    
-    proc_pattern = r"(\d{4}-\d{2}-\d{2}): Post-processing"
-    proc_time_match_str = re.search(proc_pattern, ds.history).group(1)
-    proc_timestamp = pd.Timestamp(proc_time_match_str)
 
-    return sbe_timestamp, proc_timestamp
+def read_header(cnvfile):
+    '''
+    Reads a SBE .cnv (or .hdr, .btl) file and returns a dictionary with various
+    metadata parameters extracted from the header. 
+
+    TBD: Grab instrument serial numbers.
+    '''
+    
+    with open(cnvfile, 'r', encoding = 'latin-1') as f:
+
+        # Empty dictionary: Will fill these parameters up as we go
+        hkeys = ['col_nums', 'col_names', 'col_longnames', 'SN_info', 
+                 'moon_pool', 'SBEproc_hist', 'hdr_end_line', 
+                 'latitude', 'longitude', 'NMEA_time', 'start_time', ]
+        hdict = {hkey:[] for hkey in hkeys}
+
+        # Flag that will be turned on when we read the SBE history section 
+        start_read_history = False 
+
+        # Go through the header line by line and extract specific information 
+        # when we encounter specific terms dictated by the format  
+        
+        for n_line, line in enumerate(f.readlines()):
+
+            # Read the column header info (which variable is in which data column)
+            if '# name' in line:
+                # Read column number
+                hdict['col_nums'] += [int(line.split()[2])]
+                # Read column header
+                col_name = line.split()[4].replace(':', '')
+                col_name = col_name.replace('/', '_') #  "/" in varnames not allowed in netcdf 
+                hdict['col_names'] += [col_name]
+                # Read column longname
+                hdict['col_longnames'] += [' '.join(line.split()[5:])]            
+
+            # Read NMEA lat/lon/time
+            if 'NMEA Latitude' in line:
+                hdict['latitude'] = _nmea_lat_to_decdeg(*line.split()[-3:])
+            if 'NMEA Longitude' in line:
+                hdict['longitude'] = _nmea_lon_to_decdeg(*line.split()[-3:])
+            if 'NMEA UTC' in line:
+                nmea_time_split = line.split()[-4:]
+                hdict['NMEA_time'] = _nmea_time_to_datetime(*nmea_time_split)
+            
+            # Read start time
+            if 'start_time' in line:
+                hdict['start_time'] = (
+                    _nmea_time_to_datetime(*line.split()[3:7]))
+
+                hdict['start_history'] = (
+                    hdict['start_time'].strftime('%Y-%m-%d')
+                    + ': Data collection.')
+
+            # Read cruise/ship/station/bottom depth/operator if available
+            if '** CRUISE' in line.upper():
+                hdict['cruise'] = line[(line.rfind(': ')+2):].replace('\n','')
+            if '** STATION' in line.upper():
+                hdict['station'] = line[(line.rfind(': ')+2):].replace('\n','')
+            if '** SHIP' in line.upper():
+                hdict['ship'] = line[(line.rfind(': ')+2):].replace('\n','')
+            if '** BOTTOM DEPTH' in line.upper():
+                hdict['bdep'] = line[(line.rfind(': ')+2):].replace('\n','')
+
+            # Read moon pool info
+            if 'Skuteside' in line:
+                mp_str = line.split()[-1]
+                if mp_str == 'M':
+                    hdict['moon_pool'] = True
+                elif mp_str == 'S':
+                    hdict['moon_pool'] = False
+
+            # At the end of the SENSORS section: read the history lines
+            if '</Sensors>' in line:
+                start_read_history = True
+
+            if start_read_history:
+                hdict['SBEproc_hist'] += [line] 
+
+            # Read the line containing the END string
+            # (and stop reading the file after that)
+            if '*END*' in line:
+                hdict['hdr_end_line'] = n_line
+                break
+
+        # Remove the first ('</Sensors>') and last ('*END*') lines from the SBE history string.
+        hdict['SBEproc_hist'] = hdict['SBEproc_hist'] [1:-1]
+
+        # Assign the file name without the directory path
+
+        hdict['cnvfile'] = cnvfile[cnvfile.rfind('/')+1:]
+
+        return hdict
+
+
+def _read_column_data_xr(cnvfile, header_info):
+    '''
+    Reads columnar data from a single .cnv to an xarray Dataset.
+
+    (By way of a pandas DataFrame)
+
+    TBD: 
+     - Standardize variable names and attributes. 
+     - Add relevant attributes from header
+
+    '''
+    df = pd.read_csv(cnvfile, header = header_info['hdr_end_line']+1,
+                 delim_whitespace=True, encoding = 'latin-1',
+                 names = header_info['col_names'])
+    
+    # Convert to xarray DataFrame
+    ds = xr.Dataset(df).rename({'dim_0':'scan_count'})
+    ds.attrs['binned'] = 'no'
+
+
+    return ds
+
+
+def _add_start_time(ds, header_info, start_time_NMEA=False):
+    '''
+    Add a start_time attribute.
+
+    Default behavior: 
+        - Use start_time header line
+    If start_time_NMEA = True:
+        - Use "NMEA UTC" line if present
+        - If not, use start_time
+    
+    Compicated way of doing this because there are some occasional 
+    oddities where e.g. 
+    - The "start_time" line is some times incorrect
+    - The "NMEA UTC" is not always present.
+
+    Important to get right since this is used for assigning
+    a time stamp to profiles. 
+    '''
+
+    if start_time_NMEA:
+        try:
+            ds.attrs['start_time'] = time.datetime_to_ISO8601(
+                            header_info['NMEA_time'])
+            ds.attrs['start_time_source'] = '"NMEA UTC" header line'
+
+        except:
+            try:
+                ds.attrs['start_time'] = time.datetime_to_ISO8601(
+                    header_info['start_time'])
+                ds.attrs['start_time_source'] = '"start_time" header line'
+
+            except:
+                raise Warning('Did not find a start time!'
+                    ' (no "start_time" or NMEA UTC" header lines).')
+    else:
+        ds.attrs['start_time'] = time.datetime_to_ISO8601(
+                            header_info['start_time'])
+        ds.attrs['start_time_source'] = '"start_time" header line'
+
+    return ds
+
+
+def _add_attrs(ds, header_info):
+    '''
+    Add the following as attributes if they are available from the header:
+
+        ship, cruise, station.
+
+    If we don't have a station, we use the cnv file name base.
+    '''
+
+    for key in ['ship', 'cruise', 'station']:
+        if key in header_info:
+            ds.attrs[key] = header_info[key]
+
+    if 'station' not in ds.attrs:
+        station_from_filename = (
+            header_info['cnvfile'].replace(
+            '.cnv', '').replace('.CNV', ''))
+        ds.attrs['station'] = station_from_filename
+
+    return ds
+
+
+
+def _apply_flag(ds):
+    '''
+    Applies the *flag* value assigned by the SBE processing.
+
+    -> Remove scans  where flag != 0 
+    
+    '''
+    ds = ds.where(ds.SBE_FLAG==0, drop = True)      
+
+    return ds
+
+
+def _remove_up_dncast(ds, keep = 'downcast'):
+    '''
+    Takes a ctd Dataframe and returns a subset containing only either the
+    upcast or downcast.
+
+    Note:
+    Very basic algorithm right now - just removing everything before/after the
+    pressure max and relying on SBE flaggig for the rest.
+    -> will likely have to replace with something more sophisticated. 
+    '''
+    # Index of max pressure, taken as "end of downcast"
+    max_pres_index = int(ds.PRES.argmax().data)
+
+    # If the max index is a single value following invalid values,
+    # we interpret it as the start of the upcast and use the preceding 
+    # point as the "end of upcast index" 
+    if (ds.scan_count[max_pres_index] 
+        - ds.scan_count[max_pres_index-1]) > 1:
+        
+        max_pres_index -= 1
+
+    if keep == 'upcast':
+        # Remove everything *after* pressure max
+        ds = ds.isel({'scan_count':slice(max_pres_index+1, None)})
+        ds.attrs['profile_direction'] = 'upcast'
+
+    elif keep in ['dncast', 'downcast']:
+        # Remove everything *before* pressure max
+        ds = ds.isel({'scan_count':slice(None, max_pres_index+1)})
+        ds.attrs['profile_direction'] = 'downcast'
+
+    else:
+        raise Exception('"keep" must be either "upcast" or "dncast"') 
+
+    return ds
+
+
+def _inspect_extracted(ds, ds0, start_scan=None, end_scan=None):
+    '''
+    Plot the pressure tracks showing the portion extracted after 
+    and/or removing upcast.
+    '''
+
+    fig, ax = plt.subplots(figsize = (10, 6))
+
+    ax.plot(ds0.scan_count, ds0.PRES, '.k', ms = 3, label = 'All scans')
+    ax.plot(ds.scan_count, ds.PRES, '.r', ms = 4, label ='Extracted for use')
+
+    if start_scan:
+        ax.axvline(start_scan, ls = '--', zorder = 0, label = 'start_scan')
+    if end_scan:
+        ax.axvline(end_scan, ls = '--', zorder = 0, label = 'end_scan')
+    ax.set_ylabel('PRES [dbar]')
+    ax.set_xlabel('SCAN COUNTS')
+    ax.legend()
+    ax.invert_yaxis()
+    ax.grid(alpha = 0.5)
+    plt.show()
+
+def _update_variables(ds, cnvfile):
+    '''
+    Take a Dataset and 
+    - Update the header names from SBE names (e.g. 't090C')
+      to more standardized name (e.g., 'TEMP1'). 
+    - Assign the appropriate units and standard_name as attributes.
+    - Assign sensor serial number(s) and/or calibration date(s)
+      where available.
+
+    What to look for is specified in _variable_defs.py
+    -> Will update dictionaries in there as we encounter differently
+       formatted files.
+    '''
+    
+    sensor_info = _read_sensor_info(cnvfile)
+
+    for old_name in ds.keys():
+        old_name_cap = old_name.upper()
+        if old_name_cap in vardef.SBE_name_map:
+
+            var_dict = vardef.SBE_name_map[old_name_cap]
+
+            new_name = var_dict['name']
+            unit = var_dict['units']
+            ds = ds.rename({old_name:new_name})
+            ds[new_name].attrs['units'] = unit
+
+            if 'sensors' in var_dict:
+                sensor_SNs = []
+                sensor_caldates = []
+
+                for sensor in var_dict['sensors']:
+                    sensor_SNs += [sensor_info[sensor]['SN']]
+                    sensor_caldates += [sensor_info[sensor]['cal_date']]
+
+                ds[new_name].attrs['sensor_serial_number'] = (
+                    ', '.join(sensor_SNs))
+
+                ds[new_name].attrs['sensor_calibration_date'] = (
+                    ', '.join(sensor_caldates)) 
+    return ds
 
 def _read_sensor_info(cnvfile, verbose = False):
     '''
@@ -1124,19 +1065,6 @@ def _nmea_time_to_datetime(mon, da, yr, hms):
     return nmea_time_dt
 
 
-def _common_string(str1, str2):
-    '''
-    Return the "common denominator" string with changing characters 
-    replaced with X. 
-
-    E.g.: _common_string('hello there', 'hellu thare')
-          -> 'hellX thXre
-    '''
-    min_length = min(len(str1), len(str2))
-    common_str = ''.join([char if char == str2[i] else 'X' for i, 
-                    char in enumerate(str1)])
-
-    return common_str
 
 
 def _replace_history_dates_with_ranges(D, post_proc_times, SBE_proc_times):
@@ -1169,3 +1097,114 @@ def _replace_history_dates_with_ranges(D, post_proc_times, SBE_proc_times):
         D.attrs['history'] = D.history[:rind-10] + ppr_range + D.attrs['history'][rind:]
         
     return D
+
+
+def _dates_from_history(ds):
+    '''
+    Grab the dates of 1) SBE processing and 2) Post-processing from the
+    "history" attribute.
+    '''
+    sbe_pattern = r"(\d{4}-\d{2}-\d{2}): Processed using SBE software"
+    sbe_time_match_str = re.search(sbe_pattern, ds.history).group(1)
+    sbe_timestamp = pd.Timestamp(sbe_time_match_str)
+    
+    proc_pattern = r"(\d{4}-\d{2}-\d{2}): Post-processing"
+    proc_time_match_str = re.search(proc_pattern, ds.history).group(1)
+    proc_timestamp = pd.Timestamp(proc_time_match_str)
+
+    return sbe_timestamp, proc_timestamp
+
+
+
+def _convert_time(ds, header_info, epoch = '1970-01-01', 
+                  suppress_time_warning = False):
+    '''
+    Convert time either from julian days (TIME_JULD extracted from 'timeJ') 
+    or from time elapsed in seconds (TIME_ELAPSED extracted from timeS). 
+
+    suppress_time_warning: Don't show a warning if there are no 
+    timeJ or timeS fields (useful for loops etc).
+
+    '''
+
+    if 'TIME_ELAPSED' in ds.keys():
+        ds = _convert_time_from_elapsed(ds, header_info, epoch = epoch)
+        ds.TIME_SAMPLE.attrs['SBE_source_variable'] = 'timeS' 
+    elif 'TIME_JULD' in ds.keys():
+        ds = _convert_time_from_juld(ds, header_info, epoch = epoch)
+        ds.TIME_SAMPLE.attrs['SBE_source_variable'] = 'timeJ' 
+
+    else:
+        if not suppress_time_warning:
+            print('\nNOTE: Failed to extract sample time info '
+                      '(no timeS or timeJ in .cnv file).'
+                      '\n(Not a big problem, the start_time '
+                      'can be used to assign a profile time).')
+    return ds
+
+
+def _convert_time_from_elapsed(ds, header_info, epoch = '1970-01-01'):
+    '''
+    Convert TIME_ELAPSED (sec)
+    to TIME_SAMPLE (days since 1970-01-01)
+    
+    Only sensible reference I could fnd is here;
+    https://search.r-project.org/CRAN/refmans/oce/html/read.ctd.sbe.html
+
+    (_DSE: time since epoch)
+    '''
+
+    start_time_DSE = ((header_info['start_time'] 
+                                    - pd.Timestamp(epoch))
+                                    / pd.to_timedelta(1, unit='D'))
+    
+    elapsed_time_days = ds.TIME_ELAPSED/86400
+
+    time_stamp_DSE = start_time_DSE + elapsed_time_days
+
+    ds['TIME_SAMPLE'] = time_stamp_DSE
+    ds.TIME_SAMPLE.attrs['units'] = f'Days since {epoch} 00:00:00'
+    ds = ds.drop('TIME_ELAPSED')
+
+    return ds
+
+
+def _convert_time_from_juld(ds, header_info, epoch = '1970-01-01'):
+    '''
+    Convert TIME_ELAPSED (sec)
+    to TIME (days since 1970-01-01)
+    
+    Only sensible reference I could fnd is here;
+    https://search.r-project.org/CRAN/refmans/oce/html/read.ctd.sbe.html
+
+    (_DSE: time since epoch)
+    '''
+
+    year_start = header_info['start_time'].replace(month=1, day=1, 
+                        hour=0, minute=0, second=0)
+    time_stamp = pd.to_datetime(ds.TIME_JULD-1, origin=year_start, 
+                            unit='D', yearfirst=True, ).round('1s')    
+    time_stamp_DSE = ((time_stamp- pd.Timestamp(epoch))
+                                    / pd.to_timedelta(1, unit='D'))
+
+    ds['TIME_SAMPLE'] = (('scan_count'), time_stamp_DSE)
+    ds.TIME_SAMPLE.attrs['units'] = f'Days since {epoch} 00:00:00'
+    ds = ds.drop('TIME_JULD')
+
+    return ds
+
+
+def _remove_start_scan(ds, start_scan):
+    '''
+    Remove all scans before *start_scan*
+    '''
+    ds = ds.sel({'scan_count':slice(start_scan, None)})
+    return ds
+
+
+def _remove_end_scan(ds, end_scan):
+    '''
+    Remove all scans after *end_scan*
+    '''
+    ds = ds.sel({'scan_count':slice(None, end_scan+1)})
+    return ds

@@ -67,6 +67,8 @@ SBE_name_map = {
     'LONGITUDE': {'name': 'LONGITUDE', 'units': 'degree_east'},
     'SCAN': {'name': 'SCAN', 'units': 'counts'},
     'TIMES': {'name': 'TIME_ELAPSED', 'units': 's'},
+    'TIMEJ': {'name': 'TIME_JULD', 'units': 'days'},
+
     'FLAG': {'name': 'SBE_FLAG', 'units': ''},
 
 }
