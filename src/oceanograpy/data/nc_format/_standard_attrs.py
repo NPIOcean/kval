@@ -70,7 +70,16 @@ standard_var_attrs_ctd = {
         'processing_level':'Instrument data that has been converted to physical values',
         'QC_indicator':'unknown',
         'comment':'Not compared with water sample chlorophyll measurements. Quality unknown!'
-
+    },
+    'CHLA_fluorescence': { # Used by Geli
+        'standard_name': 'mass_concentration_of_chlorophyll_in_sea_water',
+        'units': 'mg m-3',
+        'long_name': 'Chlorophyll-A from fluorometer. Not calibrated against water samples.',
+        'valid_min' : 0.0,
+        'valid_max' : 100.0,
+        'processing_level':'Instrument data that has been converted to physical values',
+        'QC_indicator':'unknown',
+        'comment':'Not compared with water sample chlorophyll measurements. Quality unknown!'
     },
     'PRES': {
         'standard_name': 'sea_water_pressure',
@@ -120,6 +129,8 @@ gmdc_keyword_dict_ctd = {
     'CNDC':'OCEANS>SALINITY/DENSITY>CONDUCTIVITY>CONDUCTIVITY PROFILES,',
     'PSAL':'OCEANS>SALINITY/DENSITY>OCEAN SALINITY>PRACTICAL SALINITY,',
     'CHLA':'OCEANS>OCEAN OPTICS>CHLOROPHYLL>CHLOROPHYLL CONCENTRATION',
+    'CHLA_instr':'OCEANS>OCEAN OPTICS>CHLOROPHYLL>CHLOROPHYLL CONCENTRATION',
+    'CHLA_fluorescence':'OCEANS>OCEAN OPTICS>CHLOROPHYLL>CHLOROPHYLL CONCENTRATION',
     'DOXY':'OCEANS>OCEAN CHEMISTRY>OXYGEN',
             }
 

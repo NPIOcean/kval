@@ -11,6 +11,7 @@ from collections import Counter
 from oceanograpy.util import time, user_input
 import pandas as pd
 from oceanograpy.data.nc_format import conventionalize, _standard_attrs, check_conventions
+import os
 
 ## LOADING AND SAVING DATA
 
@@ -81,7 +82,9 @@ def make_publishing_ready(D, NPI = True, retain_vars = []):
 
     return D
 
-def quick_metadata_check(D):
+def quick_metadata_check(D,):
+
+
 
     print('--  QUICK METADATA CHECK --')
     print('NOTE: Not comprehensive! A true check is done on export to netcdf.')
@@ -134,13 +137,17 @@ def quick_metadata_check(D):
         'CRUISE':['long_name'],
         }
     for varnm, _attrs_dict_ref_var in other_dict.items():
-        any_missing = False
-        for var_attr in _attrs_dict_ref_var:
-            if var_attr not in D[varnm].attrs:
-                print(f'- {varnm}: Possibly missing {var_attr}')
-                any_missing = True
-        if not any_missing:
-                print(f'- {varnm}: OK')
+        if varnm in D:
+            any_missing = False
+            for var_attr in _attrs_dict_ref_var:
+                if var_attr not in D[varnm].attrs:
+                    print(f'- {varnm}: Possibly missing {var_attr}')
+                    any_missing = True
+            if not any_missing:
+                    print(f'- {varnm}: OK')
+
+
+
 
 def to_netcdf(D, path, file_name = None, convention_check = False, add_to_history = True):
     '''

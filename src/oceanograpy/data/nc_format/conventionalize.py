@@ -50,8 +50,8 @@ def _get_geospatial_bounds_wkt_str(D):
     lon_max = D.geospatial_lon_max
     lon_min = D.geospatial_lon_min
 
-    corner_dict = (lon_min, lat_min, lon_min, lat_max, lon_max, lat_min, 
-                  lon_max, lat_max, lon_min, lat_min)
+    corner_dict = (lon_min, lat_min, lon_min, lat_max, lon_max, lat_max, 
+                    lon_max, lat_min, lon_min, lat_min)
 
     wkt_str = 'POLYGON ((%f %f, %f %f, %f %f, %f %f, %f %f))'%corner_dict
 
