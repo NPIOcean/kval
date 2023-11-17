@@ -1,5 +1,7 @@
 from matplotlib.dates import num2date
 import pandas as pd
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
 
 def datetime_to_ISO8601(time_dt, zone = 'Z'):
     '''
@@ -62,12 +64,25 @@ def ISO8601_to_datenum(time_str, epoch = '1970-01-01'):
     return start_time_DSE
 
 
-def start_end_times_to_duration(start_time, end_time):
+def start_end_times_cftime_to_duration(start_cftime, end_cftime):
     '''
-    *TBW*
-
-    Calculate time difference beetween two timestamps
+    Calculate time difference beetween two cftime timestamps
     and convert to ISO8601 (P[YYYY]-[MM]-[DD]T[hh]:[mm]:[ss])
     '''
 
-    pass
+    # Convert cftime objects to datetime objects
+    start_dt = datetime(start_cftime.year, start_cftime.month, start_cftime.day, start_cftime.hour, 
+                        start_cftime.minute, start_cftime.second)
+    end_dt = datetime(end_cftime.year, end_cftime.month, end_cftime.day, end_cftime.hour, 
+                      end_cftime.minute, end_cftime.second)
+
+    # Calculate the time difference
+    delta = relativedelta(end_dt, start_dt)
+
+    # Format the delta as a string with leading zeros
+    formatted_difference = (
+        f"P{delta.years:04}-{delta.months:02}-{(delta.days):02}T"
+        f"{delta.hours:02}:{delta.minutes:02}:{delta.seconds:02}"
+    )
+
+    return formatted_difference

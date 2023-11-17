@@ -1,10 +1,38 @@
-### OceanograPy.io.cnv.py ###
+'''
+### OCEANOGRAPY.IO.CNV.py ###
+
+Patsing data from .cnv to xarray Datasets.
+
+
+
+Key functions
+-------------
+
+read_cnv:
+  Loading single profiles. Reads CTD data and metadata from a .cnv file into a
+  Dataset (-> netCDF file) with any potentially useful metadata we can extract
+  from the .cnv header.
+
+join_cruise:
+  Joing several profiles (e.g. from an entire cruise)into a single Dataset (->
+  netCDF file).
+
+read_header:
+  Parse useful information from a .cnv header into a dictionary. 
+  Mainly used within read_cnv, but may have its additional uses.  
+
+May eventually want to look into the organization: -> Do all these things belong
+here or elsewhere? -> This is a massive script, should it be split up?
+
+TBD:
+- Go through documentation and PEP8 formatting
+    - Pretty decent already
+- Consider usign the *logging module*
+
 
 '''
-CNV parsing.
 
-Including pressure binning -> does that belong here or elsewhere? 
-'''
+## IMPORTS
 
 import pandas as pd
 import xarray as xr
@@ -15,25 +43,29 @@ import glob2
 import matplotlib.pyplot as plt
 import re
 from typing import Optional
-import warnings
 from tqdm.notebook import tqdm 
 import cftime
+from typing import Optional
 
-def read_cnv(cnvfile: str,
-             apply_flags: Optional[bool] = True,
-             profile: Optional[str] = 'downcast',
-             time_dim: Optional[bool] = False,
-             inspect_plot: Optional[bool] = False,
-             start_scan: Optional[int] = None,
-             end_scan: Optional[int] = None,
-             suppress_time_warning: Optional[int] = None, 
-             suppress_latlon_warning: Optional[int] = None, 
-             start_time_NMEA: Optional[bool] = True,
-             lat: Optional[float] = None,
-             lon: Optional[float] = None,
-             station: Optional[str] = None,
-             station_from_filename: Optional[bool] = False,) -> xr.Dataset:
-    '''
+## KEY FUNCTIONS
+
+def read_cnv(
+    cnvfile: str,
+    apply_flags: Optional[bool] = True,
+    profile: Optional[str] = 'downcast',
+    time_dim: Optional[bool] = False,
+    inspect_plot: Optional[bool] = False,
+    start_scan: Optional[int] = None,
+    end_scan: Optional[int] = None,
+    suppress_time_warning: Optional[bool] = False,
+    suppress_latlon_warning: Optional[bool] = False,
+    start_time_NMEA: Optional[bool] = True,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    station: Optional[str] = None,
+    station_from_filename: Optional[bool] = False,
+) -> xr.Dataset:
+    """
     Reads CTD data and metadata from a .cnv file into a more handy format.
     (I.e. an xarray Dataframe with any potentially useful metadata we can 
     extract from the .cnv header.)
@@ -52,19 +84,19 @@ def read_cnv(cnvfile: str,
 
     Parameters
     ----------
-    cnvfile: str
+    cnvfile : str
         Path to a .cnv file containing the data 
 
-    apply_flags: bool, optional 
+    apply_flags : bool, optional 
         If True, flags (from the SBE *flag* column) are applied as NaNs across
         all variables (recommended). Default is True.
      
-    profile: str, optional
+    profile : str, optional
         Specify the profile type. Options are ['upcast', 'downcast', 'none'].
 
-    time_dim: bool, optional
+    time_dim : bool, optional
         Choose whether to include a 0-D TIME coordinate. Useful if combining
-        several profiles. Deffault is False.
+        several profiles. Default is False.
 
     inspect_plot : bool, optional
         Return a plot of the whole pressure time series, showing the part of the profile 
@@ -79,52 +111,45 @@ def read_cnv(cnvfile: str,
         Manually specify the scan at which to end the profile (in *addition* to profile 
         detection and flags). Default is None.
     
-    suppress_time_warning: bool, optional
-        Don't show a warning if there are no timeJ or timeS fields
-        Detault is False.
+    suppress_time_warning : bool, optional
+        Don't show a warning if there are no timeJ or timeS fields. Default is False.
 
-    suppress_latlon_warning: bool, optional
-        Don't show a warning if there is no lat/lon information.
-        Detault is False.
+    suppress_latlon_warning : bool, optional
+        Don't show a warning if there is no lat/lon information. Default is False.
 
-    start_time_NMEA: bool, optional
+    start_time_NMEA : bool, optional
         Choose whether to get start_time attribute from the "NMEA UTC (Time)" 
         header line. Default is to grab it from the "start_time" line - this
         is technically correct but typically identical results, and the 
         "start_time" line can occasionally look funny. If unsure, check your 
         header! Default is False (= read from "start_time" header line).        
 
-    lat, lon: [float, bool], optional
+    lat, lon : [float, bool], optional
         Option to specify latitude/longitude manually. (E.g. if there is no lat/lon 
         info in the header or variables).
 
-    station [str, bool], optional
+    station : [str, bool], optional
         Option to specify station manually. Otherwise: extracting from 
         'station line' if available and from the cnv file name if not.
     
-    station_from_filename [bool], optional
+    station_from_filename : bool, optional
         Option to read the station name from the file name, e.g. "STA001"
-        fom a file "STA001.cnv". Otherwise we try to grab it from the header.
+        from a file "STA001.cnv". Otherwise, we try to grab it from the header.
         Default is False.
 
     Returns
     -------
-    xarray.Dataset
+    xr.Dataset
         A dataset containing CTD data and associated attributes.
 
     TO DO
     ----- 
     - Checking and testing
-    - Better docs (esp a good docstring for the read_cnv function!)
-    - Look into *axis* (T, Z, X, Y) - is this necessary?
     - Apply to some other datasets for testing
         - Maybe also moored sensors/TSG? (or should those be separate?)
-    - Figure out whether to make a split between this and a separate processing
-      module (e.g. binning, chopping, concatenation)
     - Tests
         - Make a test_ctd_data.cnv file with mock values and use pytest
-
-    '''
+    """
 
     header_info = read_header(cnvfile)
     ds = _read_column_data_xr(cnvfile, header_info)
@@ -138,16 +163,13 @@ def read_cnv(cnvfile: str,
                              start_time_NMEA = start_time_NMEA)
     ds = _read_SBE_proc_steps(ds, header_info)
 
-    if ds.binned != 'no':
-        ds = _change_dims_scan_to_pres(ds)
-
     ds0 = ds.copy()
     
     if apply_flags:
         ds = _apply_flag(ds)
-        ds.attrs['SBE flags applied'] = 'yes'
+        ds.attrs['SBE_flags_applied'] = 'yes'
     else:
-        ds.attrs['SBE flags applied'] = 'no'
+        ds.attrs['SBE_flags_applied'] = 'no'
 
     if time_dim:
         ds = _add_time_dim_profile(ds, 
@@ -172,326 +194,24 @@ def read_cnv(cnvfile: str,
 
     return ds
 
-
-
-
-
-def join_cruise(nc_files, bins_dbar = 1, verbose = True,
-                epoch = '1970-01-01'):
-    '''
-    Takes a number of cnv profiles, pressure bins them if necessary,
-    and joins the profiles into one single file.  
-
-    Inputs:
-
-    nc_files: string, list
-        A dictionary containing either:
-        1. A path to the location of individual profiles, 
-           e. g. 'path/to/files/'. 
-        2. A list containing xr.Datasets with the individual profiles. 
-
-    epoch: Only necessary to specify here if there is no TIME_SAMPLE
-           field in the data files. (In that case, we assign time based on 
-           the profile start time, and need to know the epoch) 
-        
-    '''
-
-
-
-
-    ### PREPARE INPUTS
-    # Grab the input data on the form of a list of xr.Datasets
-    # (1) Load all from path if we are given a path.
-    if isinstance(nc_files, str):
-        if nc_files.endswith('/'):
-            nc_files = nc_files[:-1]
-        file_list = glob2.glob(f'{nc_files}/*.nc')
-
-        # Note: We don't decode CF since we want time as a numerical variable.
-        prog_bar_msg_1 = 'Loading profiles from netcdf files'
-        ns_input = []
-        for file in tqdm(file_list, desc=prog_bar_msg_1):
-            ns_input += [xr.open_dataset(file, decode_cf=False)]
-        n_profs = len(ns_input)
-        
-        valid_nc_files = True
-        if verbose:
-            print(f'Loaded {n_profs} profiles from netcdf files: {file_list}')
-
-    # (2) Load from list of xr.Datasets if that is what we are given.
-    elif isinstance(nc_files, list):
-        if all(isinstance(nc_file, xr.Dataset) for nc_file in nc_files):
-            ns_input = nc_files
-            n_profs = len(ns_input)
-            valid_nc_files = True
-            if verbose:
-                print(f'Loaded {n_profs} profiles from list of Datasets.')
-        else:
-            valid_nc_files = False
-    else:
-        valid_nc_files = False
-
-    
-    # Raise an exception if we don't have either (1) or (2)
-    if valid_nc_files == False:
-        raise Exception('''            
-            Input *nc_files* invalid. Must be either:
-            1. A path to the location of individual profiles,
-               e.g. "path/to/files/" --or--
-            2. A list containing xr.Datasets with the individual profiles,
-               e.g. [d1, d2] with d1, d2 being xr.Datasets.
-                        ''')
-
-    ### BINNING
-    # If unbinned: bin data
-    if any(n_input.binned == 'no' for n_input in ns_input):
-        prog_bar_msg_2 = f'Binning all profiles to {bins_dbar} dbar'
-        
-        ns_binned = []
-        for n_input in tqdm(ns_input, desc = prog_bar_msg_2):
-            ns_binned += [bin_to_pressure(n_input, bins_dbar)] 
-    else: 
-        print('NOTE: It seems the input data already binned ->'
-              ' using preexisting binning.')
-        # Change profile dimension from scan_count to PRES
-
-        ns_binned = ns_input
-    
-    ### JOINING PROFILES TO ONE DATASET
-    #  Concatenation loop.
-    # - Add a CRUISE variable 
-
-    first = True
-
-    # Keeping track of these as we want to replace them with a date *range*
-    post_proc_times = []
-    SBE_proc_times = []
-
-    prog_bar_msg_3 = f'Joining profiles together'
-
-    for n in tqdm(ns_binned, prog_bar_msg_3):
-
-        sbe_timestamp, proc_timestamp = _dates_from_history(n)
-        post_proc_times += [proc_timestamp]
-        SBE_proc_times += [sbe_timestamp]
-
-        if first:
-            N = n
-            # Want to keep track of whether we use different 
-            # start_time sources
-            start_time_source = n.start_time_source
-            different_start_time_sources = False
-            first = False
-        else:
-            if n.start_time_source != start_time_source:
-                different_start_time_sources = True
-            N = xr.concat([N, n], dim = 'TIME')
-
-
-
-    ### CHECK IF ANY SENSORS CHANGED
-    # Modify metadata if they did
-    for varnm in list(N.data_vars) + ['PRES']:
-        caldates, sns, units, stations = [], [], [], []
-
-        for n in nc_files:
-            stations += [n.STATION.values[0]]
-            for _list, _attr  in zip([caldates, sns, ],
-                ['sensor_calibration_date', 'sensor_serial_number',]):
-                if varnm in n.keys():
-                    if _attr in n[varnm].attrs:
-                        _list += [n[varnm].attrs[_attr]]
-                    else:
-                        _list += [None]
-                else:
-                    _list += [None]
-
-        sns_filtered = np.array([value for value in sns if value is not None])
-        sns_unique = unique_entries = list(set(sns_filtered))
-        caldates_filtered = np.array([value for value in caldates if value is not None])
-        caldates_unique = unique_entries = list(set(caldates_filtered))
-        
-        if len(sns_unique)==2:
-            if 'comment' in N[varnm].attrs:
-                comment_0 = N[varnm].comment
-            else:
-                comment_0 = ''
-            N[varnm].attrs['comment'] = comment_0 + ' Sensors changed underway.'
-            where_sensor_A = np.array(stations)[np.array(sns)==sns_unique[0]]
-            where_sensor_B = np.array(stations)[np.array(sns)==sns_unique[1]]
-            N[varnm].attrs['stations_A'] = ', '.join(where_sensor_A)
-            N[varnm].attrs['stations_B'] = ', '.join(where_sensor_B)
-            N[varnm].attrs['sensor_calibration_date'] = (
-                f'A: {caldates_unique[0]}, B: {caldates_unique[1]}') 
-            N[varnm].attrs['sensor_serial_number'] = (
-                f'A: {sns_unique[0]}, B: {sns_unique[1]}') 
-
-    ### FINAL TOUCHES AND EXPORTS
-    
-    # Transpose so that variables are structured like (TIME, PRES) rather than
-    # (PRES, TIME). Convenient when plotting etc.
-    N = N.transpose() 
-
-
-    # Sort chronologically
-    N = N.sortby('TIME')
-    
-
-
-    # Add some metadata to the STATION variable
-    if 'STATION' in N.data_vars:
-        N['STATION'].attrs = {'long_name' : 'CTD station ID',
-                              'cf_role':'profile_id'}
-    
-    # Warn the user if we used different sources for profile start time
-    if different_start_time_sources:
-        print('\nNOTE: The start_time variable was read from different '
-            'header lines for different profiles. \nThis likely means that '
-            'your .cnv files were formatted differently through the cruise. '
-            '\nThis is probably fine, but it is a good idea to sanity check '
-            'the TIME field.')
-
-    # Add a cruise variable
-    if 'cruise' in N.attrs:
-        cruise = N.cruise
-    else:
-        cruise = '!! CRUISE !!'
-        
-        print('\nNOTE: No cruise ID found in the dataset. Remember to assign!'
-                      '\n-> ds = cnv.set_cruise(ds, "cruisename").')
-    N['CRUISE'] =  xr.DataArray(cruise, dims=())
-    N['CRUISE'].attrs = {'long_name':'Cruise ID', 'cf_role':'trajectory_id'}
-
-    # Generalize (insert "e.g.") in attributes with specific file names 
-    N.attrs['source_files'] = f"E.g. {N.attrs['source_files']}"
-    SBEproc_file_ind = N.SBE_processing.rfind('Raw data read from ')+19
-    N.attrs['SBE_processing'] = (N.SBE_processing[:SBEproc_file_ind]
-                + 'e.g. ' + N.SBE_processing[SBEproc_file_ind:])
-
-    # Add date *ranges* to the history entries if we have different dates
-    N = _replace_history_dates_with_ranges(N, post_proc_times, SBE_proc_times)
-
-    # Delete some non-useful attributes
-    del N.attrs['SBE_processing_date']
-    del N.attrs['start_time_source']
-
-    # Set the featureType attribute
-    N.attrs['featureType'] = 'TrajectoryProfile'
-
-    return N
-    
-
-
-
-def set_cruise(D, cruise_string):
-    '''
-    Assign a value to the CRUISE variable in a joined 
-    CTD dataset D.
-
-    E.g.:  D = cnv.set_cruise(D, 'cruisename') 
-    '''
-    cr_attrs = D.CRUISE.attrs
-    D['CRUISE'] = cruise_string
-    D['CRUISE'].attrs = cr_attrs 
-    return D
-
-
-
-def bin_to_pressure(ds, dp = 1):
-    '''
-    Apply pressure binning into bins of *dp* dbar.
-    Reproducing the SBE algorithm as documented in:
-    https://www.seabird.com/cms-portals/seabird_com/
-    cms/documents/training/Module13_AdvancedDataProcessing.pdf
-
-    # Provides not a bin *average* but a *linear estimate of variable at bin
-    pressure* (in practice a small but noteiceable difference)
-    (See page 13 for the formula used)
-    No surface bin included.
-   
-    Equivalent to this in SBE terms (I think)
-    # binavg_bintype = decibars
-    # binavg_binsize = *dp*
-    # binavg_excl_bad_scans = yes
-    # binavg_skipover = 0
-    # binavg_omit = 0
-    # binavg_min_scans_bin = 1
-    # binavg_max_scans_bin = 2147483647
-    # binavg_surface_bin = no, min = 0.000, max = 0.000, value = 0.000
-    '''
-
-    # Tell xarray to conserve attributes across operations
-    # (we will set this value back to whatever it was after the calculation)
-    _keep_attr_value = xr.get_options()['keep_attrs']
-    xr.set_options(keep_attrs=True)
-
-    # We have to reassign the values of the variables which are not on the
-    # pressure dimension.
-    
-    # Save a copy of the pre-binned data
-    ds0 = ds.copy()
-    # Make a list of variables with only a TIME dimension
-    time_vars = [var_name for var_name, var in ds.variables.items() 
-                 if 'TIME' in var.dims and len(var.dims) == 1]
-    # Make a copy with only the pressure-dimensional variables
-    ds_pres = ds.drop(time_vars)
-
-    # Define the bins over which to average
-    pmax = float(ds_pres.PRES.max())
-    pmax_bound = np.floor(pmax-dp/2)+dp/2
-
-    pmin = float(ds_pres.PRES.min())
-    pmin_bound = np.floor(pmin+dp/2)-dp/2
-
-    p_bounds = np.arange(pmin_bound, pmax_bound+1e-9, dp) 
-    p_centre = np.arange(pmin_bound, pmax_bound, dp)+dp/2
-
-    # Pressure averaged 
-    ds_pavg = ds_pres.groupby_bins('PRES', bins = p_bounds).mean(dim = 'scan_count')
-
-    # Get pressure *binned* according to formula on page 13 in SBEs module 13 document
-    ds_curr = ds_pavg.isel({'PRES_bins':slice(1, None)})
-    ds_prev = ds_pavg.isel({'PRES_bins':slice(None, -1)})
-    # Must assign the same coordinates in order to be able to matrix multiply
-    ds_prev.coords['PRES_bins'] =  ds_curr.PRES_bins
-
-
-
-    p_target = p_centre[slice(1, None)]
-    _numerator = ds_pavg.diff('PRES_bins')*(p_target - ds_prev.PRES)
-    _denominator = ds_pavg.PRES.diff('PRES_bins')
-
-    ds_binned = _numerator/_denominator + ds_prev
-
-
-    # Replace the PRES_bins coordinate and dimension
-    # with PRES
-    ds_binned = (ds_binned
-        .swap_dims({'PRES_bins':'PRES'})
-        .drop_vars('PRES_bins'))
-    
-    ds_binned.attrs['binned'] = f'{dp} dbar'
-
-    # Set xarray option "keep_attrs" back to whatever it was
-    xr.set_options(keep_attrs=_keep_attr_value)
-
-    # Add back the non-pressure dimensional variables
-    for time_var in time_vars:
-        ds_binned[time_var] = ds0[time_var] 
-
-    return ds_binned
-
-
-
-
-def read_header(cnvfile):
-    '''
+def read_header(cnvfile: str) -> dict:
+    """
     Reads a SBE .cnv (or .hdr, .btl) file and returns a dictionary with various
-    metadata parameters extracted from the header. 
+    metadata parameters extracted from the header.
 
-    TBD: Grab instrument serial numbers.
-    '''
-    
+    NOTE: Only tested for .cnv.
+
+    Parameters:
+    ----------
+    cnvfile : str
+        The path to the SBE .cnv, .hdr, or .btl file.
+
+    Returns:
+    -------
+    dict
+        A dictionary containing various metadata parameters extracted from the header.
+    """
+
     with open(cnvfile, 'r', encoding = 'latin-1') as f:
 
         # Empty dictionary: Will fill these parameters up as we go
@@ -555,7 +275,7 @@ def read_header(cnvfile):
 
             # Read cruise/ship/station/bottom depth/operator if available
             if '** CRUISE' in line.upper():
-                hdict['cruise'] = line[(line.rfind(': ')+2):].replace('\n','')
+                hdict['cruise_name'] = line[(line.rfind(': ')+2):].replace('\n','')
             if '** STATION' in line.upper():
                 hdict['station'] = line[(line.rfind(': ')+2):].replace('\n','')
             if '** SHIP' in line.upper():
@@ -598,16 +318,36 @@ def read_header(cnvfile):
 
         return hdict
 
+def to_nc(
+    ds: xr.Dataset,
+    where: str = '.',
+    filename: bool = False,
+    suffix: str = None
+) -> None:
+    """
+    Export a dataset to a NetCDF file.
+
+    Parameters:
+    ----------
+    ds : xr.Dataset
+        The dataset produced by read_cnv().
+    where : str, optional
+        Path in which the NetCDF file will be located.
+    filename : bool or str, optional
+        The name of the NetCDF file. If False (default),
+        the name of the cnv file will be used (no ".nc" suffix necessary).
+    suffix : str, optional
+        Option to add a suffix (e.g., "_prelim") to the file name.
+    """
+
+
+## INTERNAL FUNCTIONS: PARSING
 
 def _read_column_data_xr(cnvfile, header_info):
     '''
     Reads columnar data from a single .cnv to an xarray Dataset.
 
     (By way of a pandas DataFrame)
-
-    TBD: 
-     - Standardize variable names and attributes. 
-     - Add relevant attributes from header
 
     '''
     df = pd.read_csv(cnvfile, header = header_info['hdr_end_line']+1,
@@ -618,431 +358,6 @@ def _read_column_data_xr(cnvfile, header_info):
     ds = xr.Dataset(df).rename({'dim_0':'scan_count'})
     # Will update "binning" later if we discover that it is binned 
     ds.attrs['binned'] = 'no' 
-
-    return ds
-
-
-def _assign_specified_lat_lon_station(ds, lat, lon, station):
-    '''
-    Assign values to latitude, longitude, station attributes
-    if specified by the user (not None).
-    '''
-
-    if lat:
-        ds.attrs['latitude'] = lat 
-    if lon:
-        ds.attrs['longitude'] = lon
-    if station:
-        ds.attrs['station'] = station 
-
-    return ds
-
-
-def _add_start_time(ds, header_info, start_time_NMEA=False):
-    '''
-    Add a start_time attribute.
-
-    Default behavior: 
-        - Use start_time header line
-    If start_time_NMEA = True:
-        - Use "NMEA UTC" line if present
-        - If not, use start_time
-    
-    Compicated way of doing this because there are some occasional 
-    oddities where e.g. 
-    - The "start_time" line is some times incorrect
-    - The "NMEA UTC" is not always present.
-
-    Important to get right since this is used for assigning
-    a time stamp to profiles. 
-    '''
-
-    if start_time_NMEA:
-        try:
-            ds.attrs['start_time'] = time.datetime_to_ISO8601(
-                            header_info['NMEA_time'])
-            ds.attrs['start_time_source'] = '"NMEA UTC" header line'
-
-        except:
-            try:
-                ds.attrs['start_time'] = time.datetime_to_ISO8601(
-                    header_info['start_time'])
-                ds.attrs['start_time_source'] = '"start_time" header line'
-
-            except:
-                raise Warning('Did not find a start time!'
-                    ' (no "start_time" or NMEA UTC" header lines).')
-    else:
-        ds.attrs['start_time'] = time.datetime_to_ISO8601(
-                            header_info['start_time'])
-        ds.attrs['start_time_source'] = '"start_time" header line'
-
-    return ds
-
-
-def _add_time_dim_profile(ds, epoch = '1970-01-01', 
-                          time_source = 'sample_time',
-                          suppress_latlon_warning = False):
-    '''
-    Add a 0-dimensional TIME coordinate to a profile.
-    Also adds the 0-d variables STATION, LATITUDE, and LONGITUDE.
-
-    time_source:
-    
-    sample_time:  Average of TIME_SAMPLE varibale (which was calculated 
-                  from timeS or timeJ fields).
-
-    start_time:   Use the start_time field (star of scans). This is extracted
-                  from either the header; either the 'start_time' or 
-                  'NMEA UTC' lines (which of the twois specified in the 
-                  read_cnv() function usng the start_time_NMEA flag).
-    '''
-
-
-    if 'TIME_SAMPLE' in ds:
-        ds = ds.assign_coords({'TIME':[ds.TIME_SAMPLE.mean()]})
-        ds.TIME.attrs = {'units' : ds.TIME_SAMPLE.units,
-            'standard_name' : 'time',
-            'long_name':'Average time of measurement',
-            'SBE_source_variable':ds.TIME_SAMPLE.SBE_source_variable}
-    else:
-        start_time_num = time.ISO8601_to_datenum(ds.attrs['start_time'])
-        ds = ds.assign_coords({'TIME':[start_time_num]})
-        ds.TIME.attrs = {'units' : f'Days since {epoch} 00:00',
-                        'standard_name' : 'time',
-                        'long_name':'Start time of profile',
-                        'comment':f'Source: {ds.start_time_source}'}
-        
-    
-    # Add STATION
-    ds = _add_station_variable(ds)
-    ds = _add_latlon_variables(ds, suppress_latlon_warning)
-    
-    return ds
-
-
-
-def _add_station_variable(ds):
-    '''
-    Adds a 0-d STATION variable to a profile.
-
-    Grabs the value from the station attribute.
-
-    (Requires that a 0-d TIME dimension exists, see 
-    _add_time_dim_profile).
-
-    '''
-
-    station_array = xr.DataArray([ds.station], dims = 'TIME', coords={'TIME': ds.TIME},
-        attrs = {'long_name' : 'CTD station ID',  'cf_role':'profile_id'})
-    ds['STATION'] = station_array
-
-    return ds
-
-
-def _add_latlon_variables(ds, suppress_latlon_warning = False):
-    '''
-    Adds a 0-d STATION variable to a profile.
-
-    Grabs the value from the station attribute.
-
-    (Requires that a 0-d TIME dimension exists, see 
-    _add_time_dim_profile).
-
-    '''
-
-    missing = False
-
-    if 'latitude' in ds.attrs:
-        if ds.latitude: # If not "None"
-            lat_value = ds.latitude
-        else:
-            lat_value = np.nan
-            missing = 'latitude'
-
-    elif 'LATITUDE_SAMPLE' in ds:
-        lat_value = ds.LATITUDE_SAMPLE.mean()
-    else:
-        lat_value = np.nan
-        missing = 'latitude'
-
-    lat_array = xr.DataArray([lat_value], dims = 'TIME', 
-        coords={'TIME': ds.TIME},
-        attrs = {'standard_name': 'latitude','units': 'degree_north', 
-                'long_name': 'latitude',}) 
-                
-    ds['LATITUDE'] = lat_array
-
-
-    if 'longitude' in ds.attrs:
-        if ds.longitude: # If not "None"
-            lon_value = ds.longitude
-        else:
-            lon_value = np.nan
-        if missing:
-            missing += ', longitude'
-        else:
-            missing = 'longitude'
-    elif  'LONGITUDE_SAMPLE' in ds:
-        lon_value = ds.LONGITUDE_SAMPLE.mean()
-    else:
-        lon_value = np.nan
-        if missing:
-            missing += ', longitude'
-        else:
-            missing = 'longitude'
-
-    lon_array = xr.DataArray([lon_value], dims = 'TIME', 
-        coords={'TIME': ds.TIME},
-        attrs = {'standard_name': 'longitude','units': 'degree_east', 
-                 'long_name': 'longitude',}) 
-    ds['LONGITUDE'] = lon_array
-
-    if missing and suppress_latlon_warning==False:
-        warn_str = (f'{ds.STATION.values[0]}: Unable to find [{missing}] ' 
-            'in .cnv file \n -> Assigning NaN values.')
-        print(f'NOTE!: {warn_str}')
-    
-    return ds
-
-
-def _add_header_attrs(ds, header_info, station_from_filename = False):
-    '''
-    Add the following as attributes if they are available from the header:
-
-        ship, cruise, station, latitude, longitude
-
-    If the attribute is already assigned, we don't change it 
-
-    If we don't have a station, we use the cnv file name base.
-    (can be forced by setting station_from_filename = True)
-    '''
-    for key in ['ship', 'cruise', 'station', 'latitude', 'longitude']:
-
-        if key in header_info and key not in ds.attrs:
-
-            ds.attrs[key] = header_info[key]
-
-    if 'station' not in ds.attrs or station_from_filename:
-        station_from_filename = (
-            header_info['cnvfile'].replace(
-            '.cnv', '').replace('.CNV', ''))
-        ds.attrs['station'] = station_from_filename
-
-    return ds
-
-
-
-def _apply_flag(ds):
-    '''
-    Applies the *flag* value assigned by the SBE processing.
-
-    -> Remove scans  where flag != 0 
-    
-    '''
-    ds = ds.where(ds.SBE_FLAG==0, drop = True)      
-
-    return ds
-
-
-def _remove_up_dncast(ds, keep = 'downcast'):
-    '''
-    Takes a ctd Dataframe and returns a subset containing only either the
-    upcast or downcast.
-
-    Note:
-    Very basic algorithm right now - just removing everything before/after the
-    pressure max and relying on SBE flaggig for the rest.
-    -> will likely have to replace with something more sophisticated. 
-    '''
-    # Index of max pressure, taken as "end of downcast"
-    max_pres_index = int(ds.PRES.argmax().data)
-
-    # If the max index is a single value following invalid values,
-    # we interpret it as the start of the upcast and use the preceding 
-    # point as the "end of upcast index" 
-    if (ds.scan_count[max_pres_index] 
-        - ds.scan_count[max_pres_index-1]) > 1:
-        
-        max_pres_index -= 1
-
-    if keep == 'upcast':
-        # Remove everything *after* pressure max
-        ds = ds.isel({'scan_count':slice(max_pres_index+1, None)})
-        ds.attrs['profile_direction'] = 'upcast'
-
-    elif keep in ['dncast', 'downcast']:
-        # Remove everything *before* pressure max
-        ds = ds.isel({'scan_count':slice(None, max_pres_index+1)})
-        ds.attrs['profile_direction'] = 'downcast'
-
-    else:
-        raise Exception('"keep" must be either "upcast" or "dncast"') 
-
-    return ds
-
-
-def _inspect_extracted(ds, ds0, start_scan=None, end_scan=None):
-    '''
-    Plot the pressure tracks showing the portion extracted after 
-    and/or removing upcast.
-    '''
-
-    fig, ax = plt.subplots(figsize = (10, 6))
-
-    ax.plot(ds0.scan_count, ds0.PRES, '.k', ms = 3, label = 'All scans')
-    ax.plot(ds.scan_count, ds.PRES, '.r', ms = 4, label ='Extracted for use')
-
-    if start_scan:
-        ax.axvline(start_scan, ls = '--', zorder = 0, label = 'start_scan')
-    if end_scan:
-        ax.axvline(end_scan, ls = '--', zorder = 0, label = 'end_scan')
-    ax.set_ylabel('PRES [dbar]')
-    ax.set_xlabel('SCAN COUNTS')
-    ax.legend()
-    ax.invert_yaxis()
-    ax.grid(alpha = 0.5)
-    plt.show()
-
-def _update_variables(ds, cnvfile):
-    '''
-    Take a Dataset and 
-    - Update the header names from SBE names (e.g. 't090C')
-      to more standardized name (e.g., 'TEMP1'). 
-    - Assign the appropriate units and standard_name as attributes.
-    - Assign sensor serial number(s) and/or calibration date(s)
-      where available.
-
-    What to look for is specified in _variable_defs.py
-    -> Will update dictionaries in there as we encounter differently
-       formatted files.
-    '''
-    
-    sensor_info = _read_sensor_info(cnvfile)
-
-    for old_name in ds.keys():
-        old_name_cap = old_name.upper()
-
-        if old_name_cap in vardef.SBE_name_map:
-
-            var_dict = vardef.SBE_name_map[old_name_cap]
-
-            new_name = var_dict['name']
-            unit = var_dict['units']
-            ds = ds.rename({old_name:new_name})
-            ds[new_name].attrs['units'] = unit
-
-            if 'sensors' in var_dict:
-                sensor_SNs = []
-                sensor_caldates = []
-
-                for sensor in var_dict['sensors']:
-                    sensor_SNs += [sensor_info[sensor]['SN']]
-                    sensor_caldates += [sensor_info[sensor]['cal_date']]
-
-                ds[new_name].attrs['sensor_serial_number'] = (
-                    ', '.join(sensor_SNs))
-
-                ds[new_name].attrs['sensor_calibration_date'] = (
-                    ', '.join(sensor_caldates)) 
-
-    return ds
-
-def _read_sensor_info(cnvfile, verbose = False):
-    '''
-    Look through the header for information about sensors:
-        - Serial numbers
-        - Calibration dates  
-    '''
-
-    sensor_dict = {}
-
-    # Define stuff we want to remove from strings
-    drop_str_patterns = ['<.*?>', '\n', ' NPI']
-    drop_str_pattern_comb = '|'.join(drop_str_patterns)
-
-    with open(cnvfile, 'r', encoding = 'latin-1') as f:
-        look_sensor = False
-
-        # Loop through header lines 
-        for n_line, line in enumerate(f.readlines()):
-
-            # When encountering a <sensor> flag: 
-            # Begin looking for instrument info
-            if '<sensor' in line:
-                # Set initial flags
-                look_sensor = True
-                sensor_header_line = n_line+1
-                store_sensor_info = False
-
-            if look_sensor:
-                # Look for an entry corresponding to the sensor in the 
-                # _sensor_info_dict (prescribed) dictionary
-                # If found: read info. If not: Ignore.
-                if n_line == sensor_header_line:
-                    for sensor_str, var_key in vardef.sensor_info_dict.items():
-                        if sensor_str in line:
-                            store_sensor_info = True
-                            var_key_sensor = var_key
-                    
-                    # Print if verbose
-                    shline = line.replace('#     <!-- ', '').replace('\n', '')
-                    (print(f'\nRead from: {var_key_sensor} ({shline})') 
-                    if verbose else None)
-
-                
-                if store_sensor_info:
-                    # Grab instrument serial number
-                    if '<SerialNumber>' in line:
-                        rind_sn = line.rindex('<SerialNumber>')+14
-
-                        SN_instr = re.sub(drop_str_pattern_comb, '', 
-                                               line[rind_sn:])
-                       # SN_instr = (line[rind_sn:]
-                       #             .replace('</SerialNumber>', '')
-                       #             .replace('\n', '')
-                       #             .replace(' NPI', ''))
-                    # Grab calibration date
-                    if '<CalibrationDate>' in line:
-                        rind_cd = line.rindex('<CalibrationDate>')+17
-                        cal_date_instr = (line[rind_cd:]
-                                    .replace('</CalibrationDate>', '')
-                                    .replace('\n', ''))
-            
-            # When encountering a <sensor> flag: 
-            # Stop looking for instrument info and store
-            # in dictionary
-            if '</sensor>' in line:
-
-                # Store to dictionary
-                if look_sensor and store_sensor_info:
-                    sensor_dict[var_key_sensor] = {
-                        'SN':SN_instr,
-                        'cal_date':cal_date_instr
-                    }
-
-                # Print if verbose
-                (print(f'SN: {SN_instr}  // cal date: {cal_date_instr}+n',
-                       f'Stop reading from {var_key_sensor} (save: {store_sensor_info})') 
-                if verbose else None)
-
-                # Reset flags
-                look_sensor, var_key_sensor, = False, None
-                SN_instr, cal_date_instr = None, None
-
-
-            # Stop reading after the END string
-            if '*END*' in line:
-                return sensor_dict
-
-def _change_dims_scan_to_pres(ds):
-    '''
-    Change coordinate / dimension from scan_count to 
-    PRES. A good idea for pressure binned data (bad idea otherwise).
-    '''
-    ds = ds.set_coords('PRES')
-    ds = ds.swap_dims({'scan_count': 'PRES'})
-    ds = ds.drop('scan_count')
 
     return ds
 
@@ -1073,7 +388,7 @@ def _read_SBE_proc_steps(ds, header_info):
             proc_date = pd.to_datetime(proc_date_str) 
             proc_date_ISO8601 = time.datetime_to_ISO8601(proc_date) 
             proc_date_dmy = proc_date.strftime(dmy_fmt)
-            history_str = (f'{proc_date_dmy}: Processed using'
+            history_str = (f'{proc_date_dmy}: Processed to .cnv using'
                             ' SBE software (details in "SBE_processing").')
 
         # Get input file names (without paths)
@@ -1227,7 +542,440 @@ def _read_SBE_proc_steps(ds, header_info):
 
     return ds
 
-### UTILITY FUNCTIONS
+def _read_sensor_info(cnvfile, verbose = False):
+    '''
+    Look through the header for information about sensors:
+        - Serial numbers
+        - Calibration dates  
+    '''
+
+    sensor_dict = {}
+
+    # Define stuff we want to remove from strings
+    drop_str_patterns = ['<.*?>', '\n', ' NPI']
+    drop_str_pattern_comb = '|'.join(drop_str_patterns)
+
+    with open(cnvfile, 'r', encoding = 'latin-1') as f:
+        look_sensor = False
+
+        # Loop through header lines 
+        for n_line, line in enumerate(f.readlines()):
+
+            # When encountering a <sensor> flag: 
+            # Begin looking for instrument info
+            if '<sensor' in line:
+                # Set initial flags
+                look_sensor = True
+                sensor_header_line = n_line+1
+                store_sensor_info = False
+
+            if look_sensor:
+                # Look for an entry corresponding to the sensor in the 
+                # _sensor_info_dict (prescribed) dictionary
+                # If found: read info. If not: Ignore.
+                if n_line == sensor_header_line:
+                    for sensor_str, var_key in vardef.sensor_info_dict.items():
+                        if sensor_str in line:
+                            store_sensor_info = True
+                            var_key_sensor = var_key
+                    
+                    # Print if verbose
+                    shline = line.replace('#     <!-- ', '').replace('\n', '')
+                    (print(f'\nRead from: {var_key_sensor} ({shline})') 
+                    if verbose else None)
+
+                
+                if store_sensor_info:
+                    # Grab instrument serial number
+                    if '<SerialNumber>' in line:
+                        serial_number_index = line.rindex('<SerialNumber>')+14
+
+                        SN_instr = re.sub(drop_str_pattern_comb, '', 
+                                               line[serial_number_index:])
+
+                    # Grab calibration date
+                    if '<CalibrationDate>' in line:
+                        rind_cd = line.rindex('<CalibrationDate>')+17
+                        cal_date_instr = (line[rind_cd:]
+                                    .replace('</CalibrationDate>', '')
+                                    .replace('\n', ''))
+            
+            # When encountering a <sensor> flag: 
+            # Stop looking for instrument info and store
+            # in dictionary
+            if '</sensor>' in line:
+
+                # Store to dictionary
+                if look_sensor and store_sensor_info:
+                    sensor_dict[var_key_sensor] = {
+                        'SN':SN_instr,
+                        'cal_date':cal_date_instr
+                    }
+
+                # Print if verbose
+                (print(f'SN: {SN_instr}  // cal date: {cal_date_instr}+n',
+                       f'Stop reading from {var_key_sensor} (save: {store_sensor_info})') 
+                if verbose else None)
+
+                # Reset flags
+                look_sensor, var_key_sensor, = False, None
+                SN_instr, cal_date_instr = None, None
+
+
+            # Stop reading after the END string
+            if '*END*' in line:
+                return sensor_dict
+
+## INTERNAL FUNCTIONS: MODIFY THE DATASET
+
+def _assign_specified_lat_lon_station(ds, lat, lon, station):
+    '''
+    Assign values to latitude, longitude, station attributes
+    if specified by the user (not None).
+    '''
+
+    if lat:
+        ds.attrs['latitude'] = lat 
+    if lon:
+        ds.attrs['longitude'] = lon
+    if station:
+        ds.attrs['station'] = station 
+
+    return ds
+
+def _add_start_time(ds, header_info, start_time_NMEA=False):
+    '''
+    Add a start_time attribute.
+
+    Default behavior: 
+        - Use start_time header line
+    If start_time_NMEA = True:
+        - Use "NMEA UTC" line if present
+        - If not, use start_time
+    
+    Compicated way of doing this because there are some occasional 
+    oddities where e.g. 
+    - The "start_time" line is some times incorrect
+    - The "NMEA UTC" is not always present.
+
+    Important to get right since this is used for assigning
+    a time stamp to profiles. 
+    '''
+
+    if start_time_NMEA:
+        try:
+            ds.attrs['start_time'] = time.datetime_to_ISO8601(
+                            header_info['NMEA_time'])
+            ds.attrs['start_time_source'] = '"NMEA UTC" header line'
+
+        except:
+            try:
+                ds.attrs['start_time'] = time.datetime_to_ISO8601(
+                    header_info['start_time'])
+                ds.attrs['start_time_source'] = '"start_time" header line'
+
+            except:
+                raise Warning('Did not find a start time!'
+                    ' (no "start_time" or NMEA UTC" header lines).')
+    else:
+        ds.attrs['start_time'] = time.datetime_to_ISO8601(
+                            header_info['start_time'])
+        ds.attrs['start_time_source'] = '"start_time" header line'
+
+    return ds
+
+def _add_time_dim_profile(ds, epoch = '1970-01-01', 
+                          time_source = 'sample_time',
+                          suppress_latlon_warning = False):
+    '''
+    Add a 0-dimensional TIME coordinate to a profile.
+    Also adds the 0-d variables STATION, LATITUDE, and LONGITUDE.
+
+    time_source:
+    
+    sample_time:  Average of TIME_SAMPLE varibale (which was calculated 
+                  from timeS or timeJ fields).
+
+    start_time:   Use the start_time field (star of scans). This is extracted
+                  from either the header; either the 'start_time' or 
+                  'NMEA UTC' lines (which of the twois specified in the 
+                  read_cnv() function usng the start_time_NMEA flag).
+    '''
+
+
+    if 'TIME_SAMPLE' in ds:
+        ds = ds.assign_coords({'TIME':[ds.TIME_SAMPLE.mean()]})
+        ds.TIME.attrs = {'units' : ds.TIME_SAMPLE.units,
+            'standard_name' : 'time',
+            'long_name':'Average time of measurement',
+            'SBE_source_variable':ds.TIME_SAMPLE.SBE_source_variable}
+    else:
+        start_time_num = time.ISO8601_to_datenum(ds.attrs['start_time'])
+        ds = ds.assign_coords({'TIME':[start_time_num]})
+        ds.TIME.attrs = {'units' : f'Days since {epoch} 00:00',
+                        'standard_name' : 'time',
+                        'long_name':'Start time of profile',
+                        'comment':f'Source: {ds.start_time_source}'}
+        
+    
+    # Add STATION
+    ds = _add_station_variable(ds)
+    ds = _add_latlon_variables(ds, suppress_latlon_warning)
+    
+    return ds
+
+def _add_station_variable(ds):
+    '''
+    Adds a 0-d STATION variable to a profile.
+
+    Grabs the value from the station attribute.
+
+    (Requires that a 0-d TIME dimension exists, see 
+    _add_time_dim_profile).
+
+    '''
+
+    station_array = xr.DataArray([ds.station], dims = 'TIME', coords={'TIME': ds.TIME},
+        attrs = {'long_name' : 'CTD station ID',  'cf_role':'profile_id'})
+    ds['STATION'] = station_array
+
+    return ds
+
+def _add_latlon_variables(ds, suppress_latlon_warning = False):
+    '''
+    Adds a 0-d STATION variable to a profile.
+
+    Grabs the value from the station attribute.
+
+    (Requires that a 0-d TIME dimension exists, see 
+    _add_time_dim_profile).
+
+    '''
+
+    missing = False
+
+    if 'latitude' in ds.attrs:
+        if ds.latitude: # If not "None"
+            lat_value = ds.latitude
+        else:
+            lat_value = np.nan
+            missing = 'latitude'
+
+    elif 'LATITUDE_SAMPLE' in ds:
+        lat_value = ds.LATITUDE_SAMPLE.mean()
+    else:
+        lat_value = np.nan
+        missing = 'latitude'
+
+    lat_array = xr.DataArray([lat_value], dims = 'TIME', 
+        coords={'TIME': ds.TIME},
+        attrs = {'standard_name': 'latitude','units': 'degree_north', 
+                'long_name': 'latitude',}) 
+                
+    ds['LATITUDE'] = lat_array
+
+    if 'longitude' in ds.attrs:
+        if ds.longitude: # If not "None"
+            lon_value = ds.longitude
+        else:
+            lon_value = np.nan
+            if missing:
+                missing += ', longitude'
+            else:
+                missing = 'longitude'
+
+    elif  'LONGITUDE_SAMPLE' in ds:
+        lon_value = ds.LONGITUDE_SAMPLE.mean()
+    else:
+        lon_value = np.nan
+        if missing:
+            missing += ', longitude'
+        else:
+            missing = 'longitude'
+
+    lon_array = xr.DataArray([lon_value], dims = 'TIME', 
+        coords={'TIME': ds.TIME},
+        attrs = {'standard_name': 'longitude','units': 'degree_east', 
+                 'long_name': 'longitude',}) 
+    ds['LONGITUDE'] = lon_array
+
+
+    if missing and suppress_latlon_warning==False:
+        warn_str = (f'{ds.STATION.values[0]}: Unable to find [{missing}] ' 
+            'in .cnv file --> Assigning NaN values.')
+        print(f'NOTE!: {warn_str}')
+    
+    return ds
+
+def _add_header_attrs(ds, header_info, station_from_filename = False,
+                      decimals_latlon = 4):
+    '''
+    Add the following as attributes if they are available from the header:
+
+        ship, cruise, station, latitude, longitude
+
+    If the attribute is already assigned, we don't change it 
+
+    If we don't have a station, we use the cnv file name base.
+    (can be forced by setting station_from_filename = True)
+    '''
+    for key in ['ship', 'cruise_name', 'station', 'latitude', 'longitude']:
+
+        if key in header_info and key not in ds.attrs:
+
+            ds.attrs[key] = header_info[key]
+            if key in ['latitude', 'longitude'] and ds.attrs[key]!=None:
+                ds.attrs[key] = np.round(ds.attrs[key], decimals_latlon)
+                
+    if 'station' not in ds.attrs or station_from_filename:
+        station_from_filename = (
+            header_info['cnvfile'].replace(
+            '.cnv', '').replace('.CNV', ''))
+        ds.attrs['station'] = station_from_filename
+
+    return ds
+
+def _apply_flag(ds):
+    '''
+    Applies the *flag* value assigned by the SBE processing.
+
+    -> Remove scans  where flag != 0 
+    
+    '''
+    ds = ds.where(ds.SBE_FLAG==0, drop = True)      
+
+    return ds
+
+def _remove_up_dncast(ds, keep = 'downcast'):
+    '''
+    Takes a ctd Dataframe and returns a subset containing only either the
+    upcast or downcast.
+
+    Note:
+    Very basic algorithm right now - just removing everything before/after the
+    pressure max and relying on SBE flaggig for the rest.
+    -> will likely have to replace with something more sophisticated. 
+    '''
+    # Index of max pressure, taken as "end of downcast"
+    max_pres_index = int(ds.PRES.argmax().data)
+
+    # If the max index is a single value following invalid values,
+    # we interpret it as the start of the upcast and use the preceding 
+    # point as the "end of upcast index" 
+    if (ds.scan_count[max_pres_index] 
+        - ds.scan_count[max_pres_index-1]) > 1:
+        
+        max_pres_index -= 1
+
+    if keep == 'upcast':
+        # Remove everything *after* pressure max
+        ds = ds.isel({'scan_count':slice(max_pres_index+1, None)})
+        ds.attrs['profile_direction'] = 'upcast'
+
+    elif keep in ['dncast', 'downcast']:
+        # Remove everything *before* pressure max
+        ds = ds.isel({'scan_count':slice(None, max_pres_index+1)})
+        ds.attrs['profile_direction'] = 'downcast'
+
+    else:
+        raise Exception('"keep" must be either "upcast" or "dncast"') 
+
+    return ds
+
+def _update_variables(ds, cnvfile):
+    '''
+    Take a Dataset and 
+    - Update the header names from SBE names (e.g. 't090C')
+      to more standardized name (e.g., 'TEMP1'). 
+    - Assign the appropriate units and standard_name as attributes.
+    - Assign sensor serial number(s) and/or calibration date(s)
+      where available.
+
+    What to look for is specified in _variable_defs.py
+    -> Will update dictionaries in there as we encounter differently
+       formatted files.
+    '''
+    
+    sensor_info = _read_sensor_info(cnvfile)
+
+    for old_name in ds.keys():
+        old_name_cap = old_name.upper()
+
+        if old_name_cap in vardef.SBE_name_map:
+
+            var_dict = vardef.SBE_name_map[old_name_cap]
+
+            new_name = var_dict['name']
+            unit = var_dict['units']
+            ds = ds.rename({old_name:new_name})
+            ds[new_name].attrs['units'] = unit
+
+            if 'sensors' in var_dict:
+                sensor_SNs = []
+                sensor_caldates = []
+
+                for sensor in var_dict['sensors']:
+                    sensor_SNs += [sensor_info[sensor]['SN']]
+                    sensor_caldates += [sensor_info[sensor]['cal_date']]
+
+                ds[new_name].attrs['sensor_serial_number'] = (
+                    ', '.join(sensor_SNs))
+
+                ds[new_name].attrs['sensor_calibration_date'] = (
+                    ', '.join(sensor_caldates)) 
+
+    return ds
+
+def _change_dims_scan_to_pres(ds):
+    '''
+    Change coordinate / dimension from scan_count to 
+    PRES. A good idea for pressure binned data (bad idea otherwise).
+    '''
+    ds = ds.set_coords('PRES')
+    ds = ds.swap_dims({'scan_count': 'PRES'})
+    ds = ds.drop('scan_count')
+
+    return ds
+
+def _remove_start_scan(ds, start_scan):
+    '''
+    Remove all scans before *start_scan*
+    '''
+    ds = ds.sel({'scan_count':slice(start_scan, None)})
+    return ds
+
+def _remove_end_scan(ds, end_scan): 
+    '''
+    Remove all scans after *end_scan*
+    '''
+    ds = ds.sel({'scan_count':slice(None, end_scan+1)})
+    return ds
+
+## INTERNAL FUNCTIONS: INSPECT
+
+def _inspect_extracted(ds, ds0, start_scan=None, end_scan=None):
+    '''
+    Plot the pressure tracks showing the portion extracted after 
+    and/or removing upcast.
+    '''
+
+    fig, ax = plt.subplots(figsize = (10, 6))
+
+    ax.plot(ds0.scan_count, ds0.PRES, '.k', ms = 3, label = 'All scans')
+    ax.plot(ds.scan_count, ds.PRES, '.r', ms = 4, label ='Extracted for use')
+
+    if start_scan:
+        ax.axvline(start_scan, ls = '--', zorder = 0, label = 'start_scan')
+    if end_scan:
+        ax.axvline(end_scan, ls = '--', zorder = 0, label = 'end_scan')
+    ax.set_ylabel('PRES [dbar]')
+    ax.set_xlabel('SCAN COUNTS')
+    ax.legend()
+    ax.invert_yaxis()
+    ax.grid(alpha = 0.5)
+    plt.show()
+
+## INTERNAL FUNCTIONS: FORMAT CONVERSION
 
 def _nmea_lon_to_decdeg(deg_str, min_str, EW_str):
     '''
@@ -1247,7 +995,6 @@ def _nmea_lon_to_decdeg(deg_str, min_str, EW_str):
 
     return decdeg*dec_sign
 
-
 def _nmea_lat_to_decdeg(deg_str, min_str, NS_str):
     '''
     Convert NMEA latitude to decimal degrees latitude.
@@ -1265,7 +1012,6 @@ def _nmea_lat_to_decdeg(deg_str, min_str, NS_str):
     decdeg = int(deg_str) + float(min_str)/60 
 
     return decdeg*dec_sign
-
 
 def _nmea_time_to_datetime(mon, da, yr, hms):
     '''
@@ -1300,56 +1046,6 @@ def _decdeg_from_line(line):
 
     return decdeg
 
-
-def _replace_history_dates_with_ranges(D, post_proc_times, SBE_proc_times):
-    '''
-    When joining files: Change the history strng to show time *ranges*,
-    e.g. 
-       2017-09-24: Data collection
-    -> 2017-09-24 to 2017-09-24: Data collection
-    '''
-    ppr_min, ppr_max = np.min(post_proc_times), np.max(post_proc_times)
-    sbe_min, sbe_max = np.min(SBE_proc_times), np.max(SBE_proc_times)
-    ctd_min, ctd_max = D.TIME.min(), D.TIME.max()
-
-    date_fmt = '%Y-%m-%d'
-
-    if ctd_max>ctd_min:
-        ctd_range = (
-            f'{cftime.num2date(ctd_min, D.TIME.units).strftime(date_fmt)}'
-            f' to {cftime.num2date(ctd_max, D.TIME.units).strftime(date_fmt)}')
-        D.attrs['history'] = ctd_range + D.history[10:] 
-
-    if sbe_max>sbe_min:
-        sbe_range = f'{sbe_min.strftime(date_fmt)} to {sbe_max.strftime(date_fmt)}'
-        rind = D.history.find(': Processed using SBE')
-        D.attrs['history'] = D.history[:rind-10] + sbe_range + D.attrs['history'][rind:]
-
-    if ppr_max>ppr_min:
-        ppr_range = f'{ppr_min.strftime(date_fmt)} to {ppr_max.strftime(date_fmt)}'
-        rind = D.history.find(': Post-processing.')
-        D.attrs['history'] = D.history[:rind-10] + ppr_range + D.attrs['history'][rind:]
-        
-    return D
-
-
-def _dates_from_history(ds):
-    '''
-    Grab the dates of 1) SBE processing and 2) Post-processing from the
-    "history" attribute.
-    '''
-    sbe_pattern = r"(\d{4}-\d{2}-\d{2}): Processed using SBE software"
-    sbe_time_match_str = re.search(sbe_pattern, ds.history).group(1)
-    sbe_timestamp = pd.Timestamp(sbe_time_match_str)
-    
-    proc_pattern = r"(\d{4}-\d{2}-\d{2}): Post-processing"
-    proc_time_match_str = re.search(proc_pattern, ds.history).group(1)
-    proc_timestamp = pd.Timestamp(proc_time_match_str)
-
-    return sbe_timestamp, proc_timestamp
-
-
-
 def _convert_time(ds, header_info, epoch = '1970-01-01', 
                   suppress_time_warning = False):
     '''
@@ -1376,7 +1072,6 @@ def _convert_time(ds, header_info, epoch = '1970-01-01',
                       'can be used to assign a profile time).')
     return ds
 
-
 def _convert_time_from_elapsed(ds, header_info, epoch = '1970-01-01'):
     '''
     Convert TIME_ELAPSED (sec)
@@ -1401,7 +1096,6 @@ def _convert_time_from_elapsed(ds, header_info, epoch = '1970-01-01'):
     ds = ds.drop('TIME_ELAPSED')
 
     return ds
-
 
 def _convert_time_from_juld(ds, header_info, epoch = '1970-01-01'):
     '''
@@ -1428,15 +1122,6 @@ def _convert_time_from_juld(ds, header_info, epoch = '1970-01-01'):
     return ds
 
 
-def _remove_start_scan(ds, start_scan):
-    '''
-    Remove all scans before *start_scan*
-    '''
-    ds = ds.sel({'scan_count':slice(start_scan, None)})
-    return ds
-
-
-def _remove_end_scan(ds, end_scan):
     '''
     Remove all scans after *end_scan*
     '''
