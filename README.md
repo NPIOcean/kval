@@ -1,12 +1,12 @@
 # `oceanograPy`
 ```
-import oceanpgrapy as opy
+import oceanograpy as opy
 ```
 Collection of Python functions for working with oceanography data processing and analysis.
 
 ____
 STATUS 18.11:
-- Extensive functionality forworking with CTD data:
+- Now contains extensive functionality for working with CTD data:
     - Parsing cnvs
     - Reformatting and adding metadata for pulishing CTD data
     - Starting to become quite useful
