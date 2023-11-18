@@ -5,6 +5,7 @@ Functions for making netcdfs cf-compliant.
 from oceanograpy.util import time
 import cftime
 from oceanograpy.data.nc_format import _standard_attrs
+from oceanograpy.util import calc
 
 def add_range_attrs_ctd(D):
     '''
@@ -35,25 +36,29 @@ def add_range_attrs_ctd(D):
 
     return D
 
-def _get_geospatial_bounds_wkt_str(D):
+def _get_geospatial_bounds_wkt_str(D, decimals = 2):
     '''
     Get the geospatial_bounds_crs value on the required format:
 
     'POLYGON((x1 y1, x2 y2, x3 y3, …, x1 y1))'
 
-    Note: D must already have geospatial_lat_max (etc) attributes.
-    
+    Rounds the lat/lon to the specified number of digits, rounding
+    the last digit in the direction such that all points are contained
+    within the polygon
+
+    NOTE: D must already have geospatial_lat_max (etc) attributes.
     
     '''
-    lat_max = D.geospatial_lat_max
-    lat_min = D.geospatial_lat_min
-    lon_max = D.geospatial_lon_max
-    lon_min = D.geospatial_lon_min
+
+    lat_max = calc.custom_round_ud(D.geospatial_lat_max, decimals, 'up')
+    lat_min = calc.custom_round_ud(D.geospatial_lat_min, decimals, 'dn')
+    lon_max = calc.custom_round_ud(D.geospatial_lon_max, decimals, 'up')
+    lon_min = calc.custom_round_ud(D.geospatial_lon_min, decimals, 'dn')
 
     corner_dict = (lon_min, lat_min, lon_min, lat_max, lon_max, lat_max, 
                     lon_max, lat_min, lon_min, lat_min)
-
-    wkt_str = 'POLYGON ((%f %f, %f %f, %f %f, %f %f, %f %f))'%corner_dict
+    print(corner_dict)
+    wkt_str = ('POLYGON ((%s %s, %s %s, %s %s, %s %s, %s %s))'%corner_dict)
 
     return wkt_str
 
