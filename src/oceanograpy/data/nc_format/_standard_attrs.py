@@ -21,7 +21,7 @@ standard_var_attrs_ctd = {
         'long_name': 'Practical salinity',
         'valid_min' : 2.0,
         'valid_max' : 41.0,
-        'reference_scale':'“PSS-78',
+        'reference_scale':'PSS-78',
     },
     'CNDC': {
         'standard_name': 'sea_water_electrical_conductivity',
@@ -125,9 +125,9 @@ standard_attrs_global_ctd = {
 
 gmdc_keyword_dict_ctd = {
     'PRES':'OCEANS>OCEAN PRESSURE>WATER PRESSURE,',
-    'TEMP':'OCEANS>OCEAN TEMPERATURE>WATER TEMPERATURE,',
+    'TEMP':'OCEANS>OCEAN TEMPERATURE>OCEAN TEMPERATURE PROFILES,',
     'CNDC':'OCEANS>SALINITY/DENSITY>CONDUCTIVITY>CONDUCTIVITY PROFILES,',
-    'PSAL':'OCEANS>SALINITY/DENSITY>OCEAN SALINITY>PRACTICAL SALINITY,',
+    'PSAL':'OCEANS>SALINITY/DENSITY>OCEAN SALINITY>OCEAN SALINITY PROFILES,',
     'CHLA':'OCEANS>OCEAN OPTICS>CHLOROPHYLL>CHLOROPHYLL CONCENTRATION',
     'CHLA_instr':'OCEANS>OCEAN OPTICS>CHLOROPHYLL>CHLOROPHYLL CONCENTRATION',
     'CHLA_fluorescence':'OCEANS>OCEAN OPTICS>CHLOROPHYLL>CHLOROPHYLL CONCENTRATION',

@@ -64,13 +64,18 @@ def ctds_from_cnv_list(
 
 
 
-def make_publishing_ready(D, NPI = True, retain_vars = []):
+def make_publishing_ready(D, NPI = True, 
+                retain_vars = ['TEMP1', 'CNDC1', 'PSAL1', 'CHLA1'],
+                drop_vars = None, retain_all = False):
     '''
     Wrapper function:
     Various modifications to the metadata in order to make the dataset
     nicely formatted for publication.
     '''
-    D = drop_variables(D, retain_vars = retain_vars)
+    if retain_all:
+        drop_vars = []
+
+    D = drop_variables(D, retain_vars = retain_vars, drop_vars = drop_vars)
     D = remove_numbers_in_names(D)
     D = conventionalize.add_standard_var_attrs_ctd(D)
     D = conventionalize.add_standard_glob_attrs_ctd(D, NPI = NPI, 

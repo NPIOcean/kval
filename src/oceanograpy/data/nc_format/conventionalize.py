@@ -88,6 +88,11 @@ def add_standard_var_attrs_ctd(D, override = False):
                 else:
                     if attr not in D[varnm].attrs:
                         D[varnm].attrs[attr] = item
+
+        # These should be standard for anything measured on a CTD
+        D[varnm].attrs['coverage_content_type'] = 'physicalMeasurement'
+        D[varnm].attrs['sensor_mount'] = 'mounted_on_shipborne_profiler'
+
     return D
 
 
