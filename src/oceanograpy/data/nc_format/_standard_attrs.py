@@ -90,6 +90,18 @@ standard_var_attrs_ctd = {
         'valid_max' : 12000.0,
         'axis': 'Z',
     },
+    'SVEL': {
+        'units': 'm s-1',
+        'long_name': 'Sound veelocity of seawater',
+        'valid_min' : 1200.0,
+        'valid_max' : 1800.0,
+                },
+   'SIGTH': {
+        'units': 'kg m-3',
+        'long_name': 'Sigma-theta density',
+        'valid_min' : 0.0,
+        'valid_max' : 50.0,
+    },
     'TIME': {
         'standard_name': 'time',
         'units': 'days since 1970-01-01',

@@ -46,11 +46,13 @@ from typing import Optional
 from tqdm.notebook import tqdm 
 import cftime
 from typing import Optional
+from itertools import zip_longest
+from matplotlib.dates import date2num
 
 ## KEY FUNCTIONS
 
 def read_cnv(
-    cnvfile: str,
+    source_file: str,
     apply_flags: Optional[bool] = True,
     profile: Optional[str] = 'downcast',
     time_dim: Optional[bool] = False,
@@ -84,7 +86,7 @@ def read_cnv(
 
     Parameters
     ----------
-    cnvfile : str
+    source_file : str
         Path to a .cnv file containing the data 
 
     apply_flags : bool, optional 
@@ -151,9 +153,9 @@ def read_cnv(
         - Make a test_ctd_data.cnv file with mock values and use pytest
     """
 
-    header_info = read_header(cnvfile)
-    ds = _read_column_data_xr(cnvfile, header_info)
-    ds = _update_variables(ds, cnvfile)
+    header_info = read_header(source_file)
+    ds = _read_column_data_xr(source_file, header_info)
+    ds = _update_variables(ds, source_file)
     ds = _assign_specified_lat_lon_station(ds, lat, lon, station)
     ds = _convert_time(ds, header_info, 
                        suppress_time_warning = suppress_time_warning)
@@ -194,7 +196,153 @@ def read_cnv(
 
     return ds
 
-def read_header(cnvfile: str) -> dict:
+
+def read_btl(source_file, verbose = False, 
+             time_dim = True,
+             station_from_filename= False,
+             start_time_NMEA = True):
+
+    # Parse the header
+    header_info = read_header(source_file)
+
+    # Parse the columnar data
+    ds = _read_btl_column_data_xr(source_file, 
+                                  header_info, verbose = verbose)
+    # Add nice variable names and attributes 
+    ds = _update_variables(ds, source_file)
+    # Add a history string
+    ds.attrs['history'] = header_info['start_history']
+    # Add ship, cruise, station, latitude, longitude attributes from the header
+    ds = _add_header_attrs(ds, header_info, 
+                           station_from_filename = station_from_filename)
+    # Add a start time attribute from the header 
+    ds = _add_start_time(ds, header_info, 
+                                start_time_NMEA = start_time_NMEA)
+    # Add the SBE processing string from the header
+    ds = _read_SBE_proc_steps(ds, header_info)
+    # Add a (0-D) TIME dimension
+    time_dim = True
+    if time_dim:
+        ds = _add_time_dim_profile(ds)
+    
+    return ds 
+
+def _read_btl_column_data_xr(source_file, header_info, verbose = False):
+    '''
+    Read the columnar data from a .btl file uring information (previously)
+    parsed from the header.
+
+    A little clunky as the data are distributed over two rows (subrows), a la:
+
+    Bottle        Date    Sal00     T090C     C0S/m  
+    Position      Time                                                                                                   
+      1       Jan 04 2021    34.6715   2.963803  1.5859    (avg)
+               15:27:59                0.0001    0.000015  (sdev)
+      2       Jan 04 2021    34.6733   2.530134  1.5663    (avg)
+               15:31:33                0.0002    0.000012  (sdev)
+
+    '''
+
+    # Read column data to dataframe
+    df_all = pd.read_fwf(source_file, skiprows = header_info['start_line_btl_data'], 
+        delim_whitespace = True, names = header_info['col_names'] + ['avg_std'], 
+        encoding = 'latin-1')
+    
+    # Read the primary (avg) and second (std rows)
+    # +Reindexing and dropping the "index" and "avg_std" columns
+
+    # Parse the first subrow
+    df_first_subrow = df_all.iloc[0::2].reset_index(drop = False).drop(['index', 'avg_std'], axis = 1)
+
+    # Parse the second subrow
+    df_second_subrow = df_all.iloc[1::2].reset_index().drop(['index', 'avg_std'], axis = 1)
+
+    # Build a datafra with all the information combined
+    df_combined = pd.DataFrame()
+
+    ## Loop through all columns except date and bottle number:
+    # - Add the variables from the first subrow if they are not empty
+    # - Replace column names the nice names (if available)
+    # - Add variables from the second subrow with _std as suffix 
+    # - Also adding units, sensors as variable attributes (.attr)
+
+    for sbe_name_ in df_all.keys():
+        # Skip "bottle number" and "time" rows, will deal with those separately
+        if 'Bottle' in sbe_name_ or 'Date' in sbe_name_:
+            pass
+        else:
+
+            # Read first subrow
+            try:
+                df_combined[sbe_name_.replace('/', '_')] = (
+                    df_first_subrow[sbe_name_].astype(float))
+            except:
+                if verbose:
+                    print(f'Could not read {sbe_name_} as float - > dropping')
+
+            # Read second subrow
+            try:
+                df_combined[f'{sbe_name_.replace("/", "_")}_std'] = (
+                    df_second_subrow[sbe_name_].astype(float))
+            except:
+                if verbose:
+                    print(f'Could not read {sbe_name_}_std as float - > dropping')
+
+    ## Add bottle number (assuming it is the first column)
+    bottle_num_name = df_first_subrow.keys()[0] # Name of the bottle column
+    df_combined['NISKIN_NUMBER'] = df_first_subrow[bottle_num_name].astype(float)
+
+
+    # Parse TIME_SAMPLE from first + second subrows (assuming it is the second column)
+    # Using the nice pandas function to_datetime(for parsing)
+    # Then converting to datenum (days since 1970-01-01)
+    # NOTE: Should put this general functionality in util.time!)
+
+    time_name = df_first_subrow.keys()[1] # Name of the time column
+
+    TIME_SAMPLE = []
+    epoch = '1970-01-01'
+
+    for datestr, timestr in zip(df_first_subrow[time_name], df_second_subrow[time_name]):
+        time_string = ', '.join([datestr, timestr])
+        
+        # Parse the time string to pandas Timestamp
+        time_pd = pd.to_datetime(time_string)
+
+        # Convert to days since epoch
+        time_DSE = ((time_pd - pd.Timestamp(epoch)) / pd.to_timedelta(1, unit='D'))
+        
+        TIME_SAMPLE += [time_DSE]
+
+    df_combined['TIME_SAMPLE'] = TIME_SAMPLE
+    df_combined['TIME_SAMPLE'].attrs = {'units':f'Days since {epoch}',                        
+            'long_name': 'Time stamp of bottle closing',
+            'coverage_content_type':'coordinate',
+            'SBE_source_variable' : time_name,}
+
+
+    # Convert DataFrame to xarray Dataset
+    ds = xr.Dataset()
+
+    variable_list = list(df_combined.keys())
+    variable_list.remove('NISKIN_NUMBER')
+
+    for varnm in variable_list:
+        ds[varnm] = xr.DataArray(df_combined[varnm], dims=['NISKIN_NUMBER'], 
+                                coords={'NISKIN_NUMBER': df_combined.NISKIN_NUMBER})
+
+        # Preserve metadata attributes for the 'Value' variable
+        ds[varnm].attrs = df_combined[varnm].attrs
+
+    ds['NISKIN_NUMBER'].attrs = {'long_name':'Niskin bottle number',
+        'comment': 'Designated number for each physical Niskin bottle '
+            'on the CTD rosette (typically e.g. 1-24).'
+            ' Bottles may be closed at different depths at different stations. '}
+
+    return ds
+
+
+def read_header(filename: str) -> dict:
     """
     Reads a SBE .cnv (or .hdr, .btl) file and returns a dictionary with various
     metadata parameters extracted from the header.
@@ -203,7 +351,7 @@ def read_header(cnvfile: str) -> dict:
 
     Parameters:
     ----------
-    cnvfile : str
+    source_file : str
         The path to the SBE .cnv, .hdr, or .btl file.
 
     Returns:
@@ -212,7 +360,7 @@ def read_header(cnvfile: str) -> dict:
         A dictionary containing various metadata parameters extracted from the header.
     """
 
-    with open(cnvfile, 'r', encoding = 'latin-1') as f:
+    with open(filename, 'r', encoding = 'latin-1') as f:
 
         # Empty dictionary: Will fill these parameters up as we go
         hkeys = ['col_nums', 'col_names', 'col_longnames', 'SN_info', 
@@ -223,13 +371,16 @@ def read_header(cnvfile: str) -> dict:
         # Flag that will be turned on when we read the SBE history section 
         start_read_history = False 
 
+
         # Go through the header line by line and extract specific information 
         # when we encounter specific terms dictated by the format  
         
-        for n_line, line in enumerate(f.readlines()):
+        lines = f.readlines()
+        #return lines
+        for n_line, line in enumerate(lines):
 
             # Read the column header info (which variable is in which data column)
-            if '# name' in line:
+            if '# name' in line and not filename.endswith('.btl'):
                 # Read column number
                 hdict['col_nums'] += [int(line.split()[2])]
                 # Read column header
@@ -298,10 +449,60 @@ def read_header(cnvfile: str) -> dict:
             if start_read_history:
                 hdict['SBEproc_hist'] += [line] 
 
+            # For .cnvs:
             # Read the line containing the END string
             # (and stop reading the file after that)
-            if '*END*' in line:
+            if '*END*' in line and filename.endswith('.cnv'):
                 hdict['hdr_end_line'] = n_line
+
+                # Break the loop through all lines
+                break
+
+            # For .btls:
+            # Read the line containing the header information string
+            # (and stop reading the file after that)
+ 
+            if line.split()[0] =='Bottle' and filename.endswith('.btl'):
+                # Grab the header names
+                hdict['col_names'] = line.split()
+
+                # The header is typically wrapped across two lines. 
+                # -> adding info from the next line
+                # NOTE: Assuming that 2-row column names cannot follow 1-row ones.
+                # There *could* be cases where this is otherwise, but I haven't
+                # encountered this.
+                  
+                # Loop through following lines (usually just one)
+                nline_next = n_line + 1
+                while True: # Arbitrary clause, we will break this loop when getting to the data
+
+                    # Look at the following line
+                    line_next = lines[nline_next] 
+
+                    # If line_next starts with "1", this is the beginning of the data and 
+                    # we stop looking for additional column name information, but store
+                    # the start line.
+                    if line_next.split()[0]=='1': 
+                        hdict["start_line_btl_data"] = nline_next
+                        break
+
+                    # If not, this is part of the header, and we add info 
+                    # onto the hdict["col_names"] field.
+                    else:
+                        hdict["col_names"] = [
+                            f'{col_name} {next_part}' for col_name, next_part in 
+                            zip_longest(hdict["col_names"], line_next.split(), fillvalue='')
+                                ]
+                    nline_next += 1
+                
+                # Remove trailing whitespaces from col_names
+                col_names_stripped = [col_name.rstrip() for col_name in hdict["col_names"]]
+                hdict["col_names"] = col_names_stripped
+
+                # Store the end line
+                hdict['hdr_end_line'] = n_line-1
+                
+                # Break the loop through all lines
                 break
 
         # Remove the first ('</Sensors>') and last ('*END*') lines from the SBE history string.
@@ -314,9 +515,13 @@ def read_header(cnvfile: str) -> dict:
                     hdict[hkey] = None
 
         # Assign the file name without the directory path
-        hdict['cnvfile'] = cnvfile[cnvfile.rfind('/')+1:]
+        for suffix in ['cnv', 'hdr', 'btl']:
+            if filename.endswith(suffix):
+                hdict['source_file'] = filename[filename.rfind('/')+1:]
+                hdict['source_file_type'] = suffix
 
         return hdict
+
 
 def to_nc(
     ds: xr.Dataset,
@@ -343,14 +548,14 @@ def to_nc(
 
 ## INTERNAL FUNCTIONS: PARSING
 
-def _read_column_data_xr(cnvfile, header_info):
+def _read_column_data_xr(source_file, header_info):
     '''
     Reads columnar data from a single .cnv to an xarray Dataset.
 
     (By way of a pandas DataFrame)
 
     '''
-    df = pd.read_csv(cnvfile, header = header_info['hdr_end_line']+1,
+    df = pd.read_csv(source_file, header = header_info['hdr_end_line']+1,
                  delim_whitespace=True, encoding = 'latin-1',
                  names = header_info['col_names'])
     
@@ -378,7 +583,7 @@ def _read_SBE_proc_steps(ds, header_info):
     dmy_fmt = '%Y-%m-%d'
 
     sbe_proc_str = ['SBE SOFTWARE PROCESSING STEPS (extracted'
-                    ' from .cnv file header):',]
+                f' from .{header_info["source_file_type"]} file header):',]
 
     for line in SBElines:
         # Get processing date
@@ -388,7 +593,8 @@ def _read_SBE_proc_steps(ds, header_info):
             proc_date = pd.to_datetime(proc_date_str) 
             proc_date_ISO8601 = time.datetime_to_ISO8601(proc_date) 
             proc_date_dmy = proc_date.strftime(dmy_fmt)
-            history_str = (f'{proc_date_dmy}: Processed to .cnv using'
+            history_str = (f'{proc_date_dmy}: Processed to '
+                           f'.{header_info["source_file_type"]} using'
                             ' SBE software (details in "SBE_processing").')
 
         # Get input file names (without paths)
@@ -538,11 +744,11 @@ def _read_SBE_proc_steps(ds, header_info):
     ds.attrs['SBE_processing'] = '\n'.join(sbe_proc_str)
     ds.attrs['SBE_processing_date'] = proc_date_ISO8601
     ds.attrs['history'] += f'\n{history_str}'
-    ds.attrs['source_files'] = f'{src_files_raw} -> {header_info["cnvfile"].upper()}'
+    ds.attrs['source_files'] = f'{src_files_raw} -> {header_info["source_file"].upper()}'
 
     return ds
 
-def _read_sensor_info(cnvfile, verbose = False):
+def _read_sensor_info(source_file, verbose = False):
     '''
     Look through the header for information about sensors:
         - Serial numbers
@@ -555,7 +761,7 @@ def _read_sensor_info(cnvfile, verbose = False):
     drop_str_patterns = ['<.*?>', '\n', ' NPI']
     drop_str_pattern_comb = '|'.join(drop_str_patterns)
 
-    with open(cnvfile, 'r', encoding = 'latin-1') as f:
+    with open(source_file, 'r', encoding = 'latin-1') as f:
         look_sensor = False
 
         # Loop through header lines 
@@ -622,9 +828,13 @@ def _read_sensor_info(cnvfile, verbose = False):
                 SN_instr, cal_date_instr = None, None
 
 
-            # Stop reading after the END string
+            # Stop reading after the END string (.cnv, .hdr)
             if '*END*' in line:
                 return sensor_dict
+    # For .btl files (no end string) - just read the whole file before 
+    # before returning
+
+    return sensor_dict
 
 ## INTERNAL FUNCTIONS: MODIFY THE DATASET
 
@@ -707,7 +917,7 @@ def _add_time_dim_profile(ds, epoch = '1970-01-01',
         ds = ds.assign_coords({'TIME':[ds.TIME_SAMPLE.mean()]})
         ds.TIME.attrs = {'units' : ds.TIME_SAMPLE.units,
             'standard_name' : 'time',
-            'long_name':'Average time of measurement',
+            'long_name':'Average time of measurements',
             'SBE_source_variable':ds.TIME_SAMPLE.SBE_source_variable}
     else:
         start_time_num = time.ISO8601_to_datenum(ds.attrs['start_time'])
@@ -829,7 +1039,7 @@ def _add_header_attrs(ds, header_info, station_from_filename = False,
                 
     if 'station' not in ds.attrs or station_from_filename:
         station_from_filename = (
-            header_info['cnvfile'].replace(
+            header_info['source_file'].replace(
             '.cnv', '').replace('.CNV', ''))
         ds.attrs['station'] = station_from_filename
 
@@ -882,7 +1092,7 @@ def _remove_up_dncast(ds, keep = 'downcast'):
 
     return ds
 
-def _update_variables(ds, cnvfile):
+def _update_variables(ds, source_file):
     '''
     Take a Dataset and 
     - Update the header names from SBE names (e.g. 't090C')
@@ -896,16 +1106,27 @@ def _update_variables(ds, cnvfile):
        formatted files.
     '''
     
-    sensor_info = _read_sensor_info(cnvfile)
+    sensor_info = _read_sensor_info(source_file)
 
     for old_name in ds.keys():
         old_name_cap = old_name.upper()
+        
+        # For .btl-files we can have valiables with a _std suffix 
+        if old_name_cap.endswith('_STD'):
+            old_name_cap = old_name_cap.replace('_STD', '')
+            std_suffix = True
+        else:
+            std_suffix = False
 
         if old_name_cap in vardef.SBE_name_map:
 
             var_dict = vardef.SBE_name_map[old_name_cap]
 
-            new_name = var_dict['name']
+            if not std_suffix:
+                new_name = var_dict['name']
+            else:
+                new_name = var_dict['name'] + '_std'
+
             unit = var_dict['units']
             ds = ds.rename({old_name:new_name})
             ds[new_name].attrs['units'] = unit
@@ -915,6 +1136,7 @@ def _update_variables(ds, cnvfile):
                 sensor_caldates = []
 
                 for sensor in var_dict['sensors']:
+
                     sensor_SNs += [sensor_info[sensor]['SN']]
                     sensor_caldates += [sensor_info[sensor]['cal_date']]
 
@@ -925,6 +1147,7 @@ def _update_variables(ds, cnvfile):
                     ', '.join(sensor_caldates)) 
 
     return ds
+
 
 def _change_dims_scan_to_pres(ds):
     '''

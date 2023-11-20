@@ -37,7 +37,9 @@ def ctds_from_cnv_dir(
         cnv_files, verbose = verbose)
     D = tools.join_cruise(profile_datasets,
         verbose=verbose)
+
     return D
+
 
 def ctds_from_cnv_list(
     cnv_list: list,
@@ -63,9 +65,36 @@ def ctds_from_cnv_list(
     return D
 
 
+def dataset_from_btl_dir(
+    path: str,
+    station_from_filename: bool = False,
+    time_warnings: bool = True,
+    verbose: bool = True
+) -> xr.Dataset:
+    """
+    Create CTD datasets from CNV files in the specified path.
+
+    Parameters:
+    - path (str): Path to the CNV files.
+    - station_from_filename (bool): Whether to extract station information from filenames.
+    - time_warnings (bool): Enable/disable time-related warnings.
+    - verbose: If False, suppress some prints output.
+    Returns:
+    - D (xarray.Dataset): Joined CTD dataset.
+    """
+    btl_files = tools._btl_files_from_path(path)
+   # print(btl_files)
+    profile_datasets = tools._datasets_from_btllist(
+        btl_files, verbose = verbose)
+    D = tools.join_cruise_btl(profile_datasets,
+        verbose=verbose)
+
+    return D
+
+
 
 def make_publishing_ready(D, NPI = True, 
-                retain_vars = ['TEMP1', 'CNDC1', 'PSAL1', 'CHLA1'],
+                retain_vars = ['TEMP1', 'CNDC1', 'PSAL1', 'CHLA1', 'PRES'],
                 drop_vars = None, retain_all = False):
     '''
     Wrapper function:
@@ -182,7 +211,7 @@ def to_netcdf(D, path, file_name = None, convention_check = False, add_to_histor
 
     D.to_netcdf(file_path)
 
-    print(f'Exported file {file_name}.nc to {path}.')
+    print(f'Exported netCDF file as: {path}{file_name}.nc')
 
     if convention_check:
         print('Running convention checker:')
@@ -280,7 +309,8 @@ def calibrate_chl(
 
 
 
-def drop_variables(D, retain_vars = ['TEMP1', 'CNDC1', 'PSAL1', 'CHLA1'], 
+def drop_variables(D, retain_vars = ['TEMP1', 'CNDC1', 'PSAL1', 
+                                     'CHLA1', 'PRES'], 
                    drop_vars = None, 
                     ):
         '''
@@ -307,11 +337,14 @@ def drop_variables(D, retain_vars = ['TEMP1', 'CNDC1', 'PSAL1', 'CHLA1'],
             all_vars = [varnm for varnm in D.data_vars]
             dropped = []
             for varnm in all_vars:
-                if varnm not in retain_vars and 'PRES' in D[varnm].dims:
+                if (varnm not in retain_vars and 
+                    ('PRES' in D[varnm].dims 
+                     or 'NISKIN_NUMBER' in D[varnm].dims)):
                     D = D.drop(varnm)
                     dropped += [varnm]
-
-        print(f'Dropped these variables from the Dataset: {dropped}.')
+    
+        if len(dropped)>1:
+            print(f'Dropped these variables from the Dataset: {dropped}.')
 
         return D
 

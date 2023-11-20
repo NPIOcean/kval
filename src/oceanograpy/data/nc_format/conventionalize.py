@@ -57,7 +57,6 @@ def _get_geospatial_bounds_wkt_str(D, decimals = 2):
 
     corner_dict = (lon_min, lat_min, lon_min, lat_max, lon_max, lat_max, 
                     lon_max, lat_min, lon_min, lat_min)
-    print(corner_dict)
     wkt_str = ('POLYGON ((%s %s, %s %s, %s %s, %s %s, %s %s))'%corner_dict)
 
     return wkt_str
@@ -76,10 +75,15 @@ def add_standard_var_attrs_ctd(D, override = False):
     Add variable attributes 
     as specified in oceanograpy.data.nc_format.standard_var_attrs_ctd
 
+    if _std suffix: 
+        - Don't use standard_name, valid_min/max
+        - Add "Standard deviation of" to long_name 
+
     Override governs whether to override any variable attributes that 
     are already present (typically not advised..)
     '''
     for varnm in list(D.data_vars) + list(D.coords):
+        # Normal variables
         if varnm in _standard_attrs.standard_var_attrs_ctd:
             var_attrs_dict = _standard_attrs.standard_var_attrs_ctd[varnm]
             for attr, item in var_attrs_dict.items():
@@ -88,12 +92,63 @@ def add_standard_var_attrs_ctd(D, override = False):
                 else:
                     if attr not in D[varnm].attrs:
                         D[varnm].attrs[attr] = item
+               # print(varnm, attr, item)
 
-        # These should be standard for anything measured on a CTD
-        D[varnm].attrs['coverage_content_type'] = 'physicalMeasurement'
-        D[varnm].attrs['sensor_mount'] = 'mounted_on_shipborne_profiler'
+        # For .btl files: Add "Average" to long_name attribute
+        # Append "standard deviation of" to long_name
+        if 'long_name' in D[varnm].attrs:
+            long_name = D[varnm].attrs["long_name"]
+            long_name_nocap = long_name[0].lower() + long_name[1:]
+            if varnm != 'NISKIN_NUMBER' and 'NISKIN_NUMBER' in D[varnm].dims: 
+                D[varnm].attrs['long_name'] = ('Average '
+                    f'{long_name_nocap} measured by CTD during bottle closing')
+
+
+        # Variables with _std suffix    
+        if varnm.endswith('_std'):
+            varnm_prefix = varnm.replace('_std', '')
+            if varnm_prefix in _standard_attrs.standard_var_attrs_ctd:
+                var_attrs_dict = _standard_attrs.standard_var_attrs_ctd[
+                    varnm_prefix].copy()
+
+                # Don't want to use standard_name for these
+                for key in ['standard_name', 'valid_min', 'valid_max']:
+                    if key in var_attrs_dict:
+                        var_attrs_dict.pop(key)
+                
+                # Add the other attributes
+                for attr, item in var_attrs_dict.items():
+                    if override:
+                        D[varnm].attrs[attr] = item
+                    else:
+                        if attr not in D[varnm].attrs:
+                            D[varnm].attrs[attr] = item
+
+            # Append "standard deviation of" to long_name
+            if 'long_name' in D[varnm].attrs:
+                long_name = D[varnm].attrs["long_name"]
+                long_name_nocap = long_name[0].lower() + long_name[1:]
+                D[varnm].attrs['long_name'] = ('Standard deviation of '
+                        f'{long_name_nocap}')
+                
+            # Add ancillary_variable links between std and avg values
+            D[varnm].attrs['ancillary_variables'] = varnm_prefix
+            D[varnm_prefix].attrs['ancillary_variables'] = varnm
+
+
+        # Add some variable attributes that should be standard for anything
+        # measured on a CTD
+
+        if varnm not in ['NISKIN_NUMBER', 'TIME', 'TIME_SAMPLE']: 
+            D[varnm].attrs['coverage_content_type'] = 'physicalMeasurement'
+            D[varnm].attrs['sensor_mount'] = 'mounted_on_shipborne_profiler'
+        else:
+            D[varnm].attrs['coverage_content_type'] = 'coordinate'
 
     return D
+
+
+
 
 
 def add_standard_glob_attrs_ctd(D, NPI = False, override = False):

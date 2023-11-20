@@ -20,6 +20,9 @@ import re
 import pandas as pd
 import cftime
 
+
+
+
 def join_cruise(nc_files, bins_dbar = 1, verbose = True,
                 epoch = '1970-01-01'):
     '''
@@ -37,7 +40,8 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     epoch: Only necessary to specify here if there is no TIME_SAMPLE
            field in the data files. (In that case, we assign time based on 
            the profile start time, and need to know the epoch) 
-        
+    
+    NOTE. Should rename *nc_files*! ("datsets"?)
     '''
     ### PREPARE INPUTS
     # Grab the input data on the form of a list of xr.Datasets
@@ -171,9 +175,8 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     
     # Transpose so that variables are structured like (TIME, PRES) rather than
     # (PRES, TIME). Convenient when plotting etc.
-    # **Note**: dropping becaus CF conventions seem to require T first
+    # **Note**: Dropping doing this because CF conventions seem to require T first
     # N = N.transpose() 
-
 
     # Sort chronologically
     N = N.sortby('TIME')
@@ -226,6 +229,204 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     N.PRES.attrs['coverage_content_type'] = 'coordinate'
 
     return N
+
+
+
+
+def join_cruise_btl(datasets, verbose = True,
+                epoch = '1970-01-01'):
+    '''
+    Takes a number of btl profiles and joins the profiles into one single file.  
+
+    Inputs:
+
+    datasets: string, list
+        A dictionary containing either:
+        1. A path to the location of individual profiles, 
+           e. g. 'path/to/files/'. 
+        2. A list containing xr.Datasets with the individual profiles. 
+
+    epoch: Only necessary to specify here if there is no TIME_SAMPLE
+           field in the data files. (In that case, we assign time based on 
+           the profile start time, and need to know the epoch) 
+
+    NOTE: This is basically a slightly modified version of join_cruise()
+          which does the same for .cnvs. Should optimize and/or see if we 
+          can refactor so we don't have to repeat the same code. 
+
+
+    '''
+    ### PREPARE INPUTS
+    # Grab the input data on the form of a list of xr.Datasets
+    # (1) Load all from path if we are given a path.
+    if isinstance(datasets, str):
+        for nn in np.arange(len(datasets)):
+            if datasets[nn].endswith('/'):
+                datasets[nn] = datasets[nn][:-1]
+        file_list = glob2.glob(f'{datasets}/*.nc')
+
+        # Note: We don't decode CF since we want time as a numerical variable.
+        prog_bar_msg_1 = 'Loading profiles from netcdf files'
+        ns_input = []
+        for file in tqdm(file_list, desc=prog_bar_msg_1):
+            ns_input += [xr.open_dataset(file, decode_cf=False)]
+        n_profs = len(ns_input)
+        
+        valid_nc_files = True
+        if verbose:
+            print(f'Loaded {n_profs} profiles from netcdf files: {file_list}')
+
+    # (2) Load from list of xr.Datasets if that is what we are given.
+    elif isinstance(datasets, list):
+        if all(isinstance(nc_file, xr.Dataset) for nc_file in datasets):
+            ns_input = datasets
+            n_profs = len(ns_input)
+            valid_nc_files = True
+            if verbose:
+                print(f'Loaded {n_profs} profiles from list of Datasets.')
+        else:
+            valid_nc_files = False
+    else:
+        valid_nc_files = False
+
+    # Raise an exception if we don't have either (1) or (2)
+    if valid_nc_files == False:
+        raise Exception('''            
+            Input *datasets* invalid. Must be either:
+            1. A path to the location of individual profiles,
+               e.g. "path/to/files/" --or--
+            2. A list containing xr.Datasets with the individual profiles,
+               e.g. [d1, d2] with d1, d2 being xr.Datasets.
+                        ''')
+    
+
+    ### JOINING PROFILES TO ONE DATASET
+    #  Concatenation loop.
+    # - Add a CRUISE variable 
+
+    first = True
+
+    # Keeping track of these as we want to replace them with a date *range*
+    SBE_proc_times = []
+
+    prog_bar_msg_3 = f'Joining profiles together'
+
+    for n in tqdm(datasets, prog_bar_msg_3):
+
+        sbe_timestamp, proc_timestamp = _dates_from_history(n)
+        SBE_proc_times += [sbe_timestamp]
+
+        if first:
+            N = n
+            # Want to keep track of whether we use different 
+            # start_time sources
+            start_time_source = n.start_time_source
+            different_start_time_sources = False
+            first = False
+        else:
+            if n.start_time_source != start_time_source:
+                different_start_time_sources = True
+            N = xr.concat([N, n], dim = 'TIME')
+
+    ### CHECK IF ANY SENSORS CHANGED
+    # Modify metadata if they did
+    for varnm in list(N.data_vars) + ['NISKIN_NUMBER']:
+        caldates, sns, units, stations = [], [], [], []
+
+        for n in datasets:
+            stations += [n.STATION.values[0]]
+            for _list, _attr  in zip([caldates, sns, ],
+                ['sensor_calibration_date', 'sensor_serial_number',]):
+                if varnm in n.keys():
+                    if _attr in n[varnm].attrs:
+                        _list += [n[varnm].attrs[_attr]]
+                    else:
+                        _list += [None]
+                else:
+                    _list += [None]
+
+        sns_filtered = np.array([value for value in sns if value is not None])
+        sns_unique = unique_entries = list(set(sns_filtered))
+        caldates_filtered = np.array([value for value in caldates if value is not None])
+        caldates_unique = unique_entries = list(set(caldates_filtered))
+        
+        if len(sns_unique)==2:
+            if 'comment' in N[varnm].attrs:
+                comment_0 = N[varnm].comment
+            else:
+                comment_0 = ''
+            N[varnm].attrs['comment'] = comment_0 + ' Sensors changed underway.'
+            where_sensor_A = np.array(stations)[np.array(sns)==sns_unique[0]]
+            where_sensor_B = np.array(stations)[np.array(sns)==sns_unique[1]]
+            N[varnm].attrs['stations_A'] = ', '.join(where_sensor_A)
+            N[varnm].attrs['stations_B'] = ', '.join(where_sensor_B)
+            N[varnm].attrs['sensor_calibration_date'] = (
+                f'A: {caldates_unique[0]}, B: {caldates_unique[1]}') 
+            N[varnm].attrs['sensor_serial_number'] = (
+                f'A: {sns_unique[0]}, B: {sns_unique[1]}') 
+
+    ### FINAL TOUCHES AND EXPORTS
+    
+    # Transpose so that variables are structured like (TIME, PRES) rather than
+    # (PRES, TIME). Convenient when plotting etc.
+    N = N.transpose() 
+
+    # Sort chronologically
+    N = N.sortby('TIME')
+
+    # Add some standard metadata to the measurement variables
+    N = _add_standard_variable_attributes(N)    
+
+    # Add some metadata to the STATION variable
+    if 'STATION' in N.data_vars:
+        N['STATION'].attrs = {'long_name' : 'CTD station ID',
+                              'cf_role':'profile_id'}
+    
+    # Warn the user if we used different sources for profile start time
+    if different_start_time_sources:
+        print('\nNOTE: The start_time variable was read from different '
+            'header lines for different profiles. \nThis likely means that '
+            'your .cnv files were formatted differently through the cruise. '
+            '\nThis is probably fine, but it is a good idea to sanity check '
+            'the TIME field.')
+
+    # Add a cruise variable
+    if 'cruise' in N.attrs:
+        cruise = N.cruise_name
+    else:
+        cruise = '!! CRUISE !!'
+        
+        print('\nNOTE: No cruise ID found in the dataset. Remember to assign!'
+                      '\n-> ds = .set_ctd_attr(N, "cruise_name").')
+    N['CRUISE'] =  xr.DataArray(cruise, dims=())
+    N['CRUISE'].attrs = {'long_name':'Cruise ID',}
+
+    # Generalize (insert "e.g.") in attributes with specific file names 
+    N.attrs['source_files'] = f"E.g. {N.attrs['source_files']}"
+    SBEproc_file_ind = N.SBE_processing.rfind('Raw data read from ')+19
+    N.attrs['SBE_processing'] = (N.SBE_processing[:SBEproc_file_ind]
+                + 'e.g. ' + N.SBE_processing[SBEproc_file_ind:])
+
+    # Add date *ranges* to the history entries if we have different dates
+    # post_proc_fimes = None for btl files..
+    N = _replace_history_dates_with_ranges(N, None, SBE_proc_times)
+
+    # Delete some non-useful attributes (that are only relevant to individual
+    # profiles)
+    del_attrs = ['SBE_processing_date', 'start_time_source', 'station', 
+                 'start_time', 'SBE_flags_applied']
+    
+    for attr in del_attrs:
+        if attr in N.attrs:
+            del N.attrs[attr]     
+
+    # Set the featureType attribute
+    N.attrs['featureType'] = 'profile'
+
+    return N
+
+
+
 
 
 def bin_to_pressure(ds, dp = 1):
@@ -323,7 +524,8 @@ def _add_standard_variable_attributes(ds):
         'sensor_mount':'mounted_on_shipborne_profiler'}
 
     for varnm in ds.keys():
-        if 'PRES' in ds[varnm].dims and varnm!='SBE_FLAG':
+        if ('PRES' in ds[varnm].dims 
+            and varnm not in ['SBE_FLAG', 'TIME_SAMPLE', 'TIME']):
             for key, item in var_attrs.items():
                 ds[varnm].attrs[key] = item
     return ds
@@ -335,11 +537,18 @@ def _cnv_files_from_path(path):
     cnv_list = glob2.glob(f'{path}*.cnv')
     return cnv_list
 
+def _btl_files_from_path(path):
+    '''
+    Get a list of .btl files from a path.
+    '''
+    btl_list = glob2.glob(f'{path}*.btl')
+    return btl_list
+
 def _datasets_from_cnvlist(cnv_list, 
                            station_from_filename = False,
                            verbose = True):
     '''
-    Get a list of profile xr.Datasets from a list of cnv files. 
+    Get a list of profile xr.Datasets from a list of .cnv files. 
     '''
     dataset_list = [cnv.read_cnv(fn, time_dim=True, 
                         station_from_filename = station_from_filename,
@@ -350,14 +559,34 @@ def _datasets_from_cnvlist(cnv_list,
 
     return dataset_list
 
+def _datasets_from_btllist(btl_list, 
+                           station_from_filename = False,
+                           verbose = True):
+    '''
+    Get a list of profile xr.Datasets from a list of .btl files. 
+    '''
+    print(btl_list)
+    dataset_list = [cnv.read_btl(fn, time_dim=True, 
+                        station_from_filename = station_from_filename,) 
+                       for fn in btl_list]
+    
+
+    return dataset_list
+
+
+
 def _replace_history_dates_with_ranges(D, post_proc_times, SBE_proc_times):
     '''
-    When joining files: Change the history strng to show time *ranges*,
+    When joining files: Change the history string to show time *ranges*,
     e.g. 
        2017-09-24: Data collection
     -> 2017-09-24 to 2017-09-24: Data collection
+
+    (Note: post_proc_times can be None)
     '''
-    ppr_min, ppr_max = np.min(post_proc_times), np.max(post_proc_times)
+
+    if post_proc_times:
+        ppr_min, ppr_max = np.min(post_proc_times), np.max(post_proc_times)
     sbe_min, sbe_max = np.min(SBE_proc_times), np.max(SBE_proc_times)
     ctd_min, ctd_max = D.TIME.min(), D.TIME.max()
 
@@ -373,11 +602,15 @@ def _replace_history_dates_with_ranges(D, post_proc_times, SBE_proc_times):
         sbe_range = f'{sbe_min.strftime(date_fmt)} to {sbe_max.strftime(date_fmt)}'
         rind = D.history.find(': Processed to .cnv using SBE')
         D.attrs['history'] = D.history[:rind-10] + sbe_range + D.attrs['history'][rind:]
+    
+    if post_proc_times:
 
-    if ppr_max>ppr_min:
-        ppr_range = f'{ppr_min.strftime(date_fmt)} to {ppr_max.strftime(date_fmt)}'
-        rind = D.history.find(': Post-processing.')
-        D.attrs['history'] = D.history[:rind-10] + ppr_range + D.attrs['history'][rind:]
+        if ppr_max>ppr_min and post_proc_times:
+            ppr_range = (f'{ppr_min.strftime(date_fmt)} to'
+                f'{ppr_max.strftime(date_fmt)}')
+            rind = D.history.find(': Post-processing.')
+            D.attrs['history'] = (D.history[:rind-10] + ppr_range + 
+                                  D.attrs['history'][rind:])
         
     return D
 
@@ -387,13 +620,24 @@ def _dates_from_history(ds):
     Grab the dates of 1) SBE processing and 2) Post-processing from the
     "history" attribute.
     '''
-    sbe_pattern = r"(\d{4}-\d{2}-\d{2}): Processed to .cnv using SBE software"
-    sbe_time_match_str = re.search(sbe_pattern, ds.history).group(1)
-    sbe_timestamp = pd.Timestamp(sbe_time_match_str)
-    
-    proc_pattern = r"(\d{4}-\d{2}-\d{2}): Post-processing"
-    proc_time_match_str = re.search(proc_pattern, ds.history).group(1)
-    proc_timestamp = pd.Timestamp(proc_time_match_str)
+    try:
+        sbe_pattern = r"(\d{4}-\d{2}-\d{2}): Processed to .cnv using SBE software"
+        sbe_time_match_str = re.search(sbe_pattern, ds.history).group(1)
+        sbe_timestamp = pd.Timestamp(sbe_time_match_str)
+    except:
+        try:
+            sbe_pattern = r"(\d{4}-\d{2}-\d{2}): Processed to .btl using SBE software"
+            sbe_time_match_str = re.search(sbe_pattern, ds.history).group(1)
+            sbe_timestamp = pd.Timestamp(sbe_time_match_str)
+        except:
+            sbe_timestamp = None
 
+
+    try:
+        proc_pattern = r"(\d{4}-\d{2}-\d{2}): Post-processing"
+        proc_time_match_str = re.search(proc_pattern, ds.history).group(1)
+        proc_timestamp = pd.Timestamp(proc_time_match_str)
+    except: 
+        proc_timestamp = None
     return sbe_timestamp, proc_timestamp
 

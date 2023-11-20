@@ -1,6 +1,18 @@
 # TO DO
 
-### 17.11
+
+### ØL 20.11
+
+Added functionality for parsing .btl files. Seems to work well, but the structure may need some work:
+
+- Some code is doubled up between cvn and btl stuff in `_ctd_tools` (see `join_cruise_btl`)
+- Some function names may now not be fitting anymore - should go through and look at function names.
+
+These files are probably a good starting point fo rthe salinometer comparison. May require
+an export_to_exel or import_from _excel function or something. This should line up with 
+standardization of sample and salinometer stuff which I will have to do soon.
+
+### ØL 17.11
 
 - CTD parsing -> joining -> metadata formatting now works pretty well after a bit of a marathon.
     + Still want to look at th structure and see if we should refactor something.
