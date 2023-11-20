@@ -16,6 +16,12 @@ maintainers = [
 ]
 requires-python = ">=3.8"
 
+[project]
+dependencies = [
+  'xarray = 2023.8.0',
+
+]
+
 
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",

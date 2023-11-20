@@ -13,6 +13,14 @@ These files are probably a good starting point fo rthe salinometer comparison. M
 an `export_to_exel` or `import_from_excel` function or something. This should line up with 
 standardization of sample and salinometer stuff which I will have to do soon.
 
+
+Also:
+
+  - Add **dependencies** in `pyproject.toml`! Want other people to be able to run the 
+    development notebooks after install.
+  - Also work on these notebooks a bit..
+
+
 ### ØL 17.11
 
 - CTD parsing -> joining -> metadata formatting now works pretty well after a bit of a marathon.
