@@ -5,10 +5,17 @@ VARIABLE_DEFS.PY
 
 Contains information used to standardize variable namings:
 
-- Mapping from SBE names (e.g. "prDM" -> "PRES", 't090C' -> 'TEMP1')
-- CF-compliant attributes to append to the variables 
-  ('standard_name', 'units', etc) 
-- Mapping from SBE header instrument info to physical sensor
+SBE_name_map:
+  Mapping from SBE names (e.g. "prDM" -> "PRES", 't090C' -> 'TEMP1')
+
+
+var_attrs:
+  List of CF-compliant attributes to append to the variables 
+  ('standard_name', 'units', etc). NOTE: This is done more 
+  properly in the data.ctd module. Should maybe remove from here? 
+
+sensor_info_dict_SBE:
+  Mapping from SBE header instrument info to physical sensor
   (e.g. 'Temperature, 2 -->':'temp_sensor_2') 
 '''
 
@@ -83,7 +90,6 @@ SBE_name_map = { # Note: replace / with _  !
                   'sensors':['temp_sensor_1', 'cndc_sensor_1']},
     'SIGMA-Ï¿½11': {'name': 'SIGTH2', 'units': 'kg m-3',
                   'sensors':['temp_sensor_2', 'cndc_sensor_2']},
-
     'SVCM': {'name': 'SVEL', 'units': 'm s-1'},
     'SAL00': {'name': 'PSAL1', 'units': '1', 
               'sensors':['temp_sensor_1', 'cndc_sensor_1']},
@@ -98,7 +104,6 @@ SBE_name_map = { # Note: replace / with _  !
 
     'DZ_DTM' : {'name': 'DESCENT_RATE', 'units': 'm s-1',
               'sensors':['pres_sensor']},
-
     'LATITUDE': {'name': 'LATITUDE_SAMPLE', 'units': 'degree_north'},
     'LONGITUDE': {'name': 'LONGITUDE_SAMPLE', 'units': 'degree_east'},
     'SCAN': {'name': 'SCAN', 'units': 'counts'},
@@ -169,7 +174,7 @@ var_attrs = {
 
 ### INSTRUMENT CONFIGURATION KEYS ###
 
-sensor_info_dict = {
+sensor_info_dict_SBE = {
     'Temperature -->':'temp_sensor_1',
     'Temperature, 2 -->':'temp_sensor_2',
     'Conductivity -->':'cndc_sensor_1',

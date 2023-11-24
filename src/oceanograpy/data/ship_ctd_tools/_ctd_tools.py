@@ -11,7 +11,7 @@ format produced by OceanograPy.io.cnv:
 
 '''
 
-from oceanograpy.io import cnv
+from oceanograpy.io import sbe
 import numpy as np
 import xarray as xr
 from tqdm.notebook import tqdm 
@@ -99,7 +99,7 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
         print('NOTE: It seems the input data already binned ->'
               ' using preexisting binning.')
 
-        ns_binned = [cnv._change_dims_scan_to_pres(n) for n in ns_input]
+        ns_binned = [sbe._change_dims_scan_to_pres(n) for n in ns_input]
 
 
     ### JOINING PROFILES TO ONE DATASET
@@ -550,7 +550,7 @@ def _datasets_from_cnvlist(cnv_list,
     '''
     Get a list of profile xr.Datasets from a list of .cnv files. 
     '''
-    dataset_list = [cnv.read_cnv(fn, time_dim=True, 
+    dataset_list = [sbe.read_cnv(fn, time_dim=True, 
                         station_from_filename = station_from_filename,
                         suppress_time_warning=~verbose,
                         suppress_latlon_warning=~verbose) 
@@ -566,7 +566,7 @@ def _datasets_from_btllist(btl_list,
     Get a list of profile xr.Datasets from a list of .btl files. 
     '''
     print(btl_list)
-    dataset_list = [cnv.read_btl(fn, time_dim=True, 
+    dataset_list = [sbe.read_btl(fn, time_dim=True, 
                         station_from_filename = station_from_filename,) 
                        for fn in btl_list]
     

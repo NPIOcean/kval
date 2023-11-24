@@ -1,13 +1,15 @@
 # TO DO
 
 
+
 ### ØL 20.11
 
 Added functionality for parsing .btl files. Seems to work well, but the structure may need some work:
 
 - Some code is doubled up between cnv and btl stuff in `_ctd_tools` (see `join_cruise_btl`)
 - Some function/module names may now not be fitting anymore - should go through and look at names.
-  - I.e., the `cnv` module is now used to parse `.btl` and probably `.hdr` files.  
+  - 	~~I.e., the `cnv` module is now used to parse `.btl` and probably `.hdr` files~~ Renamed `cnv` -> `sbe` on 24.11. 
+
 
 These files are probably a good starting point fo rthe salinometer comparison. May require
 an `export_to_exel` or `import_from_excel` function or something. This should line up with 

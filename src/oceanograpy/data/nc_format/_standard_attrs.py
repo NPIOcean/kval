@@ -122,8 +122,6 @@ standard_var_attrs_ctd = {
     }
 }
 
-
-
 standard_attrs_global_ctd = {
     'Conventions':'ACDD-1.3, CF-1.8',
     'standard_name_vocabulary': 'CF Standard Name Table v74',

@@ -1,11 +1,12 @@
 '''
-### OCEANOGRAPY.IO.CNV.py ###
+### OCEANOGRAPY.IO.SBE.py ###
 
-NOTE: This module should probably be renamed *io.seabird* or *io.sbe*.
-      It currently also used for parsing .blt fils, for example.
+Parsing data from seabird format (.cnv, .hdr, .btl) to xarray Datasets.
 
 
-Parsing data from .cnv to xarray Datasets.
+
+Some of these functions are rather long and clunky. This is mainly because the
+input files are clunky and the format changes quite a lot. 
 
 Key functions
 -------------
@@ -15,8 +16,11 @@ read_cnv:
   Dataset (-> netCDF file) with any potentially useful metadata we can extract
   from the .cnv header.
 
+read_btl:
+  Similar: Load single .btl files.
+
 join_cruise:
-  Joing several profiles (e.g. from an entire cruise)into a single Dataset (->
+  Joing several profiles (e.g. from an entire cruise) into a single Dataset (->
   netCDF file).
 
 read_header:
@@ -41,12 +45,10 @@ import xarray as xr
 import numpy as np
 from oceanograpy.io import _variable_defs as vardef
 from oceanograpy.util import time
-import glob2
 import matplotlib.pyplot as plt
 import re
 from typing import Optional
 from tqdm.notebook import tqdm 
-import cftime
 from typing import Optional
 from itertools import zip_longest
 from matplotlib.dates import date2num
@@ -199,6 +201,7 @@ def read_cnv(
     return ds
 
 
+
 def read_btl(source_file, verbose = False, 
              time_dim = True,
              station_from_filename= False,
@@ -231,122 +234,6 @@ def read_btl(source_file, verbose = False,
         ds = _add_time_dim_profile(ds)
     
     return ds 
-
-
-def _read_btl_column_data_xr(source_file, header_info, verbose = False):
-    '''
-    Read the columnar data from a .btl file during information (previously)
-    parsed from the header.
-
-    A little clunky as the data are distributed over two rows (subrows), a la:
-
-    Bottle        Date    Sal00     T090C     C0S/m  
-    Position      Time                                                                                                   
-      1       Jan 04 2021    34.6715   2.963803  1.5859    (avg)
-               15:27:59                0.0001    0.000015  (sdev)
-      2       Jan 04 2021    34.6733   2.530134  1.5663    (avg)
-               15:31:33                0.0002    0.000012  (sdev)
-
-    '''
-
-    # Read column data to dataframe
-    df_all = pd.read_fwf(source_file, skiprows = header_info['start_line_btl_data'], 
-        delim_whitespace = True, names = header_info['col_names'] + ['avg_std'], 
-        encoding = 'latin-1')
-    
-    # Read the primary (avg) and second (std rows)
-    # + Reindexing and dropping the "index" and "avg_std" columns
-
-    # Parse the first subrow
-    df_first_subrow = (df_all.iloc[0::2].reset_index(drop = False)
-                       .drop(['index', 'avg_std'], axis = 1))
-
-    # Parse the second subrow
-    df_second_subrow = (df_all.iloc[1::2].reset_index()
-                        .drop(['index', 'avg_std'], axis = 1))
-
-    # Build a datafra with all the information combined
-    df_combined = pd.DataFrame()
-
-    ## Loop through all columns except date and bottle number:
-    # - Add the variables from the first subrow if they are not empty
-    # - Replace column names the nice names (if available)
-    # - Add variables from the second subrow with _std as suffix 
-    # - Also adding units, sensors as variable attributes (.attr)
-
-    for sbe_name_ in df_all.keys():
-        # Skip "bottle number" and "time" rows, will deal with those separately
-        if 'Bottle' in sbe_name_ or 'Date' in sbe_name_:
-            pass
-        else:
-            # Read first subrow
-            try:
-                df_combined[sbe_name_.replace('/', '_')] = (
-                    df_first_subrow[sbe_name_].astype(float))
-            except:
-                if verbose:
-                    print(f'Could not read {sbe_name_} as float - > dropping')
-
-            # Read second subrow
-            try:
-                df_combined[f'{sbe_name_.replace("/", "_")}_std'] = (
-                    df_second_subrow[sbe_name_].astype(float))
-            except:
-                if verbose:
-                    print(f'Could not read {sbe_name_}_std as float - > dropping')
-
-    ## Add bottle number (assuming it is the first column)
-    bottle_num_name = df_first_subrow.keys()[0] # Name of the bottle column
-    df_combined['NISKIN_NUMBER'] = df_first_subrow[bottle_num_name].astype(float)
-
-
-    # Parse TIME_SAMPLE from first + second subrows (assuming it is the second column)
-    # Using the nice pandas function to_datetime (for parsing)
-    # Then converting to datenum (days since 1970-01-01)
-    # NOTE: Should put this general functionality in util.time!)
-
-    time_name = df_first_subrow.keys()[1] # Name of the time column
-
-    TIME_SAMPLE = []
-    epoch = '1970-01-01'
-
-    for datestr, timestr in zip(df_first_subrow[time_name], df_second_subrow[time_name]):
-        time_string = ', '.join([datestr, timestr])
-        
-        # Parse the time string to pandas Timestamp
-        time_pd = pd.to_datetime(time_string)
-
-        # Convert to days since epoch
-        time_DSE = ((time_pd - pd.Timestamp(epoch)) / pd.to_timedelta(1, unit='D'))
-        
-        TIME_SAMPLE += [time_DSE]
-
-    df_combined['TIME_SAMPLE'] = TIME_SAMPLE
-    df_combined['TIME_SAMPLE'].attrs = {'units':f'Days since {epoch}',                        
-            'long_name': 'Time stamp of bottle closing',
-            'coverage_content_type':'coordinate',
-            'SBE_source_variable' : time_name,}
-
-
-    # Convert DataFrame to xarray Dataset
-    ds = xr.Dataset()
-
-    variable_list = list(df_combined.keys())
-    variable_list.remove('NISKIN_NUMBER')
-
-    for varnm in variable_list:
-        ds[varnm] = xr.DataArray(df_combined[varnm], dims=['NISKIN_NUMBER'], 
-                                coords={'NISKIN_NUMBER': df_combined.NISKIN_NUMBER})
-
-        # Preserve metadata attributes for the 'Value' variable
-        ds[varnm].attrs = df_combined[varnm].attrs
-
-    ds['NISKIN_NUMBER'].attrs = {'long_name':'Niskin bottle number',
-        'comment': 'Designated number for each physical Niskin bottle '
-            'on the CTD rosette (typically e.g. 1-24).'
-            ' Bottles may be closed at different depths at different stations. '}
-
-    return ds
 
 
 def read_header(filename: str) -> dict:
@@ -576,6 +463,126 @@ def _read_column_data_xr(source_file, header_info):
 
     return ds
 
+
+
+
+def _read_btl_column_data_xr(source_file, header_info, verbose = False):
+    '''
+    Read the columnar data from a .btl file during information (previously)
+    parsed from the header.
+
+    A little clunky as the data are distributed over two rows (subrows), a la:
+
+    Bottle        Date    Sal00     T090C     C0S/m  
+    Position      Time                                                                                                   
+      1       Jan 04 2021    34.6715   2.963803  1.5859    (avg)
+               15:27:59                0.0001    0.000015  (sdev)
+      2       Jan 04 2021    34.6733   2.530134  1.5663    (avg)
+               15:31:33                0.0002    0.000012  (sdev)
+
+    '''
+
+    # Read column data to dataframe
+    df_all = pd.read_fwf(source_file, skiprows = header_info['start_line_btl_data'], 
+        delim_whitespace = True, names = header_info['col_names'] + ['avg_std'], 
+        encoding = 'latin-1')
+    
+    # Read the primary (avg) and second (std rows)
+    # + Reindexing and dropping the "index" and "avg_std" columns
+
+    # Parse the first subrow
+    df_first_subrow = (df_all.iloc[0::2].reset_index(drop = False)
+                       .drop(['index', 'avg_std'], axis = 1))
+
+    # Parse the second subrow
+    df_second_subrow = (df_all.iloc[1::2].reset_index()
+                        .drop(['index', 'avg_std'], axis = 1))
+
+    # Build a datafra with all the information combined
+    df_combined = pd.DataFrame()
+
+    ## Loop through all columns except date and bottle number:
+    # - Add the variables from the first subrow if they are not empty
+    # - Replace column names the nice names (if available)
+    # - Add variables from the second subrow with _std as suffix 
+    # - Also adding units, sensors as variable attributes (.attr)
+
+    for sbe_name_ in df_all.keys():
+        # Skip "bottle number" and "time" rows, will deal with those separately
+        if 'Bottle' in sbe_name_ or 'Date' in sbe_name_:
+            pass
+        else:
+            # Read first subrow
+            try:
+                df_combined[sbe_name_.replace('/', '_')] = (
+                    df_first_subrow[sbe_name_].astype(float))
+            except:
+                if verbose:
+                    print(f'Could not read {sbe_name_} as float - > dropping')
+
+            # Read second subrow
+            try:
+                df_combined[f'{sbe_name_.replace("/", "_")}_std'] = (
+                    df_second_subrow[sbe_name_].astype(float))
+            except:
+                if verbose:
+                    print(f'Could not read {sbe_name_}_std as float - > dropping')
+
+    ## Add bottle number (assuming it is the first column)
+    bottle_num_name = df_first_subrow.keys()[0] # Name of the bottle column
+    df_combined['NISKIN_NUMBER'] = df_first_subrow[bottle_num_name].astype(float)
+
+
+    # Parse TIME_SAMPLE from first + second subrows (assuming it is the second column)
+    # Using the nice pandas function to_datetime (for parsing)
+    # Then converting to datenum (days since 1970-01-01)
+    # NOTE: Should put this general functionality in util.time!)
+
+    time_name = df_first_subrow.keys()[1] # Name of the time column
+
+    TIME_SAMPLE = []
+    epoch = '1970-01-01'
+
+    for datestr, timestr in zip(df_first_subrow[time_name], df_second_subrow[time_name]):
+        time_string = ', '.join([datestr, timestr])
+        
+        # Parse the time string to pandas Timestamp
+        time_pd = pd.to_datetime(time_string)
+
+        # Convert to days since epoch
+        time_DSE = ((time_pd - pd.Timestamp(epoch)) / pd.to_timedelta(1, unit='D'))
+        
+        TIME_SAMPLE += [time_DSE]
+
+    df_combined['TIME_SAMPLE'] = TIME_SAMPLE
+    df_combined['TIME_SAMPLE'].attrs = {'units':f'Days since {epoch}',                        
+            'long_name': 'Time stamp of bottle closing',
+            'coverage_content_type':'coordinate',
+            'SBE_source_variable' : time_name,}
+
+
+    # Convert DataFrame to xarray Dataset
+    ds = xr.Dataset()
+
+    variable_list = list(df_combined.keys())
+    variable_list.remove('NISKIN_NUMBER')
+
+    for varnm in variable_list:
+        ds[varnm] = xr.DataArray(df_combined[varnm], dims=['NISKIN_NUMBER'], 
+                                coords={'NISKIN_NUMBER': df_combined.NISKIN_NUMBER})
+
+        # Preserve metadata attributes for the 'Value' variable
+        ds[varnm].attrs = df_combined[varnm].attrs
+
+    ds['NISKIN_NUMBER'].attrs = {'long_name':'Niskin bottle number',
+        'comment': 'Designated number for each physical Niskin bottle '
+            'on the CTD rosette (typically e.g. 1-24).'
+            ' Bottles may be closed at different depths at different stations. '}
+
+    return ds
+
+
+
 def _read_SBE_proc_steps(ds, header_info):
     '''
     Parse the information about SBE processing steps from the cnv header into 
@@ -793,7 +800,10 @@ def _read_sensor_info(source_file, verbose = False):
                 # _sensor_info_dict (prescribed) dictionary
                 # If found: read info. If not: Ignore.
                 if n_line == sensor_header_line:
-                    for sensor_str, var_key in vardef.sensor_info_dict.items():
+
+                    for sensor_str, var_key in \
+                        vardef.sensor_info_dict_SBE.items():
+                    
                         if sensor_str in line:
                             store_sensor_info = True
                             var_key_sensor = var_key
