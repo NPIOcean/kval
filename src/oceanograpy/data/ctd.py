@@ -104,7 +104,8 @@ def make_publishing_ready(D, NPI = True,
     if retain_all:
         drop_vars = []
 
-    D = drop_variables(D, retain_vars = retain_vars, drop_vars = drop_vars)
+    D = drop_variables(D, retain_vars = retain_vars,
+                       drop_vars = drop_vars, retain_all=retain_all)
     D = remove_numbers_in_names(D)
     D = conventionalize.add_standard_var_attrs_ctd(D)
     D = conventionalize.add_standard_glob_attrs_ctd(D, NPI = NPI, 
@@ -312,6 +313,7 @@ def calibrate_chl(
 def drop_variables(D, retain_vars = ['TEMP1', 'CNDC1', 'PSAL1', 
                                      'CHLA1', 'PRES'], 
                    drop_vars = None, 
+                   retain_all = False
                     ):
         '''
         Drop measurement variables from the dataset.
@@ -327,9 +329,11 @@ def drop_variables(D, retain_vars = ['TEMP1', 'CNDC1', 'PSAL1',
         D: xarray dataset 
         retain_vars: (list or bool) Variables to retain (others will be retained) 
         drop_vars: (list or bool) Variables to drop (others will be retained) 
-
+        retain_vars: (bool) Retain all (no change to the dataset)
         '''
-
+        if retain_all:
+            return D
+        
         if drop_vars:
             D = D.drop(drop_vars)
             dropped = drop_vars
@@ -415,7 +419,7 @@ def remove_numbers_in_names(D):
 
     # Strip names
     for varnm in all_varnms:
-        if varnm not in duplicates:
+        if re.sub(r'\d', '', varnm) not in duplicates:
             varnm_stripped = re.sub(r'\d', '', varnm)
             D = D.rename_vars({varnm:varnm_stripped})
 
@@ -428,6 +432,7 @@ def add_now_as_date_created(D):
     now_time = pd.Timestamp.now()
     now_str = time.datetime_to_ISO8601(now_time)
 
+    print(now_str)
     D.attrs['date_created'] = now_str
 
     return D

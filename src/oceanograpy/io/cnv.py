@@ -1,9 +1,11 @@
 '''
 ### OCEANOGRAPY.IO.CNV.py ###
 
-Patsing data from .cnv to xarray Datasets.
+NOTE: This module should probably be renamed *io.seabird* or *io.sbe*.
+      It currently also used for parsing .blt fils, for example.
 
 
+Parsing data from .cnv to xarray Datasets.
 
 Key functions
 -------------
@@ -201,6 +203,9 @@ def read_btl(source_file, verbose = False,
              time_dim = True,
              station_from_filename= False,
              start_time_NMEA = True):
+    '''
+    ADD DOCSTRING!!
+    '''
 
     # Parse the header
     header_info = read_header(source_file)
@@ -227,9 +232,10 @@ def read_btl(source_file, verbose = False,
     
     return ds 
 
+
 def _read_btl_column_data_xr(source_file, header_info, verbose = False):
     '''
-    Read the columnar data from a .btl file uring information (previously)
+    Read the columnar data from a .btl file during information (previously)
     parsed from the header.
 
     A little clunky as the data are distributed over two rows (subrows), a la:
@@ -249,13 +255,15 @@ def _read_btl_column_data_xr(source_file, header_info, verbose = False):
         encoding = 'latin-1')
     
     # Read the primary (avg) and second (std rows)
-    # +Reindexing and dropping the "index" and "avg_std" columns
+    # + Reindexing and dropping the "index" and "avg_std" columns
 
     # Parse the first subrow
-    df_first_subrow = df_all.iloc[0::2].reset_index(drop = False).drop(['index', 'avg_std'], axis = 1)
+    df_first_subrow = (df_all.iloc[0::2].reset_index(drop = False)
+                       .drop(['index', 'avg_std'], axis = 1))
 
     # Parse the second subrow
-    df_second_subrow = df_all.iloc[1::2].reset_index().drop(['index', 'avg_std'], axis = 1)
+    df_second_subrow = (df_all.iloc[1::2].reset_index()
+                        .drop(['index', 'avg_std'], axis = 1))
 
     # Build a datafra with all the information combined
     df_combined = pd.DataFrame()
@@ -271,7 +279,6 @@ def _read_btl_column_data_xr(source_file, header_info, verbose = False):
         if 'Bottle' in sbe_name_ or 'Date' in sbe_name_:
             pass
         else:
-
             # Read first subrow
             try:
                 df_combined[sbe_name_.replace('/', '_')] = (
@@ -294,7 +301,7 @@ def _read_btl_column_data_xr(source_file, header_info, verbose = False):
 
 
     # Parse TIME_SAMPLE from first + second subrows (assuming it is the second column)
-    # Using the nice pandas function to_datetime(for parsing)
+    # Using the nice pandas function to_datetime (for parsing)
     # Then converting to datenum (days since 1970-01-01)
     # NOTE: Should put this general functionality in util.time!)
 
@@ -530,6 +537,9 @@ def to_nc(
     suffix: str = None
 ) -> None:
     """
+
+    TBW!!
+
     Export a dataset to a NetCDF file.
 
     Parameters:
@@ -571,6 +581,9 @@ def _read_SBE_proc_steps(ds, header_info):
     Parse the information about SBE processing steps from the cnv header into 
     a more easily readable format and storing the information as the global
     variable *SBE_processing*.
+
+    This is a long and clunky function. This is mainly because the input
+    format is clunky. 
 
     Also:
     - Adds a *SBE_processing_date* global variable (is this useful?)
@@ -1135,9 +1148,11 @@ def _update_variables(ds, source_file):
                 sensor_SNs = []
                 sensor_caldates = []
 
-                for sensor in var_dict['sensors']:
-
-                    sensor_SNs += [sensor_info[sensor]['SN']]
+                for sensor in var_dict['sensors']:  
+                    try:
+                        sensor_SNs += [sensor_info[sensor]['SN']]
+                    except:
+                        print(old_name_cap, sensor)
                     sensor_caldates += [sensor_info[sensor]['cal_date']]
 
                 ds[new_name].attrs['sensor_serial_number'] = (
@@ -1261,6 +1276,22 @@ def _decdeg_from_line(line):
     if len(deg_min_str)==0: # If there is no actual lat/lon string..
         return None
     
+    # Occasionally written without colon; as e.g. "Latitude N 081 12.33" 
+    # -> Need to remove the strings before parsing degrees
+
+    if isinstance(deg_min_str[0], str):
+        is_number = False
+        while is_number == False:
+            try: 
+                # Test if we have a number
+                float(deg_min_str[0])
+                is_number = True
+            except:
+                # Flip the sign is S or W (convention is positive N/E)
+                if deg_min_str[0] in ['S', 'W']:
+                    deg_min_str[1] = str(-float(deg_min_str[1]))
+                deg_min_str = deg_min_str[1:]
+
     deg = float(deg_min_str[0])
     min = float(deg_min_str[1])
     min_decdeg = min/60

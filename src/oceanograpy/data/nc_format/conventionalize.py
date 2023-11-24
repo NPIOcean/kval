@@ -79,24 +79,51 @@ def add_standard_var_attrs_ctd(D, override = False):
         - Don't use standard_name, valid_min/max
         - Add "Standard deviation of" to long_name 
 
+    if number suffix (TEMP1, CNDC2..)
+        - Add attributs from the TEMP variable
+        - Add '(primary)', '(secondary) to long name
+    
     Override governs whether to override any variable attributes that 
     are already present (typically not advised..)
     '''
+    
+
     for varnm in list(D.data_vars) + list(D.coords):
+    
+        # Check if varnm ends with a suffix
+        try:
+            number = float(varnm[-1]) # Goes to except if not a number
+            core_name = varnm[:-1]
+            if number == 1:
+                long_name_add = ' (primary sensor)'
+            elif number == 2:
+                long_name_add = ' (secondary sensor)'
+            elif number == 3:
+                long_name_add = ' (tertiary sensor)'
+            else:
+                long_name_add = ''
+        except:
+            long_name_add = ''
+            core_name = varnm
+        
         # Normal variables
-        if varnm in _standard_attrs.standard_var_attrs_ctd:
-            var_attrs_dict = _standard_attrs.standard_var_attrs_ctd[varnm]
+        if core_name in _standard_attrs.standard_var_attrs_ctd:
+            var_attrs_dict = (
+                _standard_attrs.standard_var_attrs_ctd[core_name].copy())
             for attr, item in var_attrs_dict.items():
                 if override:
                     D[varnm].attrs[attr] = item
                 else:
                     if attr not in D[varnm].attrs:
                         D[varnm].attrs[attr] = item
-               # print(varnm, attr, item)
+
+                # Append suffix to long name
+                if attr=='long_name':
+                    D[varnm].attrs['long_name'] += long_name_add
 
         # For .btl files: Add "Average" to long_name attribute
         # Append "standard deviation of" to long_name
-        if 'long_name' in D[varnm].attrs:
+        if 'long_name' in D[varnm].attrs and D.source_files[-3:].upper == 'BTL':
             long_name = D[varnm].attrs["long_name"]
             long_name_nocap = long_name[0].lower() + long_name[1:]
             if varnm != 'NISKIN_NUMBER' and 'NISKIN_NUMBER' in D[varnm].dims: 
@@ -125,7 +152,7 @@ def add_standard_var_attrs_ctd(D, override = False):
                             D[varnm].attrs[attr] = item
 
             # Append "standard deviation of" to long_name
-            if 'long_name' in D[varnm].attrs:
+            if 'long_name' in D[varnm].attrs and D.source_files[-3:].upper == 'BTL':
                 long_name = D[varnm].attrs["long_name"]
                 long_name_nocap = long_name[0].lower() + long_name[1:]
                 D[varnm].attrs['long_name'] = ('Standard deviation of '
@@ -145,6 +172,8 @@ def add_standard_var_attrs_ctd(D, override = False):
         else:
             D[varnm].attrs['coverage_content_type'] = 'coordinate'
 
+        if varnm in ['SCAN', 'nbin']:
+            D[varnm].attrs['coverage_content_type'] 
     return D
 
 

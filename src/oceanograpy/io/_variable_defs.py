@@ -41,6 +41,10 @@ SBE_name_map = { # Note: replace / with _  !
               'sensors':['oxy_sensor_1']},
     'SBEOX1MM_KG': {'name': 'DOXY2_instr', 'units': 'micromol kg-1',
               'sensors':['oxy_sensor_2']},
+    'SBOX0MM_KG': {'name': 'DOXY1_instr', 'units': 'micromol kg-1',
+              'sensors':['oxy_sensor_1']},
+    'SBOX1MM_KG': {'name': 'DOXY2_instr', 'units': 'micromol kg-1',
+              'sensors':['oxy_sensor_2']},
     'SBEOX0ML_L': {'name': 'DOXY1_instr', 'units': 'mL l-1',
               'sensors':['oxy_sensor_1']},
     'SBEOX1ML_L': {'name': 'DOXY2_instr', 'units': 'mL l-1',
@@ -58,6 +62,10 @@ SBE_name_map = { # Note: replace / with _  !
     'WETCDOM1': {'name': 'CDOM2_instr', 'units': 'mg m-3',
               'sensors':['cdom_sensor_2']},
     'CSTARAT0': {'name': 'ATTN1', 'units': 'm-1',
+              'sensors':['attn_sensor_1']},
+    'XMISS': {'name': 'TRANS1', 'units': '%',
+              'sensors':['attn_sensor_1']},
+    'BAT': {'name': 'ATTN1', 'units': 'm-1',
               'sensors':['attn_sensor_1']},
     'WETSTAR': {'name': 'CHLA1_instr', 'units': 'mg m-3',
               'sensors':['chla_sensor_1']},
@@ -81,15 +89,21 @@ SBE_name_map = { # Note: replace / with _  !
               'sensors':['temp_sensor_1', 'cndc_sensor_1']},
     'SAL11': {'name': 'PSAL2', 'units': '1',
               'sensors':['temp_sensor_2', 'cndc_sensor_2']},
-
+    'PAR': {'name': 'PAR', 'units': '?',
+              'sensors':['par_sensor_1',]},
+    'SPAR': {'name': 'SPAR', 'units': '?',
+              'sensors':['spar_sensor_1',]},
     'ALTM': {'name': 'ALTI', 'units': 'm',
               'sensors':['altimeter_sensor_1']},
+
+    'DZ_DTM' : {'name': 'DESCENT_RATE', 'units': 'm s-1',
+              'sensors':['pres_sensor']},
+
     'LATITUDE': {'name': 'LATITUDE_SAMPLE', 'units': 'degree_north'},
     'LONGITUDE': {'name': 'LONGITUDE_SAMPLE', 'units': 'degree_east'},
     'SCAN': {'name': 'SCAN', 'units': 'counts'},
     'TIMES': {'name': 'TIME_ELAPSED', 'units': 's'},
     'TIMEJ': {'name': 'TIME_JULD', 'units': 'days'},
-
     'FLAG': {'name': 'SBE_FLAG', 'units': ''},
 
 }
@@ -167,7 +181,11 @@ sensor_info_dict = {
     'sbeox0V: Oxygen raw, SBE 43 -->':'oxy_sensor_1',
     'sbeox1V: Oxygen raw, SBE 43, 2 -->':'oxy_sensor_1',
     'Fluorometer, WET Labs ECO-AFL/FL -->':'chla_sensor_1',
+    'Fluorometer, WET Labs ECO-AFL/FL, 2 -->':'chla_sensor_2',
     'Transmissometer, WET Labs C-Star -->':'attn_sensor_1',
+    'Transmissometer, Chelsea/Seatech -->':'attn_sensor_1',
     'Fluorometer, WET Labs ECO CDOM -->':'cdom_sensor_1',
     'Altimeter -->':'altimeter_sensor_1',
+    'PAR/Irradiance, Biospherical/Licor -->':'par_sensor_1',
+    'SPAR voltage, SPAR, Biospherical/Licor -->':'spar_sensor_1',
 }

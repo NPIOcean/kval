@@ -26,7 +26,7 @@ standard_var_attrs_ctd = {
     'CNDC': {
         'standard_name': 'sea_water_electrical_conductivity',
         'units': 'S m-1',
-        'long_name': 'electrical conductivity',
+        'long_name': 'Seawater electrical conductivity',
         'valid_min' : 0.0,
         'valid_max' : 50.0,
     },
