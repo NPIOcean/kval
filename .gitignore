@@ -1,11 +1,9 @@
 #### Øyvind's:
 
 *.pyc
-building
-
+development/**/*.nc
 
 #### Defaults:
-
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
