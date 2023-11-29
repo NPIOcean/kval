@@ -2,6 +2,11 @@
 OCEANOGRAPY.CTD.PY
 
 This should be what a base user interacts with.
+
+NOTE: Need to look over and see what functions can be moved to other modules.
+This should mainly contain functions *specific* to CTD profile data. Could
+instead add some wrappers that use functions from nc_attrs.conventionalize.py,
+ship_ctd.tools.py, for example.
 '''
 
 import xarray as xr
@@ -11,7 +16,10 @@ from collections import Counter
 from oceanograpy.util import time, user_input
 import pandas as pd
 from oceanograpy.data.nc_format import conventionalize, _standard_attrs, check_conventions
+from oceanograpy.maps import quickmap
+import cartopy.crs as ccrs
 import os
+
 
 ## LOADING AND SAVING DATA
 
@@ -83,7 +91,6 @@ def dataset_from_btl_dir(
     - D (xarray.Dataset): Joined CTD dataset.
     """
     btl_files = tools._btl_files_from_path(path)
-   # print(btl_files)
     profile_datasets = tools._datasets_from_btllist(
         btl_files, verbose = verbose)
     D = tools.join_cruise_btl(profile_datasets,
@@ -117,9 +124,10 @@ def make_publishing_ready(D, NPI = True,
 
     return D
 
+
 def quick_metadata_check(D,):
-
-
+    # Consider moving to conventionalize.py?
+    # (Or maybe keep this one CTD specific)
 
     print('--  QUICK METADATA CHECK --')
     print('NOTE: Not comprehensive! A true check is done on export to netcdf.')
@@ -186,11 +194,12 @@ def quick_metadata_check(D,):
 
 def to_netcdf(D, path, file_name = None, convention_check = False, add_to_history = True):
     '''
-    Export to netCDF
-    using the 'id' attribute as file name if file_name not specified
-    if that dossn't exist, use 'CTD_DATASET_NO_NAME'
-    
+    Export xarray Dataset to netCDF.
+    Using the 'id' attribute as file name if file_name not specified
+    (if that doesn't exist, use 'CTD_DATASET_NO_NAME').
     '''
+    # Consider moving to a more general module?
+
     D = add_now_as_date_created(D)
     D = reorder_attrs(D)
 
@@ -208,9 +217,25 @@ def to_netcdf(D, path, file_name = None, convention_check = False, add_to_histor
         print(f'Updated history attribute. Current content:\n---')
         print(D.history)
         print('---')
-              
 
-    D.to_netcdf(file_path)
+    # Save the file          
+    try:
+        D.to_netcdf(file_path)
+    
+    # If the file already exists, we may get a permission error. If so, ask  
+    # the user whether to delete the old file and override. 
+    except PermissionError:
+        user_input = input(f"The file {file_path} already exists. "
+                           "Do you want to override it? (y/n): ")
+    
+        if user_input.lower() in ['yes', 'y']:
+            # User wants to override the file
+            os.remove(file_path)
+            D.to_netcdf(file_path)
+            print(f"File {file_path} overridden.")
+        else:
+            # User does not want to override
+            print("Operation canceled. File not overridden.")
 
     print(f'Exported netCDF file as: {path}{file_name}.nc')
 
@@ -228,7 +253,7 @@ def calibrate_chl(
     D: xr.Dataset,
     A: float,
     B: float,
-    chl_name_in: Optional[str] = 'CHLA1_instr',
+    chl_name_in: Optional[str] = 'CHLA1_fluorescence',
     chl_name_out: Optional[str] = None,
     verbose: Optional[bool] = True,
     remove_uncal: Optional[bool] = False
@@ -236,9 +261,9 @@ def calibrate_chl(
     """
     Apply a calibration to chlorophyll based on a fit based on water samples.
 
-    CHLA -> A * CHLA_instr + B
+    CHLA -> A * CHLA_fluorescence + B
 
-    Where CHLA_instr is the name of the variable containing uncalibrated 
+    Where CHLA_fluorescence is the name of the variable containing uncalibrated 
     chlorophyll from the instrument.
 
     Append suitable metadata.
@@ -253,7 +278,7 @@ def calibrate_chl(
         Linear coefficient for calibration.
     chl_name_in : str, optional
         Name of the variable containing uncalibrated chlorophyll from the instrument.
-        Default is 'CHLA1_instr'.
+        Default is 'CHLA1_fluorescence'.
     chl_name_out : str, optional
         Name of the calibrated chlorophyll variable. If not provided, it is derived from
         chl_name_in. Default is None.
@@ -267,17 +292,19 @@ def calibrate_chl(
     xr.Dataset
         Updated dataset with calibrated chlorophyll variable.
     """
-    # Determine the output variable name for calibrated chlorophyll
+    # Determine the output variable name for calibrated chlorophyll:
     # If we don't specify a variable name for the calibrated chlorophyll, the
     # default behaviour is to 
     # a) Use the uncalibrated chl name without the '_instr' suffix (if it 
     #    has one), or 
     # b) Use the uncalibrated chl name with the suffix '_cal' 
     if not chl_name_out:
-        chl_name_out = (
-            chl_name_in.replace('_instr', '') if '_instr' in chl_name_in
-            else f'{chl_name_in}_cal'
-        )
+        
+        if '_instr' in chl_name_in or '_fluorescence' in chl_name_in:
+            chl_name_out = chl_name_in.replace('_instr', '').replace('_fluorescence', '')
+        else: 
+            chl_name_out = f'{chl_name_in}_cal'
+
 
     # Create a new variable with the coefficients applied
     D[chl_name_out] = A * D[chl_name_in] + B
@@ -290,6 +317,8 @@ def calibrate_chl(
         'calibration_formula': 'chla_calibrated = A * chla_from_ctd + B',
         'coefficient_A': A,
         'coefficient_B': B,
+        'comment':'No correction for near-surface fluorescence quenching '
+                   '(see e.g. https://doi.org/10.4319/lom.2012.10.483) has been applied.'
     }
 
     for key, item in new_attrs.items():
@@ -315,7 +344,9 @@ def drop_variables(D, retain_vars = ['TEMP1', 'CNDC1', 'PSAL1',
                    drop_vars = None, 
                    retain_all = False
                     ):
+        # Consider moving to a more general module?
         '''
+        
         Drop measurement variables from the dataset.
 
         Will retain variables that don't have a PRES dimension, such as
@@ -356,50 +387,8 @@ def drop_variables(D, retain_vars = ['TEMP1', 'CNDC1', 'PSAL1',
 
 ## SMALL FUNCTIONS FOR MODIFYING METADATA ETC
 
-def set_glob_attr(D, attr):
-    '''
-    Set global attributes for a  dataset or data frame.
-
-    Using interactive widgets. 
-    '''
-
-    option_dict = _standard_attrs.global_attrs_options
-    if attr in option_dict:
-        D = user_input.set_attr_pulldown(D, attr, 
-                    _standard_attrs.global_attrs_options[attr])
-    else:
-        # Make a larger box for (usually) long attributes
-        if attr in ['summary', 'comment', 'acknowledgment']:
-            rows = 10
-        else:
-            rows = 1
-        D = user_input.set_attr_textbox(D, attr, rows)
-
-    return D
-
-
-
-def set_var_attr(D, varname, attr):
-    '''
-    Set variable attributes for a  dataset or data frame.
-
-    Using interactive widgets. 
-    '''
-
-    option_dict = _standard_attrs.global_attrs_options
-    if attr in option_dict:
-        D = user_input.set_var_attr_pulldown(D, varname, attr, 
-                    _standard_attrs.global_attrs_options[attr])
-    else:
-        # Make a larger box for (usually) long attributes
-        if attr in ['summary', 'comment', 'acknowledgment']:
-            rows = 10
-        else:
-            rows = 1
-        D = user_input.set_var_attr_textbox(D, varname, attr, rows)
-
-    return D
-
+## Look over and consider moving some (all?) of these to 
+## nc_attrs.conventionalize?
 
 def remove_numbers_in_names(D):
     '''
@@ -432,7 +421,6 @@ def add_now_as_date_created(D):
     now_time = pd.Timestamp.now()
     now_str = time.datetime_to_ISO8601(now_time)
 
-    print(now_str)
     D.attrs['date_created'] = now_str
 
     return D
@@ -487,3 +475,22 @@ def _reorder_list(input_list, ordered_list):
     reordered_attributes = ordered_attributes + remaining_attributes
 
     return reordered_attributes
+
+
+def map(D, height = 1000, width = 1000, return_fig_ax = False, coast_resolution = '50m', ):
+    '''
+    Quick map of cruise
+    '''
+    lat_span = float(D.LATITUDE.max() - D.LATITUDE.min())
+    lon_span = float(D.LONGITUDE.max() - D.LONGITUDE.min()) 
+    lat_ctr = float(0.5*(D.LATITUDE.max() + D.LATITUDE.min()))
+    lon_ctr = float(0.5*(D.LONGITUDE.max() + D.LONGITUDE.min()))
+
+    fig, ax = quickmap.quick_map_stere(lon_ctr, lat_ctr, height = height, 
+                                       width = width, coast_resolution = coast_resolution)
+    
+    ax.plot(D.LONGITUDE, D.LATITUDE, '-k', transform = ccrs.PlateCarree(), alpha = 0.5)
+    ax.plot(D.LONGITUDE, D.LATITUDE, 'or', transform = ccrs.PlateCarree())
+
+    if return_fig_ax:
+        return fig, ax 

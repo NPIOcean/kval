@@ -62,24 +62,24 @@ standard_var_attrs_ctd = {
         'valid_max' : 100.0,
     },
     'CHLA_instr': {
-        'standard_name': 'mass_concentration_of_chlorophyll_in_sea_water',
-        'units': 'mg m-3',
-        'long_name': 'Chlorophyll-A from fluorometer. Not calibrated against water samples.',
+        'long_name': 'Chlorophyll-A from CTD fluorometer. Not calibrated with water sample chlorophyll measurements.',
         'valid_min' : 0.0,
         'valid_max' : 100.0,
         'processing_level':'Instrument data that has been converted to physical values',
         'QC_indicator':'unknown',
-        'comment':'Not compared with water sample chlorophyll measurements. Quality unknown!'
+        'comment':('Nominal units are [mg m-3], but water sample calibrations are necessary in order to produce'
+                   ' realistic absolute values. No correction for near-surface fluorescence quenching '
+                   '(see e.g. https://doi.org/10.4319/lom.2012.10.483) has been applied.')
     },
     'CHLA_fluorescence': { # Used by Geli
-        'standard_name': 'mass_concentration_of_chlorophyll_in_sea_water',
-        'units': 'mg m-3',
-        'long_name': 'Chlorophyll-A from fluorometer. Not calibrated against water samples.',
+        'long_name': 'Chlorophyll-A from CTD fluorometer. Not calibrated with water sample chlorophyll measurements.',
         'valid_min' : 0.0,
         'valid_max' : 100.0,
         'processing_level':'Instrument data that has been converted to physical values',
         'QC_indicator':'unknown',
-        'comment':'Not compared with water sample chlorophyll measurements. Quality unknown!'
+        'comment':('Nominal units are [mg m-3], but water sample calibrations are necessary in order to produce'
+                   ' realistic absolute values. No correction for near-surface fluorescence quenching '
+                   '(see e.g. https://doi.org/10.4319/lom.2012.10.483) has been applied.')
     },
     'PRES': {
         'standard_name': 'sea_water_pressure',
@@ -173,6 +173,9 @@ standard_globals_NPI_ctd = {
     'publisher_email':'post@npolar.no',
     'publisher_institution':'Norwegian Polar Institute (NPI)',
 }
+
+
+
 
 # Define standard options if we have them
 global_attrs_options = {

@@ -21,8 +21,6 @@ import pandas as pd
 import cftime
 
 
-
-
 def join_cruise(nc_files, bins_dbar = 1, verbose = True,
                 epoch = '1970-01-01'):
     '''
@@ -534,6 +532,8 @@ def _cnv_files_from_path(path):
     '''
     Get a list of .cnv files from a path.
     '''
+    if not path.endswith('/'):
+        path += '/'
     cnv_list = glob2.glob(f'{path}*.cnv')
     return cnv_list
 

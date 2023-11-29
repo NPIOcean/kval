@@ -21,7 +21,7 @@ import numpy as np
 import datetime
 from matplotlib.dates import date2num
 
-def mat_to_dict(matfile, struct_name = 'CTD', pressure_name = 'PR'):
+def mat_to_xr(matfile, struct_name = 'CTD', pressure_name = 'PR'):
     """
     Convert MATLAB .mat file to an xarray Dataset.
 
@@ -29,9 +29,7 @@ def mat_to_dict(matfile, struct_name = 'CTD', pressure_name = 'PR'):
     extensively!)
 
     Looks for (TIME) or (TIME, PRES) variables. Should generalize 
-    and maybe maek wrappers for specific applications. 
-
-    (chatGPT docsting)
+    and maybe make wrappers for specific applications. 
     
     Parameters:
     - matfile (str): Path to the MATLAB .mat file.
@@ -80,7 +78,7 @@ def mat_to_dict(matfile, struct_name = 'CTD', pressure_name = 'PR'):
         pres_unique = np.unique(level_pres_valid)
         
         if len(pres_unique)>1:
-            raise Excecption(f'{pressure_name} is'
+            raise Exception(f'{pressure_name} is'
                 ' different across profiles!'
                 '\n-> cannot load this as a gridded dataset.')
         elif len(pres_unique)==0:
@@ -108,4 +106,5 @@ def mat_to_dict(matfile, struct_name = 'CTD', pressure_name = 'PR'):
     
     # Sort chronologically
     ds = ds.sortby('TIME')
+    
     return ds

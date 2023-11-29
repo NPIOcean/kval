@@ -6,6 +6,8 @@ from oceanograpy.util import time
 import cftime
 from oceanograpy.data.nc_format import _standard_attrs
 from oceanograpy.util import calc
+from oceanograpy.util import time, user_input
+
 
 def add_range_attrs_ctd(D):
     '''
@@ -123,7 +125,7 @@ def add_standard_var_attrs_ctd(D, override = False):
 
         # For .btl files: Add "Average" to long_name attribute
         # Append "standard deviation of" to long_name
-        if 'long_name' in D[varnm].attrs and D.source_files[-3:].upper == 'BTL':
+        if 'source_files' in D.attrs and 'long_name' in D[varnm].attrs and D.source_files[-3:].upper == 'BTL':
             long_name = D[varnm].attrs["long_name"]
             long_name_nocap = long_name[0].lower() + long_name[1:]
             if varnm != 'NISKIN_NUMBER' and 'NISKIN_NUMBER' in D[varnm].dims: 
@@ -152,7 +154,7 @@ def add_standard_var_attrs_ctd(D, override = False):
                             D[varnm].attrs[attr] = item
 
             # Append "standard deviation of" to long_name
-            if 'long_name' in D[varnm].attrs and D.source_files[-3:].upper == 'BTL':
+            if 'source_files' in D.attrs and 'long_name' in D[varnm].attrs and D.source_files[-3:].upper == 'BTL':
                 long_name = D[varnm].attrs["long_name"]
                 long_name_nocap = long_name[0].lower() + long_name[1:]
                 D[varnm].attrs['long_name'] = ('Standard deviation of '
@@ -175,9 +177,6 @@ def add_standard_var_attrs_ctd(D, override = False):
         if varnm in ['SCAN', 'nbin']:
             D[varnm].attrs['coverage_content_type'] 
     return D
-
-
-
 
 
 def add_standard_glob_attrs_ctd(D, NPI = False, override = False):
@@ -228,7 +227,111 @@ def add_gmdc_keywords_ctd(D):
     return D
 
 
-def add_global_attribute(D, attr):
+
+
+
+
+def set_var_attr(D, varname, attr):
     '''
-    Prompts the user to enter the value of an attribute
+    Set variable attributes for a dataset or data frame.
+
+    Using interactive widgets. 
     '''
+
+    option_dict = _standard_attrs.global_attrs_options
+    if attr in option_dict:
+        D = user_input.set_var_attr_pulldown(D, varname, attr, 
+                    _standard_attrs.global_attrs_options[attr])
+    else:
+        # Make a larger box for (usually) long attributes
+        if attr in ['summary', 'comment', 'acknowledgment']:
+            rows = 10
+        else:
+            rows = 1
+        D = user_input.set_var_attr_textbox(D, varname, attr, rows)
+
+    return D
+
+
+
+
+def set_glob_attr(D, attr):
+    '''
+    Set global attributes for a  dataset or data frame.
+
+    Using interactive widgets. 
+
+    '''
+
+    option_dict = _standard_attrs.global_attrs_options
+    if attr in option_dict:
+        D = user_input.set_attr_pulldown(D, attr, 
+                    _standard_attrs.global_attrs_options[attr])
+    else:
+        # Make a larger box for (usually) long attributes
+        if attr in ['summary', 'comment', 'acknowledgment']:
+            rows = 10
+        else:
+            rows = 1
+        D = user_input.set_attr_textbox(D, attr, rows)
+
+    return D
+
+
+def add_missing_glob(D):
+    '''
+    Prompts the user to fill in information for missing global attrubtes
+    '''
+
+    glob_attrs_dict_ref = _standard_attrs.global_attrs_ordered.copy()
+
+    for attr in glob_attrs_dict_ref:
+        if attr not in D.attrs:
+            set_glob_attr(D, attr)
+
+    return D
+
+
+def add_missing_var(D):
+    '''
+    Prompts the user to fill in information for missing global attrubtes
+    '''
+
+    varattrs_dict_ref = _standard_attrs.variable_attrs_necessary.copy()
+
+    for varnm in D:
+        if 'PRES' in D[varnm].dims or 'NISKIN_NUMBER' in D[varnm].dims:
+            _attrs_dict_ref_var = varattrs_dict_ref.copy()
+
+            if varnm == 'CHLA':
+                _attrs_dict_ref_var += [
+                    'calibration_formula',
+                    'coefficient_A',
+                    'coefficient_B',]
+                
+            if varnm == 'PRES':
+                _attrs_dict_ref_var += [
+                    'axis',
+                    'positive',]
+                _attrs_dict_ref_var.remove('processing_level')
+                _attrs_dict_ref_var.remove('QC_indicator')
+
+            any_missing = False
+            for var_attr in _attrs_dict_ref_var:
+                if var_attr not in D[varnm].attrs:
+                    set_var_attr(D, varnm, var_attr)
+                    any_missing = True
+
+            if not any_missing:
+                    print(f'- {varnm}: OK')
+
+
+    for attr in glob_attrs_dict_ref:
+        if attr not in D.attrs:
+
+
+
+
+            set_glob_attr(D, attr)
+
+    return D
