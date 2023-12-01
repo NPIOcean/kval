@@ -7,7 +7,7 @@ import cftime
 from oceanograpy.data.nc_format import _standard_attrs
 from oceanograpy.util import calc
 from oceanograpy.util import time, user_input
-
+import numpy as np
 
 def add_range_attrs_ctd(D):
     '''
@@ -22,15 +22,24 @@ def add_range_attrs_ctd(D):
     D.attrs['geospatial_bounds_crs'] = 'EPSG:4326'
     
     # Vertical
-    D.attrs['geospatial_vertical_min'] = D.PRES.min().values
-    D.attrs['geospatial_vertical_max'] = D.PRES.max().values
+    if 'PRES' in D.keys():
+        D.attrs['geospatial_vertical_min'] = D.PRES.min().values
+        D.attrs['geospatial_vertical_max'] = D.PRES.max().values
+        D.attrs['geospatial_vertical_units'] = 'dbar'
+    elif 'DEPTH' in D.keys():
+        D.attrs['geospatial_vertical_min'] = float(D.DEPTH.min().values)
+        D.attrs['geospatial_vertical_max'] = float(D.DEPTH.max().values)
+        D.attrs['geospatial_vertical_units'] = 'm'
+
     D.attrs['geospatial_vertical_positive'] = 'down'
-    D.attrs['geospatial_vertical_units'] = 'dbar'
     D.attrs['geospatial_bounds_vertical_crs'] = 'EPSG:5831'
 
     # Time
-    start_time = cftime.num2date(D.TIME[0], D.TIME.units)
-    end_time = cftime.num2date(D.TIME[-1], D.TIME.units)
+    if D.TIME.dtype==np.dtype('datetime64[ns]'):
+        start_time, end_time = D.TIME.min(), D.TIME.max()
+    else:
+        start_time = cftime.num2date(D.TIME.min().values, D.TIME.units)
+        end_time = cftime.num2date(D.TIME.max().values, D.TIME.units)
     D.attrs['time_coverage_start'] = time.datetime_to_ISO8601(start_time)
     D.attrs['time_coverage_end'] = time.datetime_to_ISO8601(end_time)
     D.attrs['time_coverage_resolution'] = 'variable'

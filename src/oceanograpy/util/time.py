@@ -1,7 +1,8 @@
 from matplotlib.dates import num2date
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
+import numpy as np
 
 def datetime_to_ISO8601(time_dt, zone = 'Z'):
     '''
@@ -49,6 +50,7 @@ def ISO8601_to_datetime(time_str, to_UTC = True):
         return iso8601_time_utc
     else:
         return iso8601_time
+    
 
 def ISO8601_to_datenum(time_str, epoch = '1970-01-01'):
     '''
@@ -86,3 +88,90 @@ def start_end_times_cftime_to_duration(start_cftime, end_cftime):
     )
 
     return formatted_difference
+
+
+
+def matlab_time_to_timestamp(matlab_time):
+    """
+    Convert Matlab datenum into Python datetime.
+    :param datenum: Date in datenum format
+    :return:        Datetime object corresponding to datenum.
+    """
+    if isinstance(matlab_time, (int, float)):
+        # Single value case
+        days = matlab_time % 1
+        return datetime.fromordinal(
+            int(matlab_time)) + timedelta(days=days) - timedelta(days=366)
+    elif isinstance(matlab_time, (list, tuple, np.ndarray)):
+        # Array case
+        result = []
+        for time in matlab_time:
+            days = time % 1
+            result.append(
+                datetime.fromordinal(int(time)) + timedelta(days=days) 
+                                     - timedelta(days=366))
+        return np.array(result)
+    else:
+        raise ValueError("Input must be a single value or an array of Matlab datenums.")
+
+
+
+def timestamp_to_matlab_time(timestamp):
+    """
+    Convert Python datetime into Matlab datenum.
+    :param timestamp: Datetime object or an array of datetime objects
+    :return:         Matlab datenum or an array of datenums corresponding 
+                     to timestamp(s).
+    """
+    if isinstance(timestamp, datetime):
+        # Single value case
+        days = (timestamp - datetime.fromordinal(1)).days + 366
+        matlab_time_stamp = (days + (timestamp - datetime.fromordinal(days))
+                             .total_seconds() / (24 * 60 * 60)) + 366
+        return matlab_time_stamp
+    elif isinstance(timestamp, (list, tuple, np.ndarray)):
+        # Array case
+        result = []
+        for ts in timestamp:
+            days = (ts - datetime.fromordinal(1)).days + 366
+            result.append(days + 
+                (ts - datetime.fromordinal(days)).total_seconds() 
+                / (24 * 60 * 60))
+
+        matlab_time_stamp = np.array(result) + 366
+        return matlab_time_stamp
+    else:
+        raise ValueError(
+            "Input must be a single value or an array of Python datetimes.")
+
+
+def timestamp_to_datenum(timestamps, epoch='1970-01-01'):
+    """
+    Convert a timestamp or an array of timestamps to the number of days since the epoch.
+
+    Parameters:
+    - timestamps (datetime, np.ndarray): A single datetime object or an array of datetime objects.
+    - epoch (str): The reference epoch as a string in the format 'YYYY-MM-DD'. Defaults to '1970-01-01'.
+
+    Returns:
+    - np.ndarray: An array of floats representing the number of days since the epoch.
+    """
+    # Convert the epoch to a datetime object
+    epoch_datetime = datetime.strptime(epoch, '%Y-%m-%d')
+
+    # Ensure timestamps is an array
+    timestamps = np.array(timestamps)
+
+    # Calculate the differences between the timestamps and the epoch
+    deltas = timestamps - epoch_datetime
+
+    # Handle both datetime and numpy.datetime64 objects
+    if isinstance(deltas[0], np.timedelta64):
+        seconds_since_epoch = deltas.astype('timedelta64[s]').astype(float)
+    else:
+        seconds_since_epoch = np.array([delta.total_seconds() for delta in deltas])
+
+    # Convert the time differences to days
+    days_since_epoch = seconds_since_epoch / (60 * 60 * 24)
+
+    return days_since_epoch

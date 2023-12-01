@@ -58,12 +58,12 @@ standard_var_attrs_ctd = {
         'standard_name': 'mass_concentration_of_chlorophyll_in_sea_water',
         'units': 'mg m-3',
         'long_name': 'Chlorophyll-A',
-        'valid_min' : 0.0,
+        'valid_min' : -1.9,
         'valid_max' : 100.0,
     },
     'CHLA_instr': {
         'long_name': 'Chlorophyll-A from CTD fluorometer. Not calibrated with water sample chlorophyll measurements.',
-        'valid_min' : 0.0,
+        'valid_min' : -1.9,
         'valid_max' : 100.0,
         'processing_level':'Instrument data that has been converted to physical values',
         'QC_indicator':'unknown',
@@ -73,7 +73,7 @@ standard_var_attrs_ctd = {
     },
     'CHLA_fluorescence': { # Used by Geli
         'long_name': 'Chlorophyll-A from CTD fluorometer. Not calibrated with water sample chlorophyll measurements.',
-        'valid_min' : 0.0,
+        'valid_min' : -1.9,
         'valid_max' : 100.0,
         'processing_level':'Instrument data that has been converted to physical values',
         'QC_indicator':'unknown',
@@ -84,7 +84,7 @@ standard_var_attrs_ctd = {
     'PRES': {
         'standard_name': 'sea_water_pressure',
         'units': 'dbar',
-        'long_name': 'pressure',
+        'long_name': 'Pressure due to seawater',
         'positive':'down',
         'valid_min' : -1.0,
         'valid_max' : 12000.0,
@@ -92,7 +92,7 @@ standard_var_attrs_ctd = {
     },
     'SVEL': {
         'units': 'm s-1',
-        'long_name': 'Sound veelocity of seawater',
+        'long_name': 'Sound velocity of seawater',
         'valid_min' : 1200.0,
         'valid_max' : 1800.0,
                 },
@@ -122,14 +122,16 @@ standard_var_attrs_ctd = {
     }
 }
 
+
+
 standard_attrs_global_ctd = {
     'Conventions':'ACDD-1.3, CF-1.8',
     'standard_name_vocabulary': 'CF Standard Name Table v74',
-    'source': 'CTD profiles',
-    'instrument':'SBE 911+',
+    'source': 'CTD profiles from SBE911+',
+    'instrument':'In Situ/Laboratory Instruments>Profilers/Sounders>CTD',
     'data_set_language':'eng',
     'keywords_vocabulary':'NASA/GCMD Science Keywords 9.1.5',
-    'standard_name_vocabulary':'CF Standard Name Table v76',
+    'standard_name_vocabulary':'CF Standard Name Table v83',
     'iso_topic_category':'oceans',
 }
 
@@ -166,7 +168,7 @@ standard_globals_NPI_ctd = {
     'creator_institution':'Norwegian Polar Institute (NPI)',
     'data_assembly_center':'NO/NPI',
     'naming_authority':'npolar.no',
-    'instrument_vocabulary':'NASA/GCMD Instrument Keywords Version 17.0',
+    'instrument_vocabulary':'NASA/GCMD Instrument Keywords Version 17.2',
     'creator_url':'www.npolar.no',
     'publisher_name':'Norwegian Polar Institute (NPI)',
     'publisher_url':'www.npolar.no',
