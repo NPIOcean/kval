@@ -19,7 +19,7 @@ import glob2
 import re
 import pandas as pd
 import cftime
-
+from collections import OrderedDict
 
 def join_cruise(nc_files, bins_dbar = 1, verbose = True,
                 epoch = '1970-01-01'):
@@ -100,6 +100,40 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
         ns_binned = [sbe._change_dims_scan_to_pres(n) for n in ns_input]
 
 
+
+    ### CHECK FOR DUPLICATE PRESSURE LABELS
+    drop_inds = [] # Profiles we will drop
+    for ii, n in enumerate(ns_binned):
+
+        # Check whether we have dupliactes
+        pres_arr = n.PRES.to_numpy()
+        has_duplicate = len(np.unique(pres_arr)) < len(pres_arr)
+
+        # If duplicates exist: Prompt user for further action
+        if has_duplicate:
+            print(f'The file from station {n.station} appears to contain'
+                ' duplicate pressure values!\nPlease select one'
+                ' of the following (number + ENTER):'
+                '\n1: Remove duplicates (keep first entry)',
+                '\n2: Remove duplicates (keep last entry)',
+                "\n3: Don't include this profile.")
+
+            user_input = input('\nInput choice: ')
+            if user_input=='1':
+                ns_binned[ii] = n.drop_duplicates(dim="PRES", keep='first')
+            elif user_input=='2':
+                ns_binned[ii] = n.drop_duplicates(dim="PRES", keep='last')
+            elif user_input=='3':
+                drop_inds += [ii]
+            else:
+                raise Exception(f'Invalid input "{user_input}. Must be "1", "2", or "3"')
+
+    print(drop_inds)
+    if len(drop_inds)>0:
+        for drop_ind in sorted(drop_inds, reverse=True):
+            ns_binned.pop(drop_ind)
+
+
     ### JOINING PROFILES TO ONE DATASET
     #  Concatenation loop.
     # - Add a CRUISE variable 
@@ -135,7 +169,7 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     ### CHECK IF ANY SENSORS CHANGED
     # Modify metadata if they did
     for varnm in list(N.data_vars) + ['PRES']:
-        caldates, sns, units, stations = [], [], [], []
+        caldates, sns, stations = [], [], []
 
         for n in nc_files:
             stations += [n.STATION.values[0]]
@@ -149,11 +183,14 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
                 else:
                     _list += [None]
 
+
+
+
         sns_filtered = np.array([value for value in sns if value is not None])
-        sns_unique = unique_entries = list(set(sns_filtered))
+        sns_unique = np.array(list(OrderedDict.fromkeys(sns_filtered)))
         caldates_filtered = np.array([value for value in caldates if value is not None])
-        caldates_unique = unique_entries = list(set(caldates_filtered))
-        
+        caldates_unique = np.array(list(OrderedDict.fromkeys(caldates_filtered)))
+            
         if len(sns_unique)==2:
             if 'comment' in N[varnm].attrs:
                 comment_0 = N[varnm].comment
@@ -544,20 +581,27 @@ def _btl_files_from_path(path):
     btl_list = glob2.glob(f'{path}*.btl')
     return btl_list
 
+
 def _datasets_from_cnvlist(cnv_list, 
                            station_from_filename = False,
                            verbose = True):
     '''
     Get a list of profile xr.Datasets from a list of .cnv files. 
     '''
-    dataset_list = [sbe.read_cnv(fn, time_dim=True, 
-                        station_from_filename = station_from_filename,
-                        suppress_time_warning=~verbose,
-                        suppress_latlon_warning=~verbose) 
-                       for fn in cnv_list]
-    
-
+    dataset_list = []
+    for fn in cnv_list:
+        try:
+            dataset_list += [sbe.read_cnv(fn, time_dim=True, 
+                            station_from_filename = station_from_filename,
+                            suppress_time_warning=~verbose,
+                            suppress_latlon_warning=~verbose)]
+        except:
+            print(f'\n*NOTE*: Could not read file {fn}.')
+            print('(This usually indicates some sort of problem with the file.'
+                  ' For example, sensor setup may not match variables.) '
+                  '\n-> LOOK AT THE .CNV FILE! (skipping this file for now)\n')
     return dataset_list
+
 
 def _datasets_from_btllist(btl_list, 
                            station_from_filename = False,

@@ -1162,9 +1162,14 @@ def _update_variables(ds, source_file):
                 for sensor in var_dict['sensors']:  
                     try:
                         sensor_SNs += [sensor_info[sensor]['SN']]
+                        sensor_caldates += [sensor_info[sensor]['cal_date']]
+
                     except:
-                        print(old_name_cap, sensor)
-                    sensor_caldates += [sensor_info[sensor]['cal_date']]
+                        print(f'*NOTE*: Failed to find sensor {sensor}'
+                            f' associated with variable {old_name_cap}.\n'
+                            f'(file: {source_file})')
+                        sensor_SNs += ['N/A']
+                        sensor_caldates += ['N/A']
 
                 ds[new_name].attrs['sensor_serial_number'] = (
                     ', '.join(sensor_SNs))
