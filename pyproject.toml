@@ -14,9 +14,8 @@ authors = [
 maintainers = [
   { name = "Norwegian Polar Institute, Oceanography section", email = "" },
 ]
-requires-python = ">=3.8"
+requires-python = "3.11"
 
-[project]
 dependencies = [
   'xarray = 2023.8.0',
   'jupyter = "^1.0.0"',
