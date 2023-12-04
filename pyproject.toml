@@ -18,7 +18,7 @@ maintainers = [
 requires-python = ">=3.8"
 
 dependencies = [
-  'xarray==2023.8.0',
+  'xarray>=2023.8.0',
 ]
 
 
