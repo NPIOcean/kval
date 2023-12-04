@@ -1386,9 +1386,3 @@ def _convert_time_from_juld(ds, header_info, epoch = '1970-01-01'):
 
     return ds
 
-
-    '''
-    Remove all scans after *end_scan*
-    '''
-    ds = ds.sel({'scan_count':slice(None, end_scan+1)})
-    return ds
