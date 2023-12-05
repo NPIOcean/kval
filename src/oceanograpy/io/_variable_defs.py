@@ -190,6 +190,7 @@ sensor_info_dict_SBE = {
     'Transmissometer, WET Labs C-Star -->':'attn_sensor_1',
     'Transmissometer, Chelsea/Seatech -->':'attn_sensor_1',
     'Fluorometer, WET Labs ECO CDOM -->':'cdom_sensor_1',
+    'Fluorometer, WET Labs ECO CDOM, 2 -->':'cdom_sensor_2',
     'Altimeter -->':'altimeter_sensor_1',
     'PAR/Irradiance, Biospherical/Licor -->':'par_sensor_1',
     'SPAR voltage, SPAR, Biospherical/Licor -->':'spar_sensor_1',

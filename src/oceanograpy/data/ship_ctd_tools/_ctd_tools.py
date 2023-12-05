@@ -112,10 +112,11 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
         # If duplicates exist: Prompt user for further action
         if has_duplicate:
             print(f'The file from station {n.station} appears to contain'
-                ' duplicate pressure values!\nPlease select one'
-                ' of the following (number + ENTER):'
-                '\n1: Remove duplicates (keep first entry)',
-                '\n2: Remove duplicates (keep last entry)',
+                ' duplicate pressure values!\n(This is unexcpected since we '
+                ' expected pressure binned data - good idea to inspect the .cnv file!)'
+                'Please select one of the following (number + ENTER):'
+                '\n1: Remove duplicates (keep first entry).',
+                '\n2: Remove duplicates (keep last entry).',
                 "\n3: Don't include this profile.")
 
             user_input = input('\nInput choice: ')
@@ -128,7 +129,6 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
             else:
                 raise Exception(f'Invalid input "{user_input}. Must be "1", "2", or "3"')
 
-    print(drop_inds)
     if len(drop_inds)>0:
         for drop_ind in sorted(drop_inds, reverse=True):
             ns_binned.pop(drop_ind)
@@ -233,13 +233,11 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
             'the TIME field.')
 
     # Add a cruise variable
-    if 'cruise' in N.attrs:
+    if 'cruise_name' in N.attrs:
         cruise = N.cruise_name
     else:
-        cruise = '!! CRUISE !!'
-        
-        print('\nNOTE: No cruise ID found in the dataset. Remember to assign!'
-                      '\n-> ds = .set_ctd_attr(N, "cruise_name").')
+        cruise = '!! CRUISE (Not assigned) !!'
+
     N['CRUISE'] =  xr.DataArray(cruise, dims=())
     N['CRUISE'].attrs = {'long_name':'Cruise ID',}
 

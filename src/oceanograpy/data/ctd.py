@@ -478,17 +478,21 @@ def _reorder_list(input_list, ordered_list):
     return reordered_attributes
 
 
-def map(D, height = 1000, width = 1000, return_fig_ax = False, coast_resolution = '50m', ):
+def map(D, height = 1000, width = 1000, return_fig_ax = False, 
+        coast_resolution = '50m', figsize = None):
     '''
     Quick map of cruise
     '''
+    # These would maybe be useful for aut scaling of the map..
+    
     lat_span = float(D.LATITUDE.max() - D.LATITUDE.min())
     lon_span = float(D.LONGITUDE.max() - D.LONGITUDE.min()) 
     lat_ctr = float(0.5*(D.LATITUDE.max() + D.LATITUDE.min()))
     lon_ctr = float(0.5*(D.LONGITUDE.max() + D.LONGITUDE.min()))
 
     fig, ax = quickmap.quick_map_stere(lon_ctr, lat_ctr, height = height, 
-                                       width = width, coast_resolution = coast_resolution)
+                                       width = width, 
+                                       coast_resolution = coast_resolution,)
     
     ax.plot(D.LONGITUDE, D.LATITUDE, '-k', transform = ccrs.PlateCarree(), alpha = 0.5)
     ax.plot(D.LONGITUDE, D.LATITUDE, 'or', transform = ccrs.PlateCarree())
