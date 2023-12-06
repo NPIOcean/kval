@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import numpy as np
 
+
 def datetime_to_ISO8601(time_dt, zone = 'Z'):
     '''
     Convert datetime to YYYY-MM-DDThh:mm:ss<zone>
@@ -175,3 +176,29 @@ def timestamp_to_datenum(timestamps, epoch='1970-01-01'):
     days_since_epoch = seconds_since_epoch / (60 * 60 * 24)
 
     return days_since_epoch
+
+
+def convert_timenum_to_datetime(TIME, units, out_fmt='%d-%b-%Y %H:%M'):
+    """
+    Convert a numeric time value to a formatted datetime string.
+
+    Parameters:
+    - TIME (float): Numeric time value.
+    - units (str): String specifying the time units.
+    - out_fmt (str): Output format for the datetime string (default: '%d-%b-%Y %H:%M').
+
+    Returns:
+    - str: Formatted datetime string.
+
+    """
+    # Extract the reference date from the units
+    reference_date_str = units.split('since')[-1].strip()
+    reference_date = datetime.strptime(reference_date_str, '%Y-%m-%d %H:%M')
+
+    # Calculate the datetime from the reference date and numeric time
+    date_time = reference_date + timedelta(days=float(TIME))
+
+    # Format the datetime string according to the specified format
+    reference_date_string = date_time.strftime(out_fmt)
+
+    return reference_date_string
