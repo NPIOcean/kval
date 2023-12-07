@@ -64,7 +64,7 @@ def inspect_profiles(d):
         min=0, max=len(d['STATION']) - 1, step=1, value=0, description='Profile #:',
         continuous_update=False,
         style={'description_width': 'initial'},
-        layout=widgets.Layout(width='600px')  # Set the width of the slider
+        layout=widgets.Layout(width='500px')  # Set the width of the slider
     )
 
     profile_vars = _get_profile_variables(d)
@@ -102,12 +102,25 @@ def inspect_profiles(d):
         plot_profile, {'station_index': station_index_slider, 'variable': variable_dropdown}
     )
 
+
+    # Create a button to close the plot
+    close_button = widgets.Button(description="Close")
+
+    def close_plot(_):
+        # Resize the figure to 0 and close it
+        fig = plt.gcf()
+        fig.set_size_inches(0, 0)
+        widgets_collected.close()
+        plt.close(fig)
+
+    close_button.on_click(close_plot)
+
     # Display the widgets in a vertically stacked layout
-    display(widgets.VBox([
-        widgets.HBox([station_index_slider]),
+    widgets_collected = widgets.VBox([
+        widgets.HBox([station_index_slider, close_button]),
         widgets.HBox([variable_dropdown, station_dropdown]),
-        output
-    ]))
+        output])
+    display(widgets_collected)
 
 
 
@@ -138,12 +151,13 @@ def map(D, height=1000, width=1000, return_fig_ax=False, coast_resolution='50m',
         figsize = fig.get_size_inches()
 
     # Create a button to minimize the plot
-    minimize_button = widgets.Button(description="Minimize")
+    minimize_button = widgets.Button(description="Close")
 
     def minimize_plot(_):
-        # Resize the figure to 2x
-        fig.set_size_inches(0.1, 0.1)
-        fig.canvas.draw()
+        # Resize the figure to 0 and close it
+        fig.set_size_inches(0, 0)
+        button_widgets.close()
+        fig.close()
 
     minimize_button.on_click(minimize_plot)
 
@@ -171,9 +185,13 @@ def map(D, height=1000, width=1000, return_fig_ax=False, coast_resolution='50m',
     static_text = widgets.HTML(value='<p>Use the menu on the left of the figure to zoom/move around/save</p>')
 
     # Display both buttons and text with decreased vertical spacing
-    display(
-        widgets.HBox([minimize_button, org_size_button, full_size_button, static_text], layout=widgets.Layout(margin='0 0 5px 0', align_items='center')))
+
+    button_widgets =  widgets.HBox([
+        minimize_button, org_size_button, full_size_button, static_text], 
+        layout=widgets.Layout(margin='0 0 5px 0', align_items='center'))
     
+    display(button_widgets)
+       
     if return_fig_ax:
         return fig, ax
 
@@ -251,6 +269,18 @@ def ctd_contours(D):
     xvar_dropdown = widgets.Dropdown(options=['TIME', 'LONGITUDE', 'LATITUDE', 'Profile #'], 
                                      value='Profile #', description='x axis:')
 
+    # Create a button to minimize the plot
+    close_button = widgets.Button(description="Close")
+
+    def close_plot(_):
+        # Resize the figure to 0 and close it
+        fig = plt.gcf()
+        fig.set_size_inches(0, 0)
+        widgets_collected.close()
+        plt.close(fig)
+
+    close_button.on_click(close_plot)
+
     # Create slider for max depth selection
     max_depth_slider = widgets.IntSlider(min=1, max=D.PRES[-1].values, step=1, 
                                          value=D.PRES[-1].values, description='Max depth [m]:')
@@ -261,8 +291,10 @@ def ctd_contours(D):
                                       'variable2': variable_dropdown2, 
                                       'xvar': xvar_dropdown, 
                                       'max_depth': max_depth_slider})
-    display(widgets.VBox([widgets.HBox([variable_dropdown1, variable_dropdown2]), 
-                          xvar_dropdown, max_depth_slider, out]))
+    
+    widgets_collected = widgets.VBox([widgets.HBox([variable_dropdown1, variable_dropdown2]), 
+                          widgets.HBox([xvar_dropdown, close_button,]),  max_depth_slider, out])
+    display(widgets_collected)
 
 
 

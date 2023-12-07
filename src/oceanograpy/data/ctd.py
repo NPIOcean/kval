@@ -41,6 +41,13 @@ def ctds_from_cnv_dir(
     - D (xarray.Dataset): Joined CTD dataset.
     """
     cnv_files = tools._cnv_files_from_path(path)
+    number_of_cnv_files = len(cnv_files)
+    if number_of_cnv_files==0:
+        raise Exception(f'Did not find any .cnv files in the specified directory ("{path}").'
+                        ' Is there an error in the path?')
+    else:
+        print(f'Found {number_of_cnv_files} .cnv files in  "{path}".')
+
     profile_datasets = tools._datasets_from_cnvlist(
         cnv_files, verbose = verbose)
     D = tools.join_cruise(profile_datasets,
