@@ -15,6 +15,7 @@ from IPython.display import display
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 from oceanograpy.util import time
+from oceanograpy.data.ship_ctd_tools import _ctd_tools 
 from oceanograpy.maps import quickmap
 from matplotlib.ticker import MaxNLocator
 import cmocean
@@ -67,7 +68,7 @@ def inspect_profiles(d):
         layout=widgets.Layout(width='500px')  # Set the width of the slider
     )
 
-    profile_vars = _get_profile_variables(d)
+    profile_vars = _ctd_tools._get_profile_variables(d)
 
     # Create the dropdown for selecting a variable
     variable_dropdown = widgets.Dropdown(
@@ -257,7 +258,7 @@ def ctd_contours(D):
         plt.show()
 
     # Get the list of available variables
-    available_variables = _get_profile_variables(D)
+    available_variables = _ctd_tools._get_profile_variables(D)
 
     # Create dropdowns for variable selection
     variable_dropdown1 = widgets.Dropdown(options=available_variables, 
@@ -314,13 +315,3 @@ def _cmap_picker(varnm):
     cmap = getattr(cmocean.cm, cmap_name)
 
     return cmap
-
-
-# Get the profile variables
-def _get_profile_variables(d):
-    '''
-    Return a list of profile variables (i.e. variables with TIME, PRES dimensions)
-    '''
-    profile_variables = [varnm for varnm in d.data_vars if 'PRES' in d[varnm].dims 
-                            and 'TIME' in d[varnm].dims]
-    return profile_variables

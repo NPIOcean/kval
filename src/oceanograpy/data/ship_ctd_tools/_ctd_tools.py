@@ -683,3 +683,12 @@ def _dates_from_history(ds):
         proc_timestamp = None
     return sbe_timestamp, proc_timestamp
 
+
+# Get the profile variables
+def _get_profile_variables(d):
+    '''
+    Return a list of profile variables (i.e. variables with TIME, PRES dimensions)
+    '''
+    profile_variables = [varnm for varnm in d.data_vars if 'PRES' in d[varnm].dims 
+                            and 'TIME' in d[varnm].dims]
+    return profile_variables

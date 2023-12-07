@@ -4,6 +4,7 @@ from matplotlib.widgets import RectangleSelector
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 from oceanograpy.util import time
+from oceanograpy.data.ship_ctd_tools import _ctd_tools
 
 class hand_remove_points:
     def __init__(self, d, varnm, station):
@@ -197,12 +198,9 @@ class hand_remove_points:
                         'points have', 'point has')
                     )
 
-     
-
         with self.output_widget:
             clear_output(wait=True)
             print(f'APPLIED TO DATASET - Removed {self.points_removed} point(s)')
-
         
         self.close_everything()
 
@@ -219,4 +217,161 @@ class hand_remove_points:
         fig.set_size_inches(0, 0)
         self.widgets_all.close()
         plt.close(fig)
+
+    # Set this so we don't return an object (and thereby printing a messy string)
+    def __repr__(self):
+        # Return an empty string or any custom string
+        return ''
             
+
+
+def apply_offset(D):
+
+    vars = _ctd_tools._get_profile_variables(D)
+    #var_buttons = widgets.ToggleButtons(
+    #options=vars,
+    #description='Apply offset to:',
+    #disabled=False,
+    #button_style='', # 'success', 'info', 'warning', 'danger' or ''
+   #           'Apply an offset to only this particular profile',],
+     #icons=['check'] * 2
+    #)
+
+    var_buttons = widgets.RadioButtons(
+        options=vars,
+        description='Apply offset to:',
+        disabled=False
+    )
+    
+    station_buttons = widgets.ToggleButtons(
+    options=['All stations', 'Single station →', ],
+    description='Apply offset to:',
+    disabled=False,
+    button_style='', # 'success', 'info', 'warning', 'danger' or ''
+    tooltips=['Apply an offset only to the profile from this particular station', 
+        'Apply an offset to every single profile in the dataset'],
+    )
+
+    value_textbox = widgets.Text(
+    #value='Enter a value',
+    placeholder='Enter a numerical value',
+    disabled=False   
+    )
+    value_label = widgets.Label(value=f'Value of offset:')
+    value_widget = widgets.VBox([value_label, value_textbox])
+
+
+    # Function to update the description of value_textbox
+    def update_description(change):
+        selected_variable = change['new']
+        # Assuming you have a function to get units based on the selected variable
+        units = D[var_buttons.value].units
+        value_label.value = f'Value of offset ({units}):'
+
+    # Attach the update_description function to the observe method of var_buttons
+    var_buttons.observe(update_description, names='value')
+
+    # Increase the width of the description
+    value_textbox.style.description_width = '150px'  # Adjust the width as needed
+    
+
+
+    # Dropdown for selecting a single profile
+    station_dropdown = widgets.Dropdown(
+        options=list(D.STATION.values),  # Assuming keys are profile names
+        value=D.STATION.values[0],  # Set default value
+        disabled=False,
+        style={'description_width': 'initial'},  # Adjust width
+    )
+    
+  # Align items to the flex-end to move the dropdown to the bottom of the HBox
+    hbox_layout = widgets.Layout(align_items='flex-end')
+    
+    # Create an HBox with station_buttons and station_dropdown
+    hbox_station = widgets.HBox([station_buttons, station_dropdown], layout=hbox_layout)
+
+    apply_button = widgets.ToggleButton(
+        value=False,
+        description='Apply offset',
+        disabled=False,
+        button_style='success', # 'success', 'info', 'warning', 'danger' or ''
+       # tooltip='Description',
+       # icon='check' # (FontAwesome names without the `fa-` prefix)
+        )
+
+    exit_button = widgets.ToggleButton(
+        value=False,
+        description='Exit',
+        disabled=False,
+        button_style='danger', # 'success', 'info', 'warning', 'danger' or ''
+       # tooltip='Description',
+       # icon='check' # (FontAwesome names without the `fa-` prefix)
+        )
+    
+    def on_apply_button_click(change):
+        if change['new']:
+            if value_textbox.value != '':
+    
+                varnm_sel = var_buttons.value
+                offset_value = float(value_textbox.value)
+                units = D[varnm_sel].units
+                var_attrs = D[varnm_sel].attrs
+                
+                if station_buttons.value == 'Single station →':
+                    station_sel = station_dropdown.value
+                    station_string = f'station {station_sel}'
+                else:
+                    station_string = 'all stations'
+                    D[varnm_sel] = D[varnm_sel] + offset_value
+    
+                D[varnm_sel].attrs = var_attrs
+
+                offset_metadata = f"Applied offset of {offset_value} [{units}] ({station_string})"
+                
+                if 'applied_offset' in D[varnm_sel].attrs:
+                    D[varnm_sel].attrs['applied_offset'] += f'\n{offset_metadata}'
+                else:
+                    D[varnm_sel].attrs['applied_offset'] = offset_metadata
+                    
+                var_buttons.close()
+                hbox_station.close()
+                hbox_enter_value.close()
+    
+                with output_widget:
+                    clear_output(wait=True)
+                    print(f'-> {varnm_sel}: {offset_metadata}')
+
+            else:
+                var_buttons.close()
+                hbox_station.close()
+                hbox_enter_value.close()
+    
+                with output_widget:
+                    clear_output(wait=True)
+                    print(f' No offset value was entered -> Exited without changing anything. ')
+                    
+    def on_exit_button_click(change):
+        if change['new']:
+            
+            var_buttons.close()
+            hbox_station.close()
+            hbox_enter_value.close()
+
+            with output_widget:
+                clear_output(wait=True)
+                print(f' -> Exited without changing anything. ')
+
+    apply_button.observe(on_apply_button_click, names='value')
+    exit_button.observe(on_exit_button_click, names='value')
+
+    # Create an HBox with station_buttons and station_dropdown
+    hbox_enter_value = widgets.HBox([value_widget, apply_button, exit_button], layout=hbox_layout)
+
+
+    display(var_buttons)
+    display(hbox_station)
+    display(hbox_enter_value)
+
+    # Add an Output widget to capture the print statement when we are done
+    output_widget = widgets.Output()
+    display(output_widget)
