@@ -487,9 +487,15 @@ def map(D):
     viz.map(D)
 
 
-
 def inspect_profiles(D):
     '''
     Inspect individual profiles interactively
     '''
     viz.inspect_profiles(D)
+
+
+def contour(D):
+    '''
+    Contour plots of data
+    '''
+    viz.ctd_contours(D)

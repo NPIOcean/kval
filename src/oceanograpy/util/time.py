@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import numpy as np
+import numbers
 
 
 def datetime_to_ISO8601(time_dt, zone = 'Z'):
@@ -158,8 +159,13 @@ def timestamp_to_datenum(timestamps, epoch='1970-01-01'):
     - np.ndarray: An array of floats representing the number of days since the epoch.
     """
     # Convert the epoch to a datetime object
-    epoch_datetime = datetime.strptime(epoch, '%Y-%m-%d')
-
+    try:
+        epoch_datetime = datetime.strptime(epoch, '%Y-%m-%d')
+    except:
+        try:
+            epoch_datetime = datetime.strptime(epoch, 'Days since %Y-%m-%d')
+        except:
+            epoch_datetime = datetime.strptime(epoch, 'Days since %Y-%m-%d %H:%M')
     # Ensure timestamps is an array
     timestamps = np.array(timestamps)
 
@@ -176,6 +182,49 @@ def timestamp_to_datenum(timestamps, epoch='1970-01-01'):
     days_since_epoch = seconds_since_epoch / (60 * 60 * 24)
 
     return days_since_epoch
+
+
+
+def datenum_to_timestamp(datenum, epoch='1970-01-01'):
+    """
+    Convert the number of days since the epoch to a timestamp or an array of timestamps.
+
+    Parameters:
+    - datenum (float, np.ndarray): A single float or an array of floats representing the number of days since the epoch.
+    - epoch (str): The reference epoch as a string in the format 'YYYY-MM-DD'. Defaults to '1970-01-01'.
+
+    Returns:
+    - datetime.datetime, np.ndarray: A single datetime object or an array of datetime objects.
+    """
+    # Convert the epoch to a datetime object
+    try:
+        epoch_datetime = datetime.strptime(epoch, '%Y-%m-%d')
+    except:
+        try:
+            epoch_datetime = datetime.strptime(epoch, 'Days since %Y-%m-%d')
+        except:
+            epoch_datetime = datetime.strptime(epoch, 'Days since %Y-%m-%d %H:%M')
+    # Ensure datenum is an array
+    datenum = np.array(datenum)
+
+    # Convert the number of days to seconds
+    seconds_since_epoch = datenum * (60 * 60 * 24)
+
+    # Create timedelta objects from the seconds
+    if isinstance(seconds_since_epoch, (numbers.Number)):
+        timedelta_object = timedelta(seconds=int(seconds_since_epoch))
+        timestamp = epoch_datetime + timedelta_object
+        return timestamp
+
+    else:
+        timedelta_objects = np.array([timedelta(seconds=int(sec)) for sec in seconds_since_epoch])
+        timestamps = np.array([epoch_datetime + td for td in timedelta_objects])
+        return timestamps
+
+    # Add the timedeltas to the epoch
+
+    return timestamps
+
 
 
 def convert_timenum_to_datetime(TIME, units, out_fmt='%d-%b-%Y %H:%M'):

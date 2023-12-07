@@ -2,7 +2,11 @@
 Functions for visualizing ctd data.
 
 These are meant to be run in a Jupyter Lab notebook using the 
-%matplotlib widget backend
+%matplotlib widget backend.
+
+These functions are rather complex and clunky because they are tuned for the visual 
+input and menu functionality we want for the specific application. I am not too worried
+about that.
 '''
 
 import matplotlib.pyplot as plt
@@ -12,6 +16,9 @@ import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 from oceanograpy.util import time
 from oceanograpy.maps import quickmap
+from matplotlib.ticker import MaxNLocator
+import cmocean
+import numpy as np
 
 def inspect_profiles(d):
     """
@@ -60,12 +67,7 @@ def inspect_profiles(d):
         layout=widgets.Layout(width='600px')  # Set the width of the slider
     )
 
-    # Get the profile variables
-    def get_profile_variables(d):
-        profile_variables = [varnm for varnm in d.data_vars if 'PRES' in d[varnm].dims and 'TIME' in d[varnm].dims]
-        return profile_variables
-
-    profile_vars = get_profile_variables(d)
+    profile_vars = _get_profile_variables(d)
 
     # Create the dropdown for selecting a variable
     variable_dropdown = widgets.Dropdown(
@@ -106,9 +108,6 @@ def inspect_profiles(d):
         widgets.HBox([variable_dropdown, station_dropdown]),
         output
     ]))
-
-
-
 
 
 
@@ -177,3 +176,119 @@ def map(D, height=1000, width=1000, return_fig_ax=False, coast_resolution='50m',
     
     if return_fig_ax:
         return fig, ax
+
+
+
+
+def ctd_contours(D):
+    """
+    Function to create interactive contour plots based on an xarray dataset.
+
+    Parameters:
+    - D (xr.Dataset): The xarray dataset containing profile variables and coordinates.
+
+    """
+
+    # Function to update plots based on variable, xvar, and max depth selection
+    def update_plots(variable1, variable2, xvar, max_depth):
+        fig, ax = plt.subplots(2, 1, sharex=True, sharey=True)
+        fig.canvas.header_visible = False  # Hide the figure header
+
+        for axn, varnm in zip(ax, [variable1, variable2]):
+            colormap = _cmap_picker(varnm)
+            plt.xticks(rotation=0)
+            
+            if xvar == 'TIME':
+                x_data = result_timestamp = time.datenum_to_timestamp(
+                    D.TIME, D.TIME.units)
+                plt.xticks(rotation=90)
+                x_label = 'Time'
+            elif xvar == 'LONGITUDE':
+                x_data = D[xvar]
+                x_label = 'Longitude'
+            elif xvar == 'LATITUDE':
+                x_data = D[xvar]
+                x_label = 'Latitude'
+            elif xvar == 'Profile #':
+                x_data = np.arange(D.dims['TIME'])
+                x_label = 'Profile #'
+            else:
+                raise ValueError(f"Invalid value for xvar: {xvar}")
+
+            C = axn.contourf(x_data, D.PRES, D[varnm].T, cmap=colormap, levels = 30)
+            cb = plt.colorbar(C, ax=axn, label=D[varnm].units)
+            
+            # Set colorbar ticks using MaxNLocator
+            cb.locator = MaxNLocator(nbins=6)  # Adjust the number of ticks as needed
+            cb.update_ticks()
+
+            axn.plot(x_data, np.zeros(D.dims['TIME']), '|k', clip_on = False, zorder = 0)
+
+            axn.set_title(varnm)
+
+            conts = axn.contour(x_data, D.PRES, D[varnm].T, colors = 'k', 
+                                linewidths = 0.8, alpha = 0.2, levels = cb.get_ticks())
+
+            axn.set_facecolor('lightgray')
+            axn.set_ylabel('PRES [dbar]')
+
+        ax[1].set_xlabel(x_label)
+        ax[0].set_ylim(max_depth, 0)
+        plt.tight_layout()
+
+        plt.show()
+
+    # Get the list of available variables
+    available_variables = _get_profile_variables(D)
+
+    # Create dropdowns for variable selection
+    variable_dropdown1 = widgets.Dropdown(options=available_variables, 
+                                          value=available_variables[0], description='Variable 1:')
+    variable_dropdown2 = widgets.Dropdown(options=available_variables, 
+                                          value=available_variables[1], description='Variable 2:')
+
+    # Create dropdown for x-variable selection
+    xvar_dropdown = widgets.Dropdown(options=['TIME', 'LONGITUDE', 'LATITUDE', 'Profile #'], 
+                                     value='Profile #', description='x axis:')
+
+    # Create slider for max depth selection
+    max_depth_slider = widgets.IntSlider(min=1, max=D.PRES[-1].values, step=1, 
+                                         value=D.PRES[-1].values, description='Max depth [m]:')
+
+    # Use interactive to update plots based on variable, xvar, and max depth selection
+    out = widgets.interactive_output(update_plots, 
+                                     {'variable1': variable_dropdown1, 
+                                      'variable2': variable_dropdown2, 
+                                      'xvar': xvar_dropdown, 
+                                      'max_depth': max_depth_slider})
+    display(widgets.VBox([widgets.HBox([variable_dropdown1, variable_dropdown2]), 
+                          xvar_dropdown, max_depth_slider, out]))
+
+
+
+def _cmap_picker(varnm):
+    '''
+    Choose the appropriate colormap fir different variables.
+    '''
+    cmap_name = 'amp'
+    if 'TEMP' in varnm:
+        cmap_name = 'thermal'
+    elif 'PSAL' in varnm:
+        cmap_name = 'haline'
+    elif 'CHLA' in varnm:
+        cmap_name = 'algae'
+    elif 'SIGTH' in varnm:
+        cmap_name = 'deep'
+    cmap = getattr(cmocean.cm, cmap_name)
+
+    return cmap
+
+
+# Get the profile variables
+def _get_profile_variables(d):
+    '''
+    Return a list of profile variables (i.e. variables with TIME, PRES dimensions)
+    '''
+    profile_variables = [varnm for varnm in d.data_vars if 'PRES' in d[varnm].dims 
+                            and 'TIME' in d[varnm].dims]
+    return profile_variables
