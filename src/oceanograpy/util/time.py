@@ -242,7 +242,15 @@ def convert_timenum_to_datetime(TIME, units, out_fmt='%d-%b-%Y %H:%M'):
     """
     # Extract the reference date from the units
     reference_date_str = units.split('since')[-1].strip()
-    reference_date = datetime.strptime(reference_date_str, '%Y-%m-%d %H:%M')
+
+
+    try:
+        reference_date = datetime.strptime(reference_date_str, '%Y-%m-%d %H:%M')
+    except:
+        try:
+            reference_date = datetime.strptime(reference_date_str, '%Y-%m-%d %H:%M:%S')
+        except:
+            reference_date = datetime.strptime(reference_date_str, '%Y-%m-%d')
 
     # Calculate the datetime from the reference date and numeric time
     date_time = reference_date + timedelta(days=float(TIME))
