@@ -197,13 +197,20 @@ def datenum_to_timestamp(datenum, epoch='1970-01-01'):
     - datetime.datetime, np.ndarray: A single datetime object or an array of datetime objects.
     """
     # Convert the epoch to a datetime object
+    # NOTE: terribl syntax (although reasonaly rbust) - do this smarter.
     try:
         epoch_datetime = datetime.strptime(epoch, '%Y-%m-%d')
     except:
         try:
             epoch_datetime = datetime.strptime(epoch, 'Days since %Y-%m-%d')
         except:
-            epoch_datetime = datetime.strptime(epoch, 'Days since %Y-%m-%d %H:%M')
+            try:
+                epoch_datetime = datetime.strptime(epoch, 
+                                'Days since %Y-%m-%d %H:%M')
+            except:
+                epoch_datetime = datetime.strptime(epoch, 
+                                'Days since %Y-%m-%d %H:%M:%S')
+                
     # Ensure datenum is an array
     datenum = np.array(datenum)
 

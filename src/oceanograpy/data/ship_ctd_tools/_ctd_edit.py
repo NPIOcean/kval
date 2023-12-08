@@ -58,8 +58,7 @@ class hand_remove_points:
         self.ax.set_xlabel(f'{varnm} [{self.d[varnm].units}]')
         self.ax.set_ylabel(f'PRES [{self.PRES.units}]')
         self.ax.grid()
-        station_time_string = time.convert_timenum_to_datetime(
-            self.d.TIME.values[self.station_index], d.TIME.units)
+        station_time_string = time.convert_timenum_to_datetime(self.d.TIME.values[self.station_index], d.TIME.units)
         self.fig.canvas.header_visible = False  # Hide the figure header
         self.ax.set_title(f'Station: {station}: {station_time_string}')
         plt.tight_layout()
@@ -154,7 +153,6 @@ class hand_remove_points:
         Parameters:
         - button: The button click event.
         """
-        self.v
         self.var_points_remove = np.concatenate(
             [self.var_points_remove, self.var_points_selected])
         self.PRES_points_remove = np.concatenate(

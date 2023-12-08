@@ -275,13 +275,127 @@ def to_mat(D, outfile, simplify = False):
     None: The function saves the dataset as a MATLAB .mat file.
 
     Example:
-    >>> xr_to_mat(D, 'output_matfile', simplify=True)
+    >>> ctd.xr_to_mat(D, 'output_matfile', simplify=True)
     """
 
     matfile.xr_to_mat(D, outfile, simplify = simplify)
 
+############
+
+def to_csv(D, outfile):
+    """
+    Convert the CTD data (xarray.Dataset) to a human-readable .csv file.
+    
+    The file shows columnar data for all data paramaters for all stations.
+    Statins are separated by a header with the station name/time/lat/lon.
+
+    Parameters:
+    - D (xarray.Dataset): Input dataset to be converted.
+    - outfile (str): Output file path for the .csv file. If the path
+      doesn't end with '.csv', it will be appended.
+
+    Returns:
+    None: The function saves the dataset as a .cnv file.
+
+    Example:
+    >>> ctd.to_csv(D, 'output_cnvfile', )
+    """    
+    prof_vars = ['PRES']
+    
+    for key in D.data_vars.keys():
+        if  'TIME' in D[key].dims:
+            if 'PRES' in D[key].dims:
+                prof_vars += [key]
+
+    if not outfile.endswith('.csv'):
+        outfile += '.csv'
+                
+    with open(outfile, 'w') as f:
+        for time_ in D.TIME.values:
+            D_prof = D.sel(TIME=time_)
+            time_str= time.datenum_to_timestamp(time_).strftime('%Y-%m-%d %H:%M:%S')
+            print('#'*88, file=f)
+            print(f'#####  {D_prof.STATION.values:<8} ###  {time_str}  ###  LAT: {D_prof.LATITUDE.values:<10}'
+                  f' ### LON: {D_prof.LONGITUDE.values:<10} #####', file=f)
+            print('#'*88 + '\n', file=f)
+        
+            D_pd = D_prof[prof_vars].to_pandas()
+            D_pd = D_pd.drop('TIME', axis = 1)
+            
+            D_pd = D_pd.dropna(subset=D_pd.columns.difference(['PRES']), how='all')
+            print(D_pd.to_csv(), file=f)
+
 
 ############
+
+def metadata_to_txt(D, outfile):
+    """
+    Write metadata information from an xarray.Dataset to a text file.
+
+    Parameters:
+    - D (xarray.Dataset): The dataset containing metadata.
+    - outfile (str): Output file path for the text file. If the path doesn't
+      end with '.txt', it will be appended.
+
+    Returns:
+    None: The function writes metadata to the specified text file.
+
+    Example:
+    >>> metadata_to_txt(D, 'metadata_output')
+
+    NOTE: This function is pretty general. Consider putting it somethere else!
+    """
+
+    # Ensure the output file has a '.txt' extension
+    if not outfile.endswith('.txt'):
+        outfile += '.txt'
+
+    # Open the text file for writing
+    with open(outfile, 'w') as f:
+        # Create the file header based on the presence of 'id' attribute
+        if hasattr(D, 'id'):
+            file_header = f'FILE METADATA FROM: {D.id}'
+        else:
+            file_header = f'FILE METADATA'
+
+        # Print the file header with formatting
+        print('#'*80, file=f)
+        print(f'####  {file_header:<68}  ####', file=f)
+        print('#'*80, file=f)
+        print('\n' + '#'*27, file=f)
+        print('### GLOBAL ATTRIBUTES   ###', file=f)
+        print('#'*27, file=f)
+        print('', file=f)
+
+        # Print global attributes
+        for key, item in D.attrs.items():
+            print(f'# {key}:', file=f)
+            print(item, file=f)
+
+        print('', file=f)
+        print('#'*27, file=f)
+        print('### VARIABLE ATTRIBUTES ###', file=f)
+        print('#'*27, file=f)
+
+        # Get all variable names (coordinates and data variables)
+        all_vars = list(D.coords.keys()) + list(D.data_vars.keys())
+
+        # Iterate through variables
+        for varnm in all_vars:
+            print('\n' + '-'*50, file=f)
+
+            # Print variable name with indication of coordinate status
+            if varnm in D.coords:
+                print(f'{varnm} (coordinate)', file=f)
+            else:
+                print(f'{varnm}', file=f)
+
+            print('-'*50, file=f)
+
+            # Print variable attributes
+            for key, item in D[varnm].attrs.items():
+                print(f'# {key}:', file=f)
+                print(item, file=f)
 
 
 ## APPLYING CORRECTIONS ETC
