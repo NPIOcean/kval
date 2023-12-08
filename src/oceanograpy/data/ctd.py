@@ -12,6 +12,8 @@ ship_ctd.tools.py, for example.
 import xarray as xr
 from oceanograpy.data.ship_ctd_tools import _ctd_tools as tools
 from oceanograpy.data.ship_ctd_tools import _ctd_visualize as viz
+from oceanograpy.data.ship_ctd_tools import _ctd_edit as edit
+
 
 import re
 from collections import Counter
@@ -484,25 +486,168 @@ def _reorder_list(input_list, ordered_list):
 
     return reordered_attributes
 
+#### EDITING (WRAPPER FOR FUNCTIONS IN THE data.ship_ctd_tools._ctd_edit.py module)
+
+def hand_remove_points(D, variable, station):
+    """
+    Interactive removal of data points from CTD profiles 
+
+    Parameters:
+    - d (xarray.Dataset): The dataset containing the CTD data.
+    - varnm (str): The name of the variable to visualize and edit 
+                  (e.g. 'TEMP1', 'CHLA').
+    - station (str): The name of the station 
+                    (E.g. '003', '012_01', 'AT290', 'StationA').
+
+    Example usage that will let you hand edit the profile 
+    of "TEMP1" from station "StationA":
+    
+    ```python
+    HandRemovePoints(my_dataset, 'TEMP1', 'StationA')
+    ```
+    Note: Use the interactive plot to select points for removal, then 
+    click the corresponding buttons for actions.
+    """
+    edit.hand_remove_points(D, variable, station)
+
+def apply_offset(D):
+    """
+    Apply an offset to a selected variable in a given xarray CTD Dataset.
+
+    Parameters:
+    - D (xarray.Dataset): The CTD dataset to which the offset will be applied.
+
+    Displays interactive widgets for selecting the variable, choosing the application scope
+    (all stations or a single station), entering the offset value, and applying or exiting.
+
+    The offset information is stored as metadata in the dataset's variable attributes.
+
+    Examples:
+    ```python
+    apply_offset(my_dataset)
+    ```
+
+    Note: This function utilizes IPython widgets for interactive use within a Jupyter environment.
+    """
+
+    edit.apply_offset(D)
+
+def drop_vars_pick(D):
+    '''
+    Interactively drop (remove) selected variables from an xarray Dataset.
+
+    Parameters:
+    - D (xarray.Dataset): The dataset from which variables will be dropped.
+
+    Displays an interactive widget with checkboxes for each variable, allowing users
+    to select variables to remove. The removal is performed by clicking the "Drop variables"
+    button. The removed variables are also printed to the output.
+
+    After running this function, D will be updated.
+
+    Examples:
+    ```python
+    drop_vars(my_dataset)
+    ```
+    Note: This class utilizes IPython widgets for interactive use within a Jupyter environment.
+    '''
+
+    edit.drop_vars_pick(D)
+
 
 #### VISUALIZATION (WRAPPER FOR FUNCTIONS IN THE data.ship_ctd_tools._ctd_visualize.py module)
 
 def map(D):
     '''
-    Plot a map of the stations
+    Generate a quick map of the cruise CTD stations.
+
+    Parameters:
+    - D (xarray.Dataset): The dataset containing LATITUDE and LONGITUDE.
+    - height (int, optional): Height of the map figure. Default is 1000.
+    - width (int, optional): Width of the map figure. Default is 1000.
+    - return_fig_ax (bool, optional): If True, return the Matplotlib figure and axis objects.
+      Default is False.
+    - coast_resolution (str, optional): Resolution of the coastline data ('50m', '110m', '10m').
+      Default is '50m'.
+    - figsize (tuple, optional): Size of the figure. If None, the original size is used.
+
+    Displays a quick map using the provided xarray Dataset with latitude and longitude information.
+    The map includes a plot of the cruise track and red dots at data points.
+
+    Additionally, the function provides buttons for interaction:
+    - "Close" minimizes and closes the plot.
+    - "Original Size" restores the plot to its original size.
+    - "Larger" increases the plot size.
+
+    Examples:
+    ```python
+    ctd.map(D)
+    ```
+    or
+    ```python
+    fig, ax = map(my_dataset, return_fig_ax=True)
+    ```
+
+    Note: This function utilizes the `quickmap` module for generating a stereographic map.
+
+    TBD: 
+    - Should come up with an reasonable autoscaling.
+    - Should produce some grid lines.
     '''
+    
     viz.map(D)
 
 
 def inspect_profiles(D):
-    '''
-    Inspect individual profiles interactively
-    '''
+    """
+    Interactively inspect individual CTD profiles in an xarray dataset.
+
+    Parameters:
+    - d (xr.Dataset): The xarray dataset containing variables 'PRES', 'STATION', and other profile variables.
+
+    This function creates an interactive plot allowing the user to explore profiles within the given xarray dataset.
+    It displays a slider to choose a profile by its index, a dropdown menu to select a variable for visualization, and
+    another dropdown to pick a specific station. The selected profile is highlighted in color, while others are shown
+    in the background.
+
+    Parameters:
+    - d (xr.Dataset): The xarray dataset containing variables 'PRES', 'STATION', and other profile variables.
+
+    Examples:
+    ```python
+    inspect_profiles(my_dataset)
+    ```
+
+    Note: This function utilizes Matplotlib for plotting and ipywidgets for interactive controls.
+    """
     viz.inspect_profiles(D)
 
 
 def contour(D):
-    '''
-    Contour plots of data
-    '''
+    """
+    Create interactive contour plots based on an xarray dataset.
+
+    Parameters:
+    - D (xr.Dataset): The xarray dataset containing profile variables and coordinates.
+
+    This function generates interactive contour plots for two selected profile variables
+    from the given xarray dataset. It provides dropdown menus to choose the variables,
+    select the x-axis variable (e.g., 'TIME', 'LONGITUDE', 'LATITUDE', 'Profile #'), and
+    set the maximum depth for the y-axis.
+
+    Additionally, the function includes a button to close the plot.
+
+    Parameters:
+    - D (xr.Dataset): The xarray dataset containing profile variables and coordinates.
+
+    Examples:
+    ```python
+    ctd_contours(my_dataset)
+    ```
+
+    Note: This function uses the Matplotlib library for creating contour plots and the
+    ipywidgets library for interactive elements.
+    """
+
     viz.ctd_contours(D)
+

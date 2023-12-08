@@ -22,12 +22,27 @@ import cmocean
 import numpy as np
 
 def inspect_profiles(d):
+
     """
-    Function to interactively inspect profiles in an xarray dataset.
+    Interactively inspect profiles in an xarray dataset.
 
     Parameters:
     - d (xr.Dataset): The xarray dataset containing variables 'PRES', 'STATION', and other profile variables.
 
+    This function creates an interactive plot allowing the user to explore profiles within the given xarray dataset.
+    It displays a slider to choose a profile by its index, a dropdown menu to select a variable for visualization, and
+    another dropdown to pick a specific station. The selected profile is highlighted in color, while others are shown
+    in the background.
+
+    Parameters:
+    - d (xr.Dataset): The xarray dataset containing variables 'PRES', 'STATION', and other profile variables.
+
+    Examples:
+    ```python
+    inspect_profiles(my_dataset)
+    ```
+
+    Note: This function utilizes Matplotlib for plotting and ipywidgets for interactive controls.
     """
 
     # Function to create a profile plot
@@ -126,8 +141,37 @@ def inspect_profiles(d):
 
 
 def map(D, height=1000, width=1000, return_fig_ax=False, coast_resolution='50m', figsize=None):
-    '''
-    Quick map of cruise
+ '''
+    Generate a quick map of a cruise using xarray Dataset coordinates.
+
+    Parameters:
+    - D (xarray.Dataset): The dataset containing latitude and longitude coordinates.
+    - height (int, optional): Height of the map figure. Default is 1000.
+    - width (int, optional): Width of the map figure. Default is 1000.
+    - return_fig_ax (bool, optional): If True, return the Matplotlib figure and axis objects.
+      Default is False.
+    - coast_resolution (str, optional): Resolution of the coastline data ('50m', '110m', '10m').
+      Default is '50m'.
+    - figsize (tuple, optional): Size of the figure. If None, the original size is used.
+
+    Displays a quick map using the provided xarray Dataset with latitude and longitude information.
+    The map includes a plot of the cruise track and red dots at data points.
+
+    Additionally, the function provides buttons for interaction:
+    - "Close" minimizes and closes the plot.
+    - "Original Size" restores the plot to its original size.
+    - "Larger" increases the plot size.
+
+    Examples:
+    ```python
+    map(my_dataset)
+    ```
+    or
+    ```python
+    fig, ax = map(my_dataset, return_fig_ax=True)
+    ```
+
+    Note: This function utilizes the `quickmap` module for generating a stereographic map.
     '''
     # These would maybe be useful for auto-scaling of the map..
     lat_span = float(D.LATITUDE.max() - D.LATITUDE.min())
@@ -201,11 +245,28 @@ def map(D, height=1000, width=1000, return_fig_ax=False, coast_resolution='50m',
 
 def ctd_contours(D):
     """
-    Function to create interactive contour plots based on an xarray dataset.
+    Create interactive contour plots based on an xarray dataset.
 
     Parameters:
     - D (xr.Dataset): The xarray dataset containing profile variables and coordinates.
 
+    This function generates interactive contour plots for two selected profile variables
+    from the given xarray dataset. It provides dropdown menus to choose the variables,
+    select the x-axis variable (e.g., 'TIME', 'LONGITUDE', 'LATITUDE', 'Profile #'), and
+    set the maximum depth for the y-axis.
+
+    Additionally, the function includes a button to close the plot.
+
+    Parameters:
+    - D (xr.Dataset): The xarray dataset containing profile variables and coordinates.
+
+    Examples:
+    ```python
+    ctd_contours(my_dataset)
+    ```
+
+    Note: This function uses the Matplotlib library for creating contour plots and the
+    ipywidgets library for interactive elements.
     """
 
     # Function to update plots based on variable, xvar, and max depth selection
