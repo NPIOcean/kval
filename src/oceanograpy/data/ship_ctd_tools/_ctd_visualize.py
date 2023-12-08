@@ -141,7 +141,7 @@ def inspect_profiles(d):
 
 
 def map(D, height=1000, width=1000, return_fig_ax=False, coast_resolution='50m', figsize=None):
- '''
+    '''
     Generate a quick map of a cruise using xarray Dataset coordinates.
 
     Parameters:

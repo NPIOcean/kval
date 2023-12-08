@@ -2,6 +2,8 @@
 
 Collection of Python functions for working with oceanography data processing and analysis.
 
+Maintained by the Oceanography section at the [Norwegian Polar Institute](www.npolar.no/en). 
+____
 <details>
 <summary><strong>CORE FUNCTIONALITY</strong></summary>
 
@@ -41,7 +43,7 @@ ____
 
 ###### Project
 
-- The project is managed by the Oceanography section at the [Norwegian Polar Institute](www.npolar.no/en). 
+- The project is maintained by the Oceanography section at the [Norwegian Polar Institute](www.npolar.no/en). 
     - External contributions (pull requests, issues, whatever) are very welcome!
 - We will attempt to follow the guidelines from the 
   [Scientific Python Library Development Guide](https://learn.scientific-python.org/development/).
