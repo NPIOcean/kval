@@ -14,6 +14,7 @@ from oceanograpy.data.ship_ctd_tools import _ctd_tools as tools
 from oceanograpy.data.ship_ctd_tools import _ctd_visualize as viz
 from oceanograpy.data.ship_ctd_tools import _ctd_edit as edit
 
+from oceanograpy.io import matfile
 
 import re
 from collections import Counter
@@ -199,7 +200,7 @@ def quick_metadata_check(D,):
                     print(f'- {varnm}: OK')
 
 
-
+###########
 
 def to_netcdf(D, path, file_name = None, convention_check = False, add_to_history = True):
     '''
@@ -251,6 +252,36 @@ def to_netcdf(D, path, file_name = None, convention_check = False, add_to_histor
     if convention_check:
         print('Running convention checker:')
         check_conventions.check_file(file_path)
+
+
+#############
+
+def to_mat(D, outfile, simplify = False):
+    """
+    Convert the CTD data (xarray.Dataset) to a MATLAB .mat file.
+      
+    A field 'TIME_mat' with Matlab datenums is added along with the data. 
+
+    Parameters:
+    - D (xarray.Dataset): Input dataset to be converted.
+    - outfile (str): Output file path for the MATLAB .mat file. If the path
+      doesn't end with '.mat', it will be appended.
+    - simplify (bool, optional): If True, simplify the dataset by extracting
+      only coordinate and data variables (no metadata attributes). If False, 
+      the matfile will be a struct containing [attrs, data_vars, coords, dims]. 
+      Defaults to False.
+      
+    Returns:
+    None: The function saves the dataset as a MATLAB .mat file.
+
+    Example:
+    >>> xr_to_mat(D, 'output_matfile', simplify=True)
+    """
+
+    matfile.xr_to_mat(D, outfile, simplify = simplify)
+
+
+############
 
 
 ## APPLYING CORRECTIONS ETC

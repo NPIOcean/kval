@@ -370,3 +370,54 @@ def mat_to_xr_old(matfile, struct_name = 'CTD', pressure_name = 'PR'):
     ds = ds.sortby('TIME')
     
     return ds
+
+
+
+def xr_to_mat(D, outfile, simplify = False):
+    """
+    Convert an xarray.Dataset to a MATLAB .mat file.
+      
+    A field 'TIME_mat' with Matlab datenums is added along with the data. 
+
+    Parameters:
+    - D (xarray.Dataset): Input dataset to be converted.
+    - outfile (str): Output file path for the MATLAB .mat file. If the path
+      doesn't end with '.mat', it will be appended.
+    - simplify (bool, optional): If True, simplify the dataset by extracting
+      only coordinate and data variables (no metadata attributes). If False, 
+      the matfile will be a struct containing [attrs, data_vars, coords, dims]. 
+      Defaults to False.
+      
+    Returns:
+    None: The function saves the dataset as a MATLAB .mat file.
+
+    Example:
+    >>> xr_to_mat(D, 'output_matfile', simplify=True)
+    """
+    
+    time_epoch = D.TIME.units.upper().replace('DAYS SINCE ', '')[:11]
+    time_stamp = time.datenum_to_timestamp(D.TIME, D.TIME.units)
+    time_mat = time.timestamp_to_matlab_time(time_stamp)
+    
+    data_dict = D.to_dict()
+    
+    if simplify:
+        ds = {}
+        for sub_dict_name in ['coords', 'data_vars']:
+            sub_dict = data_dict[sub_dict_name]
+            for varnm, item in sub_dict.items():
+                ds[varnm] = sub_dict[varnm]['data']
+        
+        ds['TIME_mat'] = time_mat
+        data_dict = ds
+        simple_str = ' (simplified)'
+    else:
+        data_dict['coords']['TIME_mat'] = time_mat
+        simple_str = ''
+
+    if not outfile.endswith('.mat'):
+        outfile += '.mat'
+
+        
+    matlab.savemat(outfile, data_dict)
+    print(f'Saved the{simple_str} Dataset to: {outfile}')
