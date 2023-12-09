@@ -256,7 +256,7 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     # Delete some non-useful attributes (that are only relevant to individual
     # profiles)
     del_attrs = ['SBE_processing_date', 'start_time_source', 'station', 
-                 'start_time', 'SBE_flags_applied']
+                 'start_time', 'SBE_flags_applied', 'latitude', 'longitude']
     for attr in del_attrs:
         del N.attrs[attr]     
 

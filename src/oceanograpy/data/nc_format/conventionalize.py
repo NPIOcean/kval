@@ -218,20 +218,24 @@ def add_standard_glob_attrs_ctd(D, NPI = False, override = False):
 
     return D
 
-def add_gmdc_keywords_ctd(D):
+def add_gmdc_keywords_ctd(D, reset = True):
     '''
     Adds standard GMDC variables a la 
     "OCEANS>OCEAN TEMPERATURE>WATER TEMPERATURE"
     reflecting the variables in the file
     '''
+
     gmdc_dict = _standard_attrs.gmdc_keyword_dict_ctd
-    keywords = ''
+    keywords = []
 
     for varnm in D.keys():
-        if varnm in gmdc_dict:
-            keywords += gmdc_dict[varnm]
+        for gmdc_kw in gmdc_dict:
+            if gmdc_kw in varnm:
+                keywords += [gmdc_dict[gmdc_kw]]
+    
+    unique_keywords = list(set(keywords))
 
-    D.attrs['keywords'] = keywords
+    D.attrs['keywords'] = ','.join(unique_keywords)
 
     return D
 

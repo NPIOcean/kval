@@ -122,19 +122,12 @@ def dataset_from_btl_dir(
 
 
 
-def make_publishing_ready(D, NPI = True, 
-                retain_vars = ['TEMP1', 'CNDC1', 'PSAL1', 'CHLA1', 'PRES'],
-                drop_vars = None, retain_all = False):
+def metadata_auto(D, NPI = True,):
     '''
-    Wrapper function:
     Various modifications to the metadata in order to make the dataset
-    nicely formatted for publication.
+    more nicely formatted for publication.
     '''
-    if retain_all:
-        drop_vars = []
 
-    D = drop_variables(D, retain_vars = retain_vars,
-                       drop_vars = drop_vars, retain_all=retain_all)
     D = remove_numbers_in_names(D)
     D = conventionalize.add_standard_var_attrs_ctd(D)
     D = conventionalize.add_standard_glob_attrs_ctd(D, NPI = NPI, 
@@ -709,7 +702,8 @@ def drop_vars_pick(D):
     Note: This class utilizes IPython widgets for interactive use within a Jupyter environment.
     '''
 
-    edit.drop_vars_pick(D)
+    edit_obj = edit.drop_vars_pick(D)
+    return edit_obj.D
 
 
 #### VISUALIZATION (WRAPPER FOR FUNCTIONS IN THE data.ship_ctd_tools._ctd_visualize.py module)

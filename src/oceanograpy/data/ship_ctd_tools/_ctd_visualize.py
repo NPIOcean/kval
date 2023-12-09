@@ -47,6 +47,14 @@ def inspect_profiles(d):
 
     # Function to create a profile plot
     def plot_profile(station_index, variable):
+
+        # Close previous figure if there is one..
+        try:
+            previous_fig = plt.gcf()
+            plt.close(previous_fig)
+        except:
+            pass
+
         fig, ax = plt.subplots()
 
         # Plot all profiles in black in the background
@@ -428,6 +436,13 @@ def ctd_contours(D):
 
     # Function to update plots based on variable, xvar, and max depth selection
     def update_plots(variable1, variable2, xvar, max_depth):
+
+        try:
+            previous_fig = plt.gcf()
+            plt.close(previous_fig)
+        except:
+            pass
+
         fig, ax = plt.subplots(2, 1, sharex=True, sharey=True)
         fig.canvas.header_visible = False  # Hide the figure header
 
@@ -536,6 +551,14 @@ def _cmap_picker(varnm):
         cmap_name = 'algae'
     elif 'SIGTH' in varnm:
         cmap_name = 'deep'
+    elif 'CDOM' in varnm:
+        cmap_name = 'turbid'
+    elif 'DOXY' in varnm:
+        cmap_name = 'tempo'
+    elif 'ATTN' in varnm:
+        cmap_name = 'matter'  
+    elif 'SVEL' in varnm:
+        cmap_name = 'speed'  
     cmap = getattr(cmocean.cm, cmap_name)
 
     return cmap
