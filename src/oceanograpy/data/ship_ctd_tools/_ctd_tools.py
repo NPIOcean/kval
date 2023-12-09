@@ -127,7 +127,8 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
             elif user_input=='3':
                 drop_inds += [ii]
             else:
-                raise Exception(f'Invalid input "{user_input}. Must be "1", "2", or "3"')
+                raise Exception(f'Invalid input "{user_input}. '
+                                'Must be "1", "2", or "3"')
 
     if len(drop_inds)>0:
         for drop_ind in sorted(drop_inds, reverse=True):
@@ -219,11 +220,13 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     # Add some standard metadata to the measurement variables
     N = _add_standard_variable_attributes(N)    
 
+
+
     # Add some metadata to the STATION variable
     if 'STATION' in N.data_vars:
         N['STATION'].attrs = {'long_name' : 'CTD station ID',
                               'cf_role':'profile_id'}
-    
+
     # Warn the user if we used different sources for profile start time
     if different_start_time_sources:
         print('\nNOTE: The start_time variable was read from different '

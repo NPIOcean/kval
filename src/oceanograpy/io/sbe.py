@@ -601,7 +601,7 @@ def _read_SBE_proc_steps(ds, header_info):
     - Appends SBE processing history line to the *history* attribute.
     '''
     SBElines = header_info['SBEproc_hist']
-
+    ct = 1 # Step counter, SBE steps
     dmy_fmt = '%Y-%m-%d'
 
     sbe_proc_str = ['SBE SOFTWARE PROCESSING STEPS (extracted'
@@ -629,26 +629,30 @@ def _read_SBE_proc_steps(ds, header_info):
 
             
             src_files_raw = f'{hex_fn}, {xmlcon_fn}'
-            sbe_proc_str += [f'- Raw data read from {hex_fn}, {xmlcon_fn}.']
+            sbe_proc_str += [f'{ct}. Raw data read from {hex_fn}, {xmlcon_fn}.']
+            ct += 1
 
         # SBE processing details
         # Get skipover scans
         if 'datcnv_skipover' in line:
             skipover_scans = int(re.search(r'= (\d+)', line).group(1))
             if skipover_scans != 0:
-                sbe_proc_str += [f'- Skipped over {skipover_scans} initial scans.']
+                sbe_proc_str += [f'{ct}. Skipped over {skipover_scans} initial scans.']
+                ct += 1
 
         # Get ox hysteresis correction 
         if 'datcnv_ox_hysteresis_correction' in line:
             ox_hyst_yn = re.search(r'= (\w+)', line).group(1)
             if ox_hyst_yn == 'yes':
-                sbe_proc_str += [f'- Oxygen hysteresis correction applied.']
+                sbe_proc_str += [f'{ct}. Oxygen hysteresis correction applied.']
+                ct += 1
 
         # Get ox tau correction 
         if 'datcnv_ox_tau_correction' in line:
             ox_hyst_yn = re.search(r'= (\w+)', line).group(1)
             if ox_hyst_yn == 'yes':
-                sbe_proc_str += [f'- Oxygen tau correction applied.']
+                sbe_proc_str += [f'{ct}. Oxygen tau correction applied.']
+                ct += 1
 
         # Get low pass filter details
         if 'filter_low_pass_tc_A' in line:
@@ -658,15 +662,17 @@ def _read_SBE_proc_steps(ds, header_info):
         if 'filter_low_pass_A_vars' in line:
             try:
                 lp_vars_A = re.search(r' = (.+)$', line).group(1).split()
-                sbe_proc_str += [f'- Low-pass filter with time constant {lp_A}'
+                sbe_proc_str += [f'{ct}. Low-pass filter with time constant {lp_A}'
                     + f' seconds applied to: {" ".join(lp_vars_A)}.']
+                ct += 1
             except: 
                 print('FYI: Looks like filter A was not applied to any variables.')
         if 'filter_low_pass_B_vars' in line:
             try:
                 lp_vars_B = re.search(r' = (.+)$', line).group(1).split()
-                sbe_proc_str += [f'- Low-pass filter with time constant {lp_B}'
+                sbe_proc_str += [f'{ct}. Low-pass filter with time constant {lp_B}'
                     + f' seconds applied to: {" ".join(lp_vars_B)}.']
+                ct += 1
             except:
                 print('FYI: Looks like filter A was not applied to any variables.')
 
@@ -677,9 +683,10 @@ def _read_SBE_proc_steps(ds, header_info):
             celltm_tau= re.search(r'= (.+)$', line).group(1)
         if 'celltm_temp_sensor_use_for_cond' in line:
             celltm_sensors = re.search(r'= (.+)$', line).group(1)
-            sbe_proc_str += ['- Cell thermal mass correction applied to conductivity' 
+            sbe_proc_str += [f'{ct}. Cell thermal mass correction applied to conductivity' 
                  f' from sensors: [{celltm_sensors}]. ',
                  f'   > Parameters ALPHA: [{celltm_alpha}], TAU: [{celltm_tau}].']
+            ct += 1
 
         # Get loop edit details
         if 'loopedit_minVelocity' in line:
@@ -698,15 +705,16 @@ def _read_SBE_proc_steps(ds, header_info):
                 loop_excl_str = 'Bad scans excluded'
             else:
                 loop_excl_str = 'Bad scans not excluded'
-            sbe_proc_str += ['- Loop editing applied.',
+            sbe_proc_str += [f'{ct}. Loop editing applied.',
                  (f'   > Parameters: Minimum velocity (ms-1): {loop_minvel}, '
                   f'Soak depth range (m): {loop_ss_mindep} to {loop_ss_maxdep}, '
                   + f'\n   > {loop_excl_str}. '
                   + f'Deck pressure offset: {loop_ss_deckpress_str}.')]
+            ct += 1
 
         # Get wild edit details
         if 'wildedit_date' in line:
-            sbe_proc_str += ['- Wild editing applied.']
+            sbe_proc_str += [f'{ct}. Wild editing applied.']
         if 'wildedit_vars' in line:
             we_vars = re.search(r' = (.+)$', line).group(1).split()
             sbe_proc_str += [f'   > Applied to variables: {" ".join(we_vars)}.']
@@ -721,6 +729,29 @@ def _read_SBE_proc_steps(ds, header_info):
             sbe_proc_str += [(f'   > Parameters: n_std (first pass): {we_pass1}, '
                 f'n_std (second pass): {we_pass2}, min_delta: {we_mindelta},\n'
                 f'   > # points per test: {we_npoint}.')]
+            ct += 1
+
+        if 'Derive_in' in line or 'derive_in' in line:
+            sbe_proc_str += [
+                f'{ct}. Derived EOS-8 salinity and other variables.']
+            ct += 1
+
+        # Get window filter details
+        if 'wfilter_excl_bad_scans' in line:
+            wf_bad_scans = re.search(r'= (.+)', line).group(1)
+            if wf_bad_scans == 'yes':
+                wf_bad_scans = 'Bad scans excluded'
+            else:
+                wf_bad_scans = 'Bad scans not excluded'
+        if 'wfilter_action' in line:
+
+            wf_variable = re.search(r'(.+) =', line).group(0).split()[-2]
+            wf_filter_type = (re.search(r'= (.+)', line).group(0).split()[1]
+                              .replace(',', ''))
+            wf_filter_param = re.search(r'(\d+)', line).group(0)
+            sbe_proc_str += [f'{ct}. Window filter ({wf_filter_type}, '
+                f'{wf_filter_param}) applied to {wf_variable} ({wf_bad_scans}).']
+            ct += 1
 
         # Get align CTD details
         if 'alignctd_adv' in line:
@@ -728,12 +759,13 @@ def _read_SBE_proc_steps(ds, header_info):
             matches = re.findall(r'(\w+)\s+([0-9.]+)', line)
             # Rerutn a list of tuples with (variable, advance time in seconds)
             align_tuples = [(key, float(value)) for key, value in matches]
-            sbe_proc_str += ['- Misalignment correction applied.']
+            sbe_proc_str += [f'{ct}. Misalignment correction applied.']
             sbe_proc_str += [f'   > Parameters [variable (advance time, sec)]:']
             align_str = []
             for align_tuple in align_tuples:
                 align_str += [f'{align_tuple[0]} ({align_tuple[1]})'] 
             sbe_proc_str += [f'   > {", ".join(align_str)}']
+            ct += 1
 
         # Get bin averaging details
         if 'binavg_bintype' in line:
@@ -760,11 +792,11 @@ def _read_SBE_proc_steps(ds, header_info):
                 surfbin_params = re.search(
                     r'yes, (.+)$', line).group(1).split().upper()
                 surfbin_str = f'Surface bin parameters: {surfbin_params}'
-            sbe_proc_str += [f'- Bin averaged ({bin_size} {bin_unit}).']
+            sbe_proc_str += [f'{ct}. Bin averaged ({bin_size} {bin_unit}).']
             sbe_proc_str += [f'   > {binavg_excl_str}{bin_skipover_str}.']
             sbe_proc_str += [f'   > {surfbin_str}.']
             SBE_binned = f'{bin_size} {bin_unit} (SBE software)'
-
+            ct += 1
     try:
         ds.attrs['binned'] = SBE_binned
     except: pass
@@ -1066,11 +1098,14 @@ def _add_header_attrs(ds, header_info, station_from_filename = False,
             ds.attrs[key] = header_info[key]
             if key in ['latitude', 'longitude'] and ds.attrs[key]!=None:
                 ds.attrs[key] = np.round(ds.attrs[key], decimals_latlon)
-                
+    
+    # Grab station from filename (stripping away .cnv and _bin)
     if 'station' not in ds.attrs or station_from_filename:
         station_from_filename = (
             header_info['source_file'].replace(
-            '.cnv', '').replace('.CNV', ''))
+            '.cnv', '').replace('.CNV', '')
+            .replace('_bin', '').replace('_BIN', ''))
+        
         ds.attrs['station'] = station_from_filename
 
     return ds
