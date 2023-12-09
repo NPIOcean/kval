@@ -321,13 +321,13 @@ def read_header(filename: str) -> dict:
 
             # Read cruise/ship/station/bottom depth/operator if available
             if '** CRUISE' in line.upper():
-                hdict['cruise_name'] = line[(line.rfind(': ')+2):].replace('\n','')
+                hdict['cruise_name'] = line[(line.rfind(': ')+2):].replace('\n','').strip()
             if '** STATION' in line.upper():
-                hdict['station'] = line[(line.rfind(': ')+2):].replace('\n','')
+                hdict['station'] = line[(line.rfind(': ')+2):].replace('\n','').strip()
             if '** SHIP' in line.upper():
-                hdict['ship'] = line[(line.rfind(': ')+2):].replace('\n','')
+                hdict['ship'] = line[(line.rfind(': ')+2):].replace('\n','').strip()
             if '** BOTTOM DEPTH' in line.upper():
-                hdict['bdep'] = line[(line.rfind(': ')+2):].replace('\n','')
+                hdict['bdep'] = line[(line.rfind(': ')+2):].replace('\n','').strip()
 
             # Read moon pool info
             if 'Skuteside' in line:

@@ -140,6 +140,163 @@ def inspect_profiles(d):
 
 
 
+def inspect_dual_sensors(D):
+    """
+    Function to interactively inspect profiles of pairs of variables with the same name but different numbers.
+
+    Parameters:
+    - D: xarray.Dataset, the dataset containing the variables.
+
+    Usage:
+    - Call inspect_dual_sensors(D) to interactively inspect profiles.
+    """
+
+    def plot_dual_sensor(station_index, variable_pair):
+        """
+        Plot profiles of the selected variable pair for a given station.
+
+        Parameters:
+        - station_index: int, index of the selected station.
+        - variable_pair: tuple, pair of variables to be plotted.
+        """
+        variable1, variable2 = variable_pair
+
+        fig, ax = plt.subplots(1, 2, sharey=True, figsize=(10, 5))
+
+        profile_1 = D[variable1].isel(TIME=station_index)
+        profile_2 = D[variable2].isel(TIME=station_index)
+
+        ax[0].plot(profile_1, D['PRES'], alpha=0.8, lw=1, color='tab:orange', label=variable1)
+        ax[0].plot(profile_2, D['PRES'], alpha=0.8, lw=1, color='tab:blue', label=variable2)
+        ax[0].fill_betweenx(D['PRES'], profile_1, profile_2, alpha=0.2, color='k')
+
+        ax[1].plot(profile_2 - profile_1, D['PRES'], alpha=0.8, lw=1, color='tab:red',
+                   label=f'{variable2} - {variable1}')
+        ax[1].fill_betweenx(D['PRES'], profile_2 - profile_1, alpha=0.2, color='tab:red',)
+
+        difference_mean = np.round((profile_2 - profile_1).mean(), 6)
+        ax[1].axvline(difference_mean, color='k', ls=':', alpha=0.5, label=f'Mean: {difference_mean.values}')
+
+        station_time_string = time.convert_timenum_to_datetime(profile_1.TIME, D.TIME.units)
+        fig.suptitle(f'Station: {D["STATION"].values[station_index]}, {station_time_string}')
+        ax[0].set_xlabel(f'{D[variable1].units}')
+        ax[1].set_xlabel(f'{D[variable1].units}')
+        ax[0].set_title('Dual sensor profiles')
+        ax[1].set_title('Dual sensor difference')
+        
+        ax[0].set_ylabel('PRES')
+        ax[0].invert_yaxis()
+        ax[0].grid()
+        ax[1].grid()
+
+        fig.canvas.header_visible = False  # Hide the figure header
+        plt.tight_layout()
+        ax[0].legend(fontsize=10)
+        ax[1].legend(fontsize=8)
+        plt.show()
+
+    def _find_variable_pairs(D):
+        """
+        Find pairs of variables with the same name but different numbers.
+
+        Parameters:
+        - D: xarray.Dataset, the dataset containing the variables.
+
+        Returns:
+        - variable_pairs: list of tuples, pairs of variables.
+        """
+        variable_pairs = []
+        data_vars = list(D.data_vars.keys())
+
+        for i in range(len(data_vars)):
+            current_var = data_vars[i]
+
+            for j in range(i + 1, len(data_vars)):
+                next_var = data_vars[j]
+
+                # Extract the variable name and number from the variables
+                current_name, current_num = ''.join(filter(str.isalpha, current_var)), ''.join(
+                    filter(str.isdigit, current_var))
+                next_name, next_num = ''.join(filter(str.isalpha, next_var)), ''.join(filter(str.isdigit, next_var))
+
+                # Check if the variable names match and have different numbers
+                if current_name == next_name and current_num != next_num:
+                    variable_pairs.append((current_var, next_var))
+        return variable_pairs
+
+    # Get the descriptions for the slider
+    station_descriptions = [str(station) for station in D['STATION'].values]
+
+    # Create the slider for selecting a station
+    station_index_slider = widgets.IntSlider(
+        min=0, max=len(D['STATION']) - 1, step=1, value=0, description='Profile #:',
+        continuous_update=False,
+        style={'description_width': 'initial'},
+        layout=widgets.Layout(width='500px')  # Set the width of the slider
+    )
+
+    profile_vars = _ctd_tools._get_profile_variables(D)
+
+    variable_pairs = _find_variable_pairs(D)
+    variable_pairs_labels = [f'{var_pair[0]} and {var_pair[1]}' for var_pair in variable_pairs]
+    variable_pairs_dict = {vlab: vpair for vlab, vpair in zip(variable_pairs_labels, variable_pairs)}
+
+    # Create the dropdown for selecting a variable
+    variable_dropdown = widgets.Dropdown(
+        options=variable_pairs_dict,
+        value=variable_pairs[0],
+        description='Variable'
+    )
+
+    # Create the dropdown for selecting a station
+    station_dropdown = widgets.Dropdown(
+        options=station_descriptions,
+        value=station_descriptions[0],
+        description='Station:'
+    )
+
+    # Update slider value when dropdown changes
+    def update_slider_from_dropdown(change):
+        station_index = station_descriptions.index(change.new)
+        station_index_slider.value = station_index
+
+    # Update dropdown value when slider changes
+    def update_dropdown_from_slider(change):
+        station_description = str(D['STATION'].values[change.new])
+        station_dropdown.value = station_description
+
+    # Link slider and dropdown
+    station_dropdown.observe(update_slider_from_dropdown, names='value')
+    station_index_slider.observe(update_dropdown_from_slider, names='value')
+
+    # Use interactive_output to create interactive controls
+    output = widgets.interactive_output(
+        plot_dual_sensor, {'station_index': station_index_slider,
+                           'variable_pair': variable_dropdown, }
+    )
+
+    # Create a button to close the plot
+    close_button = widgets.Button(description="Close")
+
+    def close_plot(_):
+        # Resize the figure to 0 and close it
+        fig = plt.gcf()
+        fig.set_size_inches(0, 0)
+        widgets_collected.close()
+        plt.close(fig)
+
+    close_button.on_click(close_plot)
+
+    # Display the widgets in a vertically stacked layout
+    widgets_collected = widgets.VBox([
+        widgets.HBox([station_index_slider, close_button]),
+        widgets.HBox([variable_dropdown, station_dropdown]),
+        output])
+    display(widgets_collected)
+
+
+
+
 def map(D, height=1000, width=1000, return_fig_ax=False, coast_resolution='50m', figsize=None):
     '''
     Generate a quick map of a cruise using xarray Dataset coordinates.
@@ -295,19 +452,25 @@ def ctd_contours(D):
             else:
                 raise ValueError(f"Invalid value for xvar: {xvar}")
 
-            C = axn.contourf(x_data, D.PRES, D[varnm].T, cmap=colormap, levels = 30)
-            cb = plt.colorbar(C, ax=axn, label=D[varnm].units)
+            if xvar in ['TIME', 'Profile #']:
+                D_sorted = D
+            else:
+                D_sorted = D.sortby(xvar)
+                x_data = D_sorted[xvar] 
+
+            C = axn.contourf(x_data, D_sorted.PRES, D_sorted[varnm].T, cmap=colormap, levels = 30)
+            cb = plt.colorbar(C, ax=axn, label=D_sorted[varnm].units)
             
             # Set colorbar ticks using MaxNLocator
             cb.locator = MaxNLocator(nbins=6)  # Adjust the number of ticks as needed
             cb.update_ticks()
 
-            axn.plot(x_data, np.zeros(D.dims['TIME']), '|k', clip_on = False, zorder = 0)
+            axn.plot(x_data, np.zeros(D_sorted.dims['TIME']), '|k', clip_on = False, zorder = 0)
 
             axn.set_title(varnm)
 
-            conts = axn.contour(x_data, D.PRES, D[varnm].T, colors = 'k', 
-                                linewidths = 0.8, alpha = 0.2, levels = cb.get_ticks())
+            conts = axn.contour(x_data, D_sorted.PRES, D_sorted[varnm].T, colors = 'k', 
+                                linewidths = 0.8, alpha = 0.2, levels = cb.get_ticks()[::2])
 
             axn.set_facecolor('lightgray')
             axn.set_ylabel('PRES [dbar]')

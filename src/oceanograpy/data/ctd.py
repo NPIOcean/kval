@@ -768,6 +768,19 @@ def inspect_profiles(D):
     viz.inspect_profiles(D)
 
 
+def inspect_dual_sensors(D):
+    """
+    Interactively inspect profiles of sensor pairs (e.g., PSAL1 and PSAL2).
+
+    Parameters:
+    - D: xarray.Dataset, the dataset containing the variables.
+
+    Usage:
+    - Call inspect_dual_sensors(D) to interactively inspect profiles.
+    """
+    viz.inspect_dual_sensors(D)
+
+
 def contour(D):
     """
     Create interactive contour plots based on an xarray dataset.
