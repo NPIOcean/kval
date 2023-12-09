@@ -30,7 +30,8 @@ def ctds_from_cnv_dir(
     path: str,
     station_from_filename: bool = False,
     time_warnings: bool = True,
-    verbose: bool = True
+    verbose: bool = True,
+    start_time_NMEA = False,
 ) -> xr.Dataset:
     """
     Create CTD datasets from CNV files in the specified path.
@@ -40,6 +41,11 @@ def ctds_from_cnv_dir(
     - station_from_filename (bool): Whether to extract station information from filenames.
     - time_warnings (bool): Enable/disable time-related warnings.
     - verbose: If False, suppress some prints output.
+    - start_time_NMEA (bool, optional)
+      If True: get start_time attribute from the "NMEA UTC (Time)" 
+      header line. Default (False) is to grab it from the "start_time" line. 
+      (That seems to occasionally cause problems).
+
     Returns:
     - D (xarray.Dataset): Joined CTD dataset.
     """
@@ -52,7 +58,7 @@ def ctds_from_cnv_dir(
         print(f'Found {number_of_cnv_files} .cnv files in  "{path}".')
 
     profile_datasets = tools._datasets_from_cnvlist(
-        cnv_files, verbose = verbose)
+        cnv_files, verbose = verbose, start_time_NMEA = start_time_NMEA)
     D = tools.join_cruise(profile_datasets,
         verbose=verbose)
 
@@ -63,7 +69,8 @@ def ctds_from_cnv_list(
     cnv_list: list,
     station_from_filename: bool = False,
     time_warnings: bool = True,
-    verbose: bool = True
+    verbose: bool = True,
+    start_time_NMEA = False,
 ) -> xr.Dataset:
     """
     Create CTD datasets from CNV files in the specified path.
@@ -73,11 +80,16 @@ def ctds_from_cnv_list(
     - station_from_filename (bool): Whether to extract station information from filenames.
     - time_warnings (bool): Enable/disable time-related warnings.
     - verbose: If False, suppress some prints output.
+    - start_time_NMEA (bool, optional)
+      If True: get start_time attribute from the "NMEA UTC (Time)" 
+      header line. Default (False) is to grab it from the "start_time" line. 
+      (That seems to occasionally cause problems).
+
     Returns:
     - D (xarray.Dataset): Joined CTD dataset.
     """
     profile_datasets = tools._datasets_from_cnvlist(
-        cnv_list, verbose = verbose)
+        cnv_list, verbose = verbose, start_time_NMEA = start_time_NMEA)
     D = tools.join_cruise(profile_datasets,
         verbose=verbose)
     return D

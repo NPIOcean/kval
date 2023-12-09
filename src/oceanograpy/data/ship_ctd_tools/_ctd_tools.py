@@ -582,7 +582,7 @@ def _btl_files_from_path(path):
 
 def _datasets_from_cnvlist(cnv_list, 
                            station_from_filename = False,
-                           verbose = True):
+                           verbose = True, start_time_NMEA = False):
     '''
     Get a list of profile xr.Datasets from a list of .cnv files. 
     '''
@@ -592,7 +592,8 @@ def _datasets_from_cnvlist(cnv_list,
             dataset_list += [sbe.read_cnv(fn, time_dim=True, 
                             station_from_filename = station_from_filename,
                             suppress_time_warning=~verbose,
-                            suppress_latlon_warning=~verbose)]
+                            suppress_latlon_warning=~verbose,
+                            start_time_NMEA = start_time_NMEA)]
         except:
             print(f'\n*NOTE*: Could not read file {fn}.')
             print('(This usually indicates some sort of problem with the file.'

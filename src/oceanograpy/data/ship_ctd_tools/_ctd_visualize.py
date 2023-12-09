@@ -142,7 +142,7 @@ def inspect_profiles(d):
 
 def inspect_dual_sensors(D):
     """
-    Function to interactively inspect profiles of pairs of variables with the same name but different numbers.
+    Function to interactively inspect profiles of sensor pairs (e.g., PSAL1 and PSAL2).
 
     Parameters:
     - D: xarray.Dataset, the dataset containing the variables.
@@ -235,8 +235,6 @@ def inspect_dual_sensors(D):
         layout=widgets.Layout(width='500px')  # Set the width of the slider
     )
 
-    profile_vars = _ctd_tools._get_profile_variables(D)
-
     variable_pairs = _find_variable_pairs(D)
     variable_pairs_labels = [f'{var_pair[0]} and {var_pair[1]}' for var_pair in variable_pairs]
     variable_pairs_dict = {vlab: vpair for vlab, vpair in zip(variable_pairs_labels, variable_pairs)}
@@ -309,7 +307,7 @@ def map(D, height=1000, width=1000, return_fig_ax=False, coast_resolution='50m',
       Default is False.
     - coast_resolution (str, optional): Resolution of the coastline data ('50m', '110m', '10m').
       Default is '50m'.
-    - figsize (tuple, optional): Size of the figure. If None, the original size is used.
+    - figsize (tuple, optional): Size of the figure. If None, the default size is used.
 
     Displays a quick map using the provided xarray Dataset with latitude and longitude information.
     The map includes a plot of the cruise track and red dots at data points.
@@ -330,9 +328,11 @@ def map(D, height=1000, width=1000, return_fig_ax=False, coast_resolution='50m',
 
     Note: This function utilizes the `quickmap` module for generating a stereographic map.
     '''
-    # These would maybe be useful for auto-scaling of the map..
+    # These two are currently not used, but would maybe be useful for
+    # auto-scaling of the map..
     lat_span = float(D.LATITUDE.max() - D.LATITUDE.min())
     lon_span = float(D.LONGITUDE.max() - D.LONGITUDE.min())
+
     lat_ctr = float(0.5 * (D.LATITUDE.max() + D.LATITUDE.min()))
     lon_ctr = float(0.5 * (D.LONGITUDE.max() + D.LONGITUDE.min()))
 

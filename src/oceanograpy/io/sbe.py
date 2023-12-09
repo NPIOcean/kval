@@ -65,7 +65,7 @@ def read_cnv(
     end_scan: Optional[int] = None,
     suppress_time_warning: Optional[bool] = False,
     suppress_latlon_warning: Optional[bool] = False,
-    start_time_NMEA: Optional[bool] = True,
+    start_time_NMEA: Optional[bool] = False,
     lat: Optional[float] = None,
     lon: Optional[float] = None,
     station: Optional[str] = None,
@@ -162,7 +162,8 @@ def read_cnv(
     ds = _update_variables(ds, source_file)
     ds = _assign_specified_lat_lon_station(ds, lat, lon, station)
     ds = _convert_time(ds, header_info, 
-                       suppress_time_warning = suppress_time_warning)
+                       suppress_time_warning = suppress_time_warning,
+                       start_time_NMEA = start_time_NMEA)
     ds.attrs['history'] = header_info['start_history']
     ds = _add_header_attrs(ds, header_info, station_from_filename)
     ds = _add_start_time(ds, header_info, 
@@ -621,7 +622,12 @@ def _read_SBE_proc_steps(ds, header_info):
         # Get input file names (without paths)
         if 'datcnv_in' in line:
             hex_fn = re.search(r'\\([^\\]+\.HEX)', line.upper()).group(1)
-            xmlcon_fn = re.search(r'\\([^\\]+\.XMLCON)', line.upper()).group(1)
+            try:
+                xmlcon_fn = re.search(r'\\([^\\]+\.XMLCON)', line.upper()).group(1)
+            except:
+                xmlcon_fn = re.search(r'\\([^\\]+\.CON)', line.upper()).group(1)
+
+            
             src_files_raw = f'{hex_fn}, {xmlcon_fn}'
             sbe_proc_str += [f'- Raw data read from {hex_fn}, {xmlcon_fn}.']
 
@@ -1317,7 +1323,7 @@ def _decdeg_from_line(line):
     return decdeg
 
 def _convert_time(ds, header_info, epoch = '1970-01-01', 
-                  suppress_time_warning = False):
+                  suppress_time_warning = False, start_time_NMEA = False):
     '''
     Convert time either from julian days (TIME_JULD extracted from 'timeJ') 
     or from time elapsed in seconds (TIME_ELAPSED extracted from timeS). 
@@ -1328,10 +1334,12 @@ def _convert_time(ds, header_info, epoch = '1970-01-01',
     '''
 
     if 'TIME_ELAPSED' in ds.keys():
-        ds = _convert_time_from_elapsed(ds, header_info, epoch = epoch)
+        ds = _convert_time_from_elapsed(ds, header_info, 
+            epoch = epoch, start_time_NMEA = start_time_NMEA)
         ds.TIME_SAMPLE.attrs['SBE_source_variable'] = 'timeS' 
     elif 'TIME_JULD' in ds.keys():
-        ds = _convert_time_from_juld(ds, header_info, epoch = epoch)
+        ds = _convert_time_from_juld(ds, header_info, 
+            epoch = epoch, start_time_NMEA = start_time_NMEA)
         ds.TIME_SAMPLE.attrs['SBE_source_variable'] = 'timeJ' 
 
     else:
@@ -1342,19 +1350,24 @@ def _convert_time(ds, header_info, epoch = '1970-01-01',
                       'can be used to assign a profile time).')
     return ds
 
-def _convert_time_from_elapsed(ds, header_info, epoch = '1970-01-01'):
+def _convert_time_from_elapsed(ds, header_info, 
+        epoch = '1970-01-01', start_time_NMEA = False):
     '''
     Convert TIME_ELAPSED (sec)
     to TIME_SAMPLE (days since 1970-01-01)
     
-    Only sensible reference I could fnd is here;
+    Only sensible reference I could find is here;
     https://search.r-project.org/CRAN/refmans/oce/html/read.ctd.sbe.html
 
     (_DSE: time since epoch)
     '''
 
-    start_time_DSE = ((header_info['start_time'] 
-                                    - pd.Timestamp(epoch))
+    if start_time_NMEA:
+        ref_time = header_info['NMEA_time'] 
+    else:
+        ref_time = header_info['start_time'] 
+
+    start_time_DSE = ((ref_time- pd.Timestamp(epoch))
                                     / pd.to_timedelta(1, unit='D'))
     
     elapsed_time_days = ds.TIME_ELAPSED/86400
@@ -1367,7 +1380,9 @@ def _convert_time_from_elapsed(ds, header_info, epoch = '1970-01-01'):
 
     return ds
 
-def _convert_time_from_juld(ds, header_info, epoch = '1970-01-01'):
+
+def _convert_time_from_juld(ds, header_info, epoch = '1970-01-01',
+            start_time_NMEA = False):
     '''
     Convert TIME_ELAPSED (sec)
     to TIME (days since 1970-01-01)
@@ -1378,7 +1393,12 @@ def _convert_time_from_juld(ds, header_info, epoch = '1970-01-01'):
     (_DSE: time since epoch)
     '''
 
-    year_start = header_info['start_time'].replace(month=1, day=1, 
+    if start_time_NMEA:
+        ref_time = header_info['NMEA_time'] 
+    else:
+        ref_time = header_info['start_time'] 
+
+    year_start = ref_time.replace(month=1, day=1, 
                         hour=0, minute=0, second=0)
     time_stamp = pd.to_datetime(ds.TIME_JULD-1, origin=year_start, 
                             unit='D', yearfirst=True, ).round('1s')    
