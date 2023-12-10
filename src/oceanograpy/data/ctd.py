@@ -660,6 +660,14 @@ def hand_remove_points(D, variable, station):
     """
     edit.hand_remove_points(D, variable, station)
 
+def apply_threshold(D):
+    '''
+    Interactively select a valid range for data variables,
+    and apply thresholds to the data.
+    '''
+    edit.threshold_edit(D)
+    return D
+
 def apply_offset(D):
     """
     Apply an offset to a selected variable in a given xarray CTD Dataset.
@@ -695,14 +703,28 @@ def drop_vars_pick(D):
 
     After running this function, D will be updated.
 
-    Examples:
-    ```python
-    drop_vars(my_dataset)
-    ```
     Note: This class utilizes IPython widgets for interactive use within a Jupyter environment.
     '''
 
     edit_obj = edit.drop_vars_pick(D)
+    return edit_obj.D
+
+
+def drop_stations_pick(D):
+    '''
+    Interactive class for dropping selected time points from an xarray Dataset based on the value of STATION(TIME).
+
+    Parameters:
+    - D (xarray.Dataset): The dataset from which time points will be dropped.
+
+    Displays an interactive widget with checkboxes for each time point, showing the associated STATION.
+    Users can select time points to remove. The removal is performed by clicking the "Drop time points"
+    button. The removed time points are also printed to the output.
+
+    Note: This class utilizes IPython widgets for interactive use within a Jupyter environment.
+    '''
+
+    edit_obj = edit.drop_stations_pick(D)
     return edit_obj.D
 
 

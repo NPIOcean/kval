@@ -5,6 +5,7 @@ import ipywidgets as widgets
 from IPython.display import display, clear_output
 from oceanograpy.util import time
 from oceanograpy.data.ship_ctd_tools import _ctd_tools
+from oceanograpy.calc.numbers import order_of_magnitude
 
 ###########################
 
@@ -449,6 +450,131 @@ def apply_offset(D):
     output_widget = widgets.Output()
     display(output_widget)
 
+#########################################################################
+
+
+class drop_stations_pick:
+    '''
+
+    NOT FINISHED!!
+    Interactive class for dropping selected time points from an xarray Dataset based on the value of STATION(TIME).
+
+    Parameters:
+    - D (xarray.Dataset): The dataset from which time points will be dropped.
+
+    Displays an interactive widget with checkboxes for each time point, showing the associated STATION.
+    Users can select time points to remove. The removal is performed by clicking the "Drop time points"
+    button. The removed time points are also printed to the output.
+
+    Examples:
+    ```python
+    drop_time_points_pick(my_dataset)
+    ```
+
+    Note: This class utilizes IPython widgets for interactive use within a Jupyter environment.
+    '''
+    def __init__(self, D):
+        self.D = D
+        self.selected_time_points = []
+        self.max_stations_per_row = 3
+        self.checkbox_spacing = '0px'  # Adjust this value to control spacing
+
+        # Create Checkbox widgets with STATION labels
+        self.checkbox_widgets = [widgets.Checkbox(description=str(D['STATION'].sel(TIME=time_point).item()), indent=False) for time_point in D['TIME'].values]
+
+        # Calculate the number of checkboxes per row
+        checkboxes_per_row = min(self.max_stations_per_row, len(self.checkbox_widgets))
+
+        # Calculate the number of rows
+        num_rows = (len(self.checkbox_widgets) // checkboxes_per_row) + (1 if len(self.checkbox_widgets) % checkboxes_per_row != 0 else 0)
+
+        # Create VBox widgets for each column with adjusted spacing
+        columns = [widgets.VBox(self.checkbox_widgets[i * num_rows:(i + 1) * num_rows], layout=widgets.Layout(margin=f'0 0 0 {self.checkbox_spacing}')) for i in np.arange(checkboxes_per_row)]
+
+        # Arrange columns in an HBox
+        checkboxes_hbox = widgets.HBox(columns, layout=widgets.Layout(margin='0px'))
+
+        # Text widget
+        self.text_widget = widgets.HTML(value="Select stations to remove:")
+
+        # Create an Output widget to capture the print statement when done
+        self.output_widget = widgets.Output()
+
+        # Create buttons
+        self.remove_button = widgets.ToggleButton(value=False, description='Drop stations from dataset', button_style='success')
+
+
+        # Set the width of the buttons
+        button_width = '200px'  # Adjust the width as needed
+        self.remove_button.layout.width = button_width
+        self.exit_button = widgets.ToggleButton(value=False, description='Exit', button_style='danger')
+
+        # Attach button event handlers
+        self.remove_button.observe(lambda change: self.on_remove_button_click(change, D), names='value')
+        self.exit_button.observe(self.on_exit_button_click, names='value')
+
+        # Layout for buttons
+        hbox_layout = widgets.Layout(align_items='flex-end')
+        self.hbox_buttons = widgets.HBox([self.remove_button, self.exit_button], layout=hbox_layout)
+
+        # Function to handle checkbox changes
+        def handle_checkbox_change(change):
+            self.selected_time_points = [time_point for checkbox, time_point in zip(self.checkbox_widgets, D['TIME'].values) if checkbox.value]
+            print(f"Selected time points: {', '.join(map(str, self.selected_time_points))}")
+
+        # Attach the handle_checkbox_change function to the observe method of each checkbox
+        for checkbox in self.checkbox_widgets:
+            checkbox.observe(handle_checkbox_change, names='value')
+
+        # Display widgets
+        display(self.text_widget)
+        display(checkboxes_hbox)
+        display(self.hbox_buttons)
+        display(self.output_widget)
+
+    def on_remove_button_click(self, change, D):
+        if change['new']:
+            stations_removed = []
+            
+            for time_point in self.selected_time_points:
+                for variable in D.variables:
+                    if 'TIME' in D[variable].dims:
+                        stations_removed.append(f"{variable}_"
+                                f"{str(self.D.STATION.sel(TIME=self.D['TIME'] == time_point).values[0])}")
+            
+            # Perform the removal after collecting all items to remove
+            for time_point in self.selected_time_points:
+                for variable in D.variables:
+                    if 'TIME' in D[variable].dims:
+                        index_to_remove = np.where(D['TIME'].values == time_point)[0]
+                        
+                        # Remove the corresponding values from the variable
+                        del D[variable][index_to_remove]
+
+            self.close_widgets()
+            with self.output_widget:
+                clear_output(wait=True)
+               # print(f'-> Removed stations: {", ".join(stations_removed)}')
+
+                self.close_widgets()
+                with self.output_widget:
+                    clear_output(wait=True)
+                   # print(f'-> Removed stations: {", ".join(stations_removed)}')
+
+    def on_exit_button_click(self, change):
+        if change['new']:
+            self.close_widgets()
+            with self.output_widget:
+                clear_output(wait=True)
+                print(' -> Exited without changing anything.')
+
+    def close_widgets(self):
+        self.text_widget.close()
+        self.hbox_buttons.close()
+        #self.output_widget.close()
+        for checkbox in self.checkbox_widgets:
+            checkbox.close()
+
 
 #########################################################################
 
@@ -545,3 +671,365 @@ class drop_vars_pick:
         self.checkbox_columns.close()
         self.text_widget.close()
         self.hbox_buttons.close()
+
+
+#########################################################################
+
+
+def threshold_edit(d):
+    """
+    Interactive tool for threshold editing of a variable in a dataset.
+
+    Parameters:
+    - d (xarray.Dataset): The input dataset containing the variable to be threshold-edited.
+
+    Usage:
+    Call this function with the dataset as an argument to interactively set threshold values and visualize the impact on the data.
+
+    Returns:
+    None
+    """
+    
+    def get_slider_params(d, variable):
+        """
+        Helper function to calculate slider parameters based on the variable's data range.
+        A little clunky as we have to deal with floating point errors to get nice output.
+
+        Also used to get order of magnitude, so we output the order of magnitude of the step. 
+
+        Parameters:
+        - d (xarray.Dataset): The input dataset.
+        - variable (str): The variable for which slider parameters are calculated.
+
+        Returns:
+        Tuple (float, float, float, int): Lower floor, upper ceil, step, order of magnitude step.
+        """
+        upper = float(d[variable].max())
+        lower = float(d[variable].min())
+
+        range = upper-lower
+        oom_range = order_of_magnitude(range)
+        oom_step = oom_range-2
+        step = 10**oom_step
+        
+        lower_floor = np.round(np.floor(lower*10**(-oom_step))*10**(oom_step), -oom_step)
+        upper_ceil = np.round(np.ceil(upper*10**(-oom_step))*10**(oom_step), -oom_step)
+        
+        return lower_floor, upper_ceil, step, oom_step
+
+
+    # Get the list of available variables
+    variable_names = _ctd_tools._get_profile_variables(d)
+
+    # Dropdown menu for variable selection
+    variable_dropdown = widgets.Dropdown(
+        options=variable_names,
+        value=variable_names[0],
+        description='Variable:'
+    )
+
+    # Function to update plots based on variable, xvar, and max depth selection
+    def update_plots(min_value, max_value, variable):
+        """
+        Helper function to update plots based on variable, min, and max values.
+
+        Parameters:
+        - min_value (float): Minimum threshold value.
+        - max_value (float): Maximum threshold value.
+        - variable (str): The variable being threshold-edited.
+
+        Returns:
+        None
+        """
+        try:
+            previous_fig = plt.gcf()
+            plt.close(previous_fig)
+        except:
+            pass
+
+        fig = plt.figure(figsize=(6, 3))
+        ax0 = plt.subplot2grid((1, 1), (0, 0))
+        fig.canvas.header_visible = False  # Hide the figure header
+
+        var_range = (np.nanmin(d[variable].values), np.nanmax(d[variable].values))
+        var_span = var_range[1] - var_range[0]
+
+        hist_all = ax0.hist(d[variable].values.flatten(), bins=100, range=var_range, color='tab:orange',
+                            alpha=0.7, label='Distribution outside range')
+
+        d_reduced = d.where((d[variable] >= min_value) & (d[variable] <= max_value))
+
+        # Count non-nan values in each dataset
+        count_valid_d = int(d[variable].count())
+        count_valid_d_reduced = int(d_reduced[variable].count())
+
+        # Calculate the number of points that would be dropped by the threshold cut
+        points_cut = count_valid_d - count_valid_d_reduced
+        points_pct = points_cut / count_valid_d * 100
+
+        ax0.set_title(
+            f'Histogram of {variable}', fontsize = 10)
+
+        ax0.hist(d_reduced[variable].values.flatten(), bins=100,
+                 range=var_range, color='tab:blue', alpha=1,
+                 label='Distribution inside range')
+
+        ax0.set_xlabel(f'[{d[variable].units}]')
+        ax0.set_ylabel('Frequency')
+        var_span = np.nanmax(d[variable].values) - np.nanmin(d[variable].values)
+        ax0.set_xlim(np.nanmin(d[variable].values) - var_span * 0.05, np.nanmax(d[variable].values) + var_span * 0.05)
+
+        # Vertical lines for range values
+        ax0.axvline(x=min_value, color='k', linestyle='--', label='Min Range')
+        ax0.axvline(x=max_value, color='k', linestyle=':', label='Max Range')
+        ax0.legend()
+
+        # Display the updated plot
+        clear_output(wait=True)
+        plt.tight_layout()
+        plt.show()
+
+        # Update the cut information text
+        update_cut_info_text(variable, points_cut, points_pct)
+
+    def apply_cut(_):
+        """
+        Apply the threshold cut to the selected variable. Makes suitable changes to the metadata (variable attributes)
+
+        Parameters:
+        - _: Unused parameter.
+
+        Returns:
+        None
+        """
+        variable = variable_dropdown.value
+
+        lower_floor, upper_ceil, step, oom_step = get_slider_params(d, variable)
+        
+        min_value = np.round(np.floor(min_slider.value*10**(-oom_step))*10**(oom_step), -oom_step)  
+        max_value = np.round(np.floor(max_slider.value*10**(-oom_step))*10**(oom_step), -oom_step)  
+        
+        var_max = float(d[variable].max())
+        var_min = float(d[variable].min())
+        unit = d[variable].units
+        
+        if unit == '1':
+            unit=''
+    
+        if min_value<=var_min and max_value>=var_max:
+            threshold = None
+        elif min_value<=var_min and max_value<var_max:
+            threshold = True
+            thr_str = f'Rejected all data above {max_value} {unit}.'
+            d[variable].attrs['valid_max'] = max_value
+        elif min_value>var_min and max_value>=var_max:
+            threshold = True
+            thr_str = f'Rejected all data below {min_value} {unit}.'
+            d[variable].attrs['valid_min'] = min_value
+        elif min_value>var_min and max_value<var_max:
+            threshold = True
+            thr_str = f'Rejected all data outside ({min_value}, {max_value}) {unit}.'
+            d[variable].attrs['valid_max'] = max_value
+            d[variable].attrs['valid_min'] = min_value
+
+        if threshold:
+            # Count non-nan values in the dataset
+            count_valid_before = int(d[variable].count())
+    
+            # Apply the cut
+            d[variable] = d[variable].where((d[variable] >= min_value) & (d[variable] <= max_value), np.nan)
+            
+            # Count non-nan values in the dataset
+            count_valid_after = int(d[variable].count())
+    
+            # Calculate the number of points that would be dropped by the threshold cut
+            points_cut = count_valid_before - count_valid_after
+            points_pct = points_cut / count_valid_before * 100
+
+            # Add info to metadata variable
+            count_str = f'This removed {points_cut} data points ({points_pct:.1f}%).'
+
+            if 'threshold_editing' in d[variable].attrs.keys(): 
+                d[variable].attrs['threshold_editing']+= f'\n{thr_str} {count_str}'
+            else:
+                d[variable].attrs['threshold_editing']= f'{thr_str} {count_str}'
+
+            
+            # Update plots
+            update_plots(min_value, max_value, variable)
+
+    
+    # Create a button to minimize the plot
+    close_button = widgets.Button(description="Exit", 
+                                  style={'button_color': '#FF9999'})
+
+    def close_plot(_):
+        # Resize the figure to 0 and close it
+        fig = plt.gcf()
+        fig.set_size_inches(0, 0)
+        widgets_collected.close()
+        plt.close(fig)
+
+    # Function to reset sliders
+    def reset_sliders(_):
+        min_slider.value = min_slider.min
+        max_slider.value = max_slider.max
+        update_plot_sliders(None)
+
+
+    # Determine the range of values in the dataset
+    value_range = d[variable_dropdown.value].max() - d[variable_dropdown.value].min()
+    
+    # Calculate a suitable step size that includes whole numbers
+    step_size = max(1, np.round(value_range / 100, 2))  # Adjust 100 as needed
+
+    # Range sliders and input boxes
+    slider_min, slider_max, slider_step, oom_step = get_slider_params(d, variable_dropdown.value)
+
+
+    min_slider = widgets.FloatSlider(
+        value=slider_min,
+        min=slider_min,
+        max=slider_max,
+        step=slider_step,
+        description=f'Lower cutoff value:',
+        style={'description_width': 'initial'},
+        layout={'width': '680px'}
+    )
+
+    max_slider = widgets.FloatSlider(
+        value=slider_max,
+        min=slider_min,
+        max=slider_max,
+        step=slider_step,
+        description=f'Upper cutoff value:',
+        style={'description_width': 'initial'},
+        layout={'width': '680px'}
+    )
+    
+        
+    # Numeric input boxes for min and max values
+    min_value_text = widgets.FloatText(
+        value=d[variable_dropdown.value].min(),
+        description='Min Value:',
+        style={'description_width': 'initial'},
+        layout={'width': '200px'}
+    )
+    
+    max_value_text = widgets.FloatText(
+        value=d[variable_dropdown.value].max(),
+        description='Max Value:',
+        style={'description_width': 'initial'},
+        layout={'width': '200px'}
+)
+
+    reset_button = widgets.Button(description="Reset Sliders")
+    reset_button.on_click(reset_sliders)
+
+    apply_button = widgets.Button(
+        description=f"Apply cut to {variable_dropdown.value}",
+        style={'button_color': '#99FF99'})
+    apply_button.on_click(apply_cut)
+
+    # Text widget to display the cut information
+    cut_info_text = widgets.Text(value='', description='', disabled=True, layout={'width': '600px'}, style={'color': 'black'})
+
+    # Function to update the cut information text
+    def update_cut_info_text(variable, points_cut, points_pct):
+        text = f'This cut would reduce {variable} by {points_cut} data points ({points_pct:.1f}%).'
+        cut_info_text.value = text
+        
+    def update_apply_button_label(change):
+        apply_button.description = f"Apply cut to {change.new}"
+    
+    # Observer for min value text box
+    def update_min_slider(change):
+        min_slider.value = min_value_text.value
+    
+    # Observer for max value text box
+    def update_max_slider(change):
+        max_slider.value = max_value_text.value
+    
+    # Observer for min slider
+    def update_min_value(change):
+        min_value_text.value = min_slider.value
+    
+    # Observer for max slider
+    def update_max_value(change):
+        max_value_text.value = max_slider.value
+
+    
+    # Observer for variable dropdown
+    def update_sliders(change):
+        variable = change.new
+        slider_min, slider_max, slider_step, oom = get_slider_params(d, variable)
+
+        max_slider.min, max_slider.max = -1e9, 1e9
+        min_slider.min, min_slider.max = -1e9, 1e9
+
+        try:
+            max_slider.min = slider_min
+            max_slider.max = slider_max
+        except:
+            max_slider.max = slider_max
+            max_slider.min = slider_min
+        try:
+            min_slider.min = slider_min
+            min_slider.max = slider_max
+        except:
+            min_slider.max = slider_max
+            min_slider.min = slider_min
+            
+        min_slider.description = f'Lower cutoff value (units: {d[variable_dropdown.value].units}):'
+        max_slider.description = f'Upper cutoff value (units: {d[variable_dropdown.value].units}):'
+
+        min_slider.value = min_slider.min
+        max_slider.value = max_slider.max
+        min_slider.step = slider_step 
+        max_slider.step = slider_step 
+
+        # Rebuild the sliders every time the variable changes
+        display(widgets_collected)
+
+
+
+    variable_dropdown.observe(update_sliders, names='value')
+    variable_dropdown.observe(update_apply_button_label, names='value')
+    
+    # Observer for sliders
+    def update_plot_sliders(change):
+        if change is not None:  # Check if change is None to prevent closing the figure on reset
+            update_plots(min_slider.value, max_slider.value, variable_dropdown.value)
+
+    min_slider.observe(update_plot_sliders, names='value')
+    max_slider.observe(update_plot_sliders, names='value')
+
+    # Set up observers
+    min_slider.observe(update_min_value, names='value')
+    max_slider.observe(update_max_value, names='value')
+    min_value_text.observe(update_min_slider, names='value')
+    max_value_text.observe(update_max_slider, names='value')
+
+    close_button.on_click(close_plot)
+
+    reset_button = widgets.Button(description="Reset Sliders")
+    reset_button.on_click(reset_sliders)
+
+    # Use interactive to update plots based on variable, xvar, and max depth selection
+    out = widgets.interactive_output(update_plots,
+                                     {'min_value': min_slider, 'max_value': max_slider, 'variable': variable_dropdown})
+
+   # widgets_collected = widgets.VBox([widgets.HBox([variable_dropdown, apply_button, reset_button]),
+   #                                   widgets.HBox([min_slider]), max_slider, out, close_button])
+    
+    # Include the new widgets in the final layout
+    widgets_collected = widgets.VBox([
+        widgets.HBox([variable_dropdown, apply_button, reset_button, close_button]),
+        widgets.HBox([min_slider, min_value_text]),
+        widgets.HBox([max_slider, max_value_text]),
+        cut_info_text, widgets.HBox([out, ])
+    ])
+    
+
+    # Display the initial state of the title text
+    display(widgets_collected)

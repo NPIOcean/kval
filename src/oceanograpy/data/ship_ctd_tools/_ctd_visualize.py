@@ -540,7 +540,7 @@ def ctd_contours(D):
 
 def _cmap_picker(varnm):
     '''
-    Choose the appropriate colormap fir different variables.
+    Choose the appropriate colormap for different variables.
     '''
     cmap_name = 'amp'
     if 'TEMP' in varnm:
