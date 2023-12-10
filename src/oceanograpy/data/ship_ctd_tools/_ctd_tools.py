@@ -432,8 +432,6 @@ def join_cruise_btl(datasets, verbose = True,
     else:
         cruise = '!! CRUISE !!'
         
-        print('\nNOTE: No cruise ID found in the dataset. Remember to assign!'
-                      '\n-> ds = .set_ctd_attr(N, "cruise_name").')
     N['CRUISE'] =  xr.DataArray(cruise, dims=())
     N['CRUISE'].attrs = {'long_name':'Cruise ID',}
 
@@ -450,7 +448,7 @@ def join_cruise_btl(datasets, verbose = True,
     # Delete some non-useful attributes (that are only relevant to individual
     # profiles)
     del_attrs = ['SBE_processing_date', 'start_time_source', 'station', 
-                 'start_time', 'SBE_flags_applied']
+                 'start_time', 'SBE_flags_applied', 'latitude', 'longitude']
     
     for attr in del_attrs:
         if attr in N.attrs:
@@ -607,13 +605,15 @@ def _datasets_from_cnvlist(cnv_list,
 
 def _datasets_from_btllist(btl_list, 
                            station_from_filename = False,
-                           verbose = True):
+                           verbose = True, start_time_NMEA = False,
+                           time_adjust_NMEA = False):
     '''
     Get a list of profile xr.Datasets from a list of .btl files. 
     '''
-    print(btl_list)
     dataset_list = [sbe.read_btl(fn, time_dim=True, 
-                        station_from_filename = station_from_filename,) 
+                        station_from_filename = station_from_filename,
+                        start_time_NMEA = start_time_NMEA,
+                        time_adjust_NMEA = time_adjust_NMEA) 
                        for fn in btl_list]
     
 

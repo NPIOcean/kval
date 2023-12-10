@@ -99,6 +99,8 @@ def dataset_from_btl_dir(
     path: str,
     station_from_filename: bool = False,
     time_warnings: bool = True,
+    start_time_NMEA: bool = False,
+    time_adjust_NMEA: bool = False,
     verbose: bool = True
 ) -> xr.Dataset:
     """
@@ -114,7 +116,8 @@ def dataset_from_btl_dir(
     """
     btl_files = tools._btl_files_from_path(path)
     profile_datasets = tools._datasets_from_btllist(
-        btl_files, verbose = verbose)
+        btl_files, verbose = verbose, start_time_NMEA = start_time_NMEA,
+        time_adjust_NMEA = time_adjust_NMEA)
     D = tools.join_cruise_btl(profile_datasets,
         verbose=verbose)
 

@@ -203,13 +203,14 @@ def read_cnv(
     return ds
 
 
-
 def read_btl(source_file, verbose = False, 
              time_dim = True,
              station_from_filename= False,
-             start_time_NMEA = True):
+             start_time_NMEA = True, 
+             time_adjust_NMEA = False):
     '''
-    ADD DOCSTRING!!
+    time_adjust_NMEA: Use this if the "start time" in the file
+    header is incorrect (occasionally seems to be reset to 2000-1-1)  
     '''
 
     # Parse the header
@@ -233,8 +234,25 @@ def read_btl(source_file, verbose = False,
     # Add a (0-D) TIME dimension
     time_dim = True
     if time_dim:
+
         ds = _add_time_dim_profile(ds)
     
+
+        if time_adjust_NMEA:
+
+
+            # Calculate the difference bewteen nmae and start time in days
+            diff_days = ((header_info['NMEA_time'] - header_info['start_time'])
+                             .total_seconds() / (24 * 3600))
+            
+            # Hold on to variable attributes
+            time_attrs = ds.TIME.attrs
+
+            # Apply the offset to TIME
+            ds = ds.assign_coords(TIME=ds.TIME.values + diff_days)
+
+            # Reapply variable attributes
+            ds.TIME.attrs = time_attrs
     return ds 
 
 
@@ -243,7 +261,7 @@ def read_header(filename: str) -> dict:
     Reads a SBE .cnv (or .hdr, .btl) file and returns a dictionary with various
     metadata parameters extracted from the header.
 
-    NOTE: Only tested for .cnv.
+    NOTE: Only tested for .cnv and .btl.
 
     Parameters:
     ----------
@@ -578,7 +596,7 @@ def _read_btl_column_data_xr(source_file, header_info, verbose = False):
 
     ds['NISKIN_NUMBER'].attrs = {'long_name':'Niskin bottle number',
         'comment': 'Designated number for each physical Niskin bottle '
-            'on the CTD rosette (typically e.g. 1-24).'
+            'on the CTD rosette (typically e.g. 1-24, 1-11).'
             ' Bottles may be closed at different depths at different stations. '}
 
     return ds
@@ -1104,7 +1122,8 @@ def _add_header_attrs(ds, header_info, station_from_filename = False,
         station_from_filename = (
             header_info['source_file'].replace(
             '.cnv', '').replace('.CNV', '')
-            .replace('_bin', '').replace('_BIN', ''))
+            .replace('_bin', '').replace('_BIN', '')
+            .replace('.btl', '').replace('.BTL', ''))
         
         ds.attrs['station'] = station_from_filename
 

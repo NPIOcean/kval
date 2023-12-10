@@ -12,7 +12,6 @@ about that.
 import matplotlib.pyplot as plt
 import ipywidgets as widgets
 from IPython.display import display
-import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 from oceanograpy.util import time
 from oceanograpy.data.ship_ctd_tools import _ctd_tools 
