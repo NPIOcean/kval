@@ -13,9 +13,7 @@ import xarray as xr
 from oceanograpy.data.ship_ctd_tools import _ctd_tools as tools
 from oceanograpy.data.ship_ctd_tools import _ctd_visualize as viz
 from oceanograpy.data.ship_ctd_tools import _ctd_edit as edit
-
 from oceanograpy.io import matfile
-
 import re
 from collections import Counter
 from oceanograpy.util import time
@@ -122,7 +120,6 @@ def dataset_from_btl_dir(
         verbose=verbose)
 
     return D
-
 
 
 def metadata_auto(D, NPI = True,):
@@ -261,6 +258,18 @@ def to_netcdf(D, path, file_name = None, convention_check = False, add_to_histor
         print('Running convention checker:')
         check_conventions.check_file(file_path)
 
+
+#############
+
+def from_netcdf(path_to_file):
+    '''
+    Import a netCDF file - e.g. one previously generated
+    with these tools.
+    '''
+
+    d = xr.open_dataset(path_to_file, decode_cf = False)
+
+    return d
 
 #############
 
