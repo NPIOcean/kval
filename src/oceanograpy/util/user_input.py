@@ -12,7 +12,7 @@ from IPython.display import display, clear_output, Markdown
 ## Enter attributes using inteactive widgets
 # Can probably refactor this..
     
-def set_attr_textbox(D, attr, rows=1, cols=50):
+def set_attr_textbox(D, attr, rows=1, cols=50, initial_value = None):
     """
     Create a widget for setting a text attribute with a text box.
 
@@ -34,12 +34,14 @@ def set_attr_textbox(D, attr, rows=1, cols=50):
         vbox.close()
 
         
-    prompt = (
+    prompt1 = (
         f"Enter the desired value for the "
         f"<span style='color: blue; font-weight: bold;'>{attr}</span>"
-        " global attribute:"
+        ' global attribute:'
     )
-    text_input = widgets.Textarea(value='', rows=rows, cols=cols)
+    prompt2 = '(Click "Submit" button to apply to dataset)'
+    text_input = widgets.Textarea(rows=rows, cols=cols, 
+                                  value = initial_value)
     
     # Create a button widget
     enter_button = widgets.Button(description="Submit")
@@ -49,7 +51,8 @@ def set_attr_textbox(D, attr, rows=1, cols=50):
         lambda b: _on_button_click(b, D, attr, text_input))
     
     # Create a VBox to arrange the prompt, text box, and button
-    vbox = widgets.VBox([widgets.HTML(value=prompt), text_input, enter_button])
+    vbox = widgets.VBox([widgets.HTML(value=prompt1), widgets.HTML(value=prompt2),
+                         text_input, enter_button])
     
     # Display the VBox
     display(vbox)
@@ -57,7 +60,7 @@ def set_attr_textbox(D, attr, rows=1, cols=50):
     return D  # Return the modified dictionary
 
 
-def set_var_attr_textbox(D, varnm, attr, rows=1, cols=50):
+def set_var_attr_textbox(D, varnm, attr, rows=1, cols=50, initial_value = None):
     """
     Create a widget for setting a variable text attribute with a text box.
 
@@ -79,12 +82,15 @@ def set_var_attr_textbox(D, varnm, attr, rows=1, cols=50):
         # Close the widget
         vbox.close()
 
-    prompt = (
+    prompt1 = (
         f"Enter the desired value for the "
         f"<span style='color: blue; font-weight: bold;'>{attr}</span>"
-        f" attribute of variable {varnm}:"
+        f' attribute of variable {varnm}:'
     )
-    text_input = widgets.Textarea(value='', rows=rows, cols=cols)
+    prompt2 = '(Click "Submit" button to apply to dataset)'
+
+    text_input = widgets.Textarea(rows=rows, cols=cols, 
+                                  value = initial_value)
     
     # Create a button widget
     enter_button = widgets.Button(description="Submit")
@@ -93,7 +99,8 @@ def set_var_attr_textbox(D, varnm, attr, rows=1, cols=50):
     enter_button.on_click(on_button_click)
     
     # Create a VBox to arrange the prompt, text box, and button
-    vbox = widgets.VBox([widgets.HTML(value=prompt), text_input, enter_button])
+    vbox = widgets.VBox([widgets.HTML(value=prompt1), widgets.HTML(value=prompt2),
+                         text_input, enter_button])
     
     # Display the VBox
     display(vbox)
@@ -102,7 +109,7 @@ def set_var_attr_textbox(D, varnm, attr, rows=1, cols=50):
 
 
 
-def set_attr_pulldown(D, attr, options_with_comments):
+def set_attr_pulldown(D, attr, options_with_comments, initial_value = None):
     """
     Create a widget for setting an attribute with a pulldown menu and optional comments.
 
@@ -130,9 +137,12 @@ def set_attr_pulldown(D, attr, options_with_comments):
 
         
     if options_with_comments and all(isinstance(opt, list) for opt in options_with_comments):
+
         allowed_options, option_comments = zip(*options_with_comments)
-        dropdown = widgets.Dropdown(options=allowed_options, value=None, 
+
+        dropdown = widgets.Dropdown(options=allowed_options, value=initial_value, 
             style={'description_width': 'initial', 'width': '700px'})
+        
         dropdown_label = widgets.HTML(f"Attribute: <b style='color: blue;'>{attr}</b>")
         comment_box = widgets.Textarea(value='', disabled=True, layout=widgets.Layout(width='700px'))
         comment_box_label = widgets.Label("Description:")
@@ -169,7 +179,7 @@ def set_attr_pulldown(D, attr, options_with_comments):
 
 
 
-def set_var_attr_pulldown(D, varnm, attr, options_with_comments):
+def set_var_attr_pulldown(D, varnm, attr, options_with_comments, initial_value = None):
     """
     Create a widget for setting a variable attribute with a pulldown menu and optional comments.
 
@@ -199,8 +209,11 @@ def set_var_attr_pulldown(D, varnm, attr, options_with_comments):
         
     if options_with_comments and all(isinstance(opt, list) for opt in options_with_comments):
         allowed_options, option_comments = zip(*options_with_comments)
-        dropdown = widgets.Dropdown(options=allowed_options, value=None, 
-            style={'description_width': 'initial', 'width': '700px'})
+
+        dropdown = widgets.Dropdown(options=allowed_options, value=initial_value, 
+            style={'description_width': 'initial', 'width': '700px'}, 
+
+                                  initial_value = initial_value)
         dropdown_label = widgets.HTML(f"Attribute: <b style='color: blue;'>{attr}</b>")
         comment_box = widgets.Textarea(value='', disabled=True, layout=widgets.Layout(width='700px'))
         comment_box_label = widgets.Label("Description:")

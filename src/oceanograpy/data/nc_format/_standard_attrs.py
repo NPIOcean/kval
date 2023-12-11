@@ -30,6 +30,13 @@ standard_var_attrs_ctd = {
         'valid_min' : 0.0,
         'valid_max' : 50.0,
     },
+    'ATTN': {
+        'standard_name': 'volume_beam_attenuation_coefficient_of_radiative_flux_in_sea_water',
+        'units': 'm-1',
+        'long_name': 'Beam attenuation coefficient',
+        'valid_min' : 0.0,
+        'valid_max' : 100.0,
+    },
     'DOXY': {
         'standard_name': 'volume_fraction_of_oxygen_in_sea_water',# Check!
         'units': 'ml l-1',
@@ -54,14 +61,14 @@ standard_var_attrs_ctd = {
         'valid_max' : 1000.0,
     },
     'CHLA': {
-
-        'standard_name': 'mass_concentration_of_chlorophyll_in_sea_water',
+        'standard_name': 'chlorophyll_concentration_in_sea_water',
         'units': 'mg m-3',
         'long_name': 'Chlorophyll-A',
         'valid_min' : -1.9,
         'valid_max' : 100.0,
     },
     'CHLA_instr': {
+        'standard_name': 'chlorophyll_concentration_in_sea_water',
         'long_name': 'Chlorophyll-A from CTD fluorometer. Not calibrated with water sample chlorophyll measurements.',
         'valid_min' : -1.9,
         'valid_max' : 100.0,
@@ -71,7 +78,8 @@ standard_var_attrs_ctd = {
                    ' realistic absolute values. No correction for near-surface fluorescence quenching '
                    '(see e.g. https://doi.org/10.4319/lom.2012.10.483) has been applied.')
     },
-    'CHLA_fluorescence': { # Used by Geli
+    'CHLA_fluorescence': {
+        'standard_name': 'chlorophyll_concentration_in_sea_water',
         'long_name': 'Chlorophyll-A from CTD fluorometer. Not calibrated with water sample chlorophyll measurements.',
         'valid_min' : -1.9,
         'valid_max' : 100.0,
@@ -80,6 +88,14 @@ standard_var_attrs_ctd = {
         'comment':('Nominal units are [mg m-3], but water sample calibrations are necessary in order to produce'
                    ' realistic absolute values. No correction for near-surface fluorescence quenching '
                    '(see e.g. https://doi.org/10.4319/lom.2012.10.483) has been applied.')
+    },
+    'CDOM_instr': {
+        'long_name': ('Colored dissolved organic matter (CDOM) from CTD fluorometer. '
+            'Not calibrated with water sample chlorophyll measurements.'),
+        'processing_level':'Instrument data that has been converted to physical values',
+        'QC_indicator':'unknown',
+        'comment':('Nominal units are [mg m-3], but water sample calibrations are necessary in order to produce'
+                   ' realistic absolute values.')
     },
     'PRES': {
         'standard_name': 'sea_water_pressure',
@@ -91,6 +107,7 @@ standard_var_attrs_ctd = {
         'axis': 'Z',
     },
     'SVEL': {
+        'standard_name':'speed_of_sound_in_sea_water',
         'units': 'm s-1',
         'long_name': 'Sound velocity of seawater',
         'valid_min' : 1200.0,

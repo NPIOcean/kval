@@ -244,24 +244,33 @@ def add_gmdc_keywords_ctd(D, reset = True):
 
 
 
-def set_var_attr(D, varname, attr):
+def set_var_attr(D, variable, attr):
     '''
     Set variable attributes for a dataset or data frame.
 
     Using interactive widgets. 
     '''
 
+
+    # Check if the attribute already exists in D
+    if attr in D[variable].attrs:
+        initial_value = D[variable].attrs[attr]
+    else:
+        initial_value = None
+
     option_dict = _standard_attrs.global_attrs_options
     if attr in option_dict:
-        D = user_input.set_var_attr_pulldown(D, varname, attr, 
-                    _standard_attrs.global_attrs_options[attr])
+        D = user_input.set_var_attr_pulldown(D, variable, attr, 
+                    _standard_attrs.global_attrs_options[attr],
+                    initial_value = initial_value)
     else:
         # Make a larger box for (usually) long attributes
         if attr in ['summary', 'comment', 'acknowledgment']:
             rows = 10
         else:
             rows = 1
-        D = user_input.set_var_attr_textbox(D, varname, attr, rows)
+        D = user_input.set_var_attr_textbox(D, variable, attr, rows,
+                    initial_value = initial_value)
 
     return D
 
@@ -277,16 +286,25 @@ def set_glob_attr(D, attr):
     '''
 
     option_dict = _standard_attrs.global_attrs_options
+
+    # Check if the attribute already exists in D
+    if attr in D.attrs:
+        initial_value = D.attrs[attr]
+    else:
+        initial_value = None
+
     if attr in option_dict:
         D = user_input.set_attr_pulldown(D, attr, 
-                    _standard_attrs.global_attrs_options[attr])
+                    _standard_attrs.global_attrs_options[attr], 
+                    initial_value=initial_value)
     else:
         # Make a larger box for (usually) long attributes
         if attr in ['summary', 'comment', 'acknowledgment']:
             rows = 10
         else:
             rows = 1
-        D = user_input.set_attr_textbox(D, attr, rows)
+        D = user_input.set_attr_textbox(D, attr, rows, 
+                            initial_value=initial_value)
 
     return D
 

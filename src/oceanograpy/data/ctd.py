@@ -20,7 +20,8 @@ from oceanograpy.util import time
 import pandas as pd
 from oceanograpy.data.nc_format import conventionalize, _standard_attrs, check_conventions
 import os
-
+from IPython.display import clear_output
+from oceanograpy.data.nc_format.check_conventions import check_file_with_button
 
 ## LOADING AND SAVING DATA
 
@@ -61,6 +62,8 @@ def ctds_from_cnv_dir(
         verbose=verbose)
 
     return D
+
+
 
 
 def ctds_from_cnv_list(
@@ -128,14 +131,14 @@ def metadata_auto(D, NPI = True,):
     more nicely formatted for publication.
     '''
 
-    D = remove_numbers_in_names(D)
+    D = _remove_numbers_in_names(D)
     D = conventionalize.add_standard_var_attrs_ctd(D)
     D = conventionalize.add_standard_glob_attrs_ctd(D, NPI = NPI, 
                                                     override = False)
     D = conventionalize.add_gmdc_keywords_ctd(D)
     D = conventionalize.add_range_attrs_ctd(D)
 
-    D = reorder_attrs(D)
+    D = _reorder_attrs(D)
 
     return D
 
@@ -205,6 +208,22 @@ def quick_metadata_check(D,):
                     print(f'- {varnm}: OK')
 
 
+############
+
+def check_metadata(D):
+    '''
+    Use the IOOS compliance checker 
+    (https://github.com/ioos/compliance-checker-web)
+    to chek an nc file (CF and ACDD conventions).
+
+    Can take a file path or an xr.Dataset as input
+    
+    Output is closed with a "Close" button.
+    '''
+
+    check_file_with_button(D)
+
+
 ###########
 
 def to_netcdf(D, path, file_name = None, convention_check = False, add_to_history = True):
@@ -215,8 +234,8 @@ def to_netcdf(D, path, file_name = None, convention_check = False, add_to_histor
     '''
     # Consider moving to a more general module?
 
-    D = add_now_as_date_created(D)
-    D = reorder_attrs(D)
+    D = _add_now_as_date_created(D)
+    D = _reorder_attrs(D)
 
     if file_name == None:
         try:
@@ -511,14 +530,19 @@ def calibrate_chl(
 
 
 
-def drop_variables(D, retain_vars = ['TEMP1', 'CNDC1', 'PSAL1', 
+def _drop_variables(D, retain_vars = ['TEMP1', 'CNDC1', 'PSAL1', 
                                      'CHLA1', 'PRES'], 
                    drop_vars = None, 
                    retain_all = False
                     ):
         # Consider moving to a more general module?
         '''
-        
+        NOTE: HIDDEN FOR NOW 
+        Using teh (interactive) drop_vars_pick() for now. This function is also 
+        useful, but we shoudl think about what to call it vs _drop_variables,
+        and whether the default should be not do remove anything..
+
+
         Drop measurement variables from the dataset.
 
         Will retain variables that don't have a PRES dimension, such as
@@ -562,7 +586,45 @@ def drop_variables(D, retain_vars = ['TEMP1', 'CNDC1', 'PSAL1',
 ## Look over and consider moving some (all?) of these to 
 ## nc_attrs.conventionalize?
 
-def remove_numbers_in_names(D):
+def set_attr_glob(D, attr):
+    """
+    Set a global attribute (metadata) for the dataset.
+
+    Parameters:
+        D (xarray dataset): The dictionary representing the dataset or data frame.
+        attr (str): The global attribute name (e.g. "title").
+
+    Returns:
+        xr.Dataset: The updated xarray Dataset with the global attribute set.
+
+    Example:
+        To set an attribute 'title' in the dataset D:
+        >>> D = set_attr_var(D, 'title')
+    """
+    D = conventionalize.set_glob_attr(D, attr)
+    return D
+
+
+def set_attr_var(D, variable, attr):
+    """
+    Set a variable attribute (metadata) for a specific variable in the dataset.
+
+    Parameters:
+        D (xarray dataset): The dictionary representing the dataset or data frame.
+        variable (str): The variable name for which the attribute will be set (e.g. "PRES").
+        attr (str): The attribute name (e.g. "long_name").
+
+    Returns:
+        xr.Dataset: The updated xarray Dataset with the variable attribute set.
+
+    Example:
+        To set an attribute 'units' for the variable 'TEMP1' in the dataset D:
+        >>> D = set_attr_var(D, 'TEMP1', 'units')
+    """
+    D = conventionalize.set_var_attr(D, variable, attr)
+    return D
+
+def _remove_numbers_in_names(D):
     '''
     Remove numbers from variable names like "TEMP1", "PSAL2".
 
@@ -586,7 +648,7 @@ def remove_numbers_in_names(D):
 
     return D
 
-def add_now_as_date_created(D):
+def _add_now_as_date_created(D):
     '''
     Add a global attribute "date_created" with todays date.
     '''
@@ -598,7 +660,7 @@ def add_now_as_date_created(D):
     return D
 
 
-def reorder_attrs(D):
+def _reorder_attrs(D):
     """
     Reorder global and variable attributes of a dataset based on the 
     specified order in _standard_attrs.
@@ -722,8 +784,10 @@ def drop_vars_pick(D):
     return edit_obj.D
 
 
-def drop_stations_pick(D):
+def _drop_stations_pick(D):
     '''
+    UNFINISHED! Tabled for fixing..
+
     Interactive class for dropping selected time points from an xarray Dataset based on the value of STATION(TIME).
 
     Parameters:

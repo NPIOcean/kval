@@ -1215,6 +1215,10 @@ def _update_variables(ds, source_file):
             ds = ds.rename({old_name:new_name})
             ds[new_name].attrs['units'] = unit
 
+            if 'standard_name' in var_dict:
+                ds[new_name].attrs['standard_name'] = var_dict['standard_name'] 
+
+
             if 'sensors' in var_dict:
                 sensor_SNs = []
                 sensor_caldates = []

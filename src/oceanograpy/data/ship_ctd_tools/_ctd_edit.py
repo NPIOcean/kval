@@ -638,7 +638,6 @@ class drop_vars_pick:
          # Function to handle checkbox changes
         def handle_checkbox_change(change):
             self.selected_options = [label for checkbox, label in zip(self.checkbox_widgets, self.checkbox_labels) if checkbox.value]
-            print(f"Selected options: {', '.join(self.selected_options)}")
         
         # Attach the handle_checkbox_change function to the observe method of each checkbox
         for checkbox in self.checkbox_widgets:

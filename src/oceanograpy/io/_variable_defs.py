@@ -25,7 +25,7 @@ sensor_info_dict_SBE:
 
 SBE_name_map = { # Note: replace / with _  !
     'PRDM': {'name': 'PRES', 'units': 'dbar', 
-              'sensors':['pres_sensor']},
+              'sensors':['pres_sensor'],},
     'T090C': {'name': 'TEMP1', 'units': 'degree_Celsius', 
               'sensors':['temp_sensor_1']},
     'T190C': {'name': 'TEMP2', 'units': 'degree_Celsius', 
@@ -44,22 +44,38 @@ SBE_name_map = { # Note: replace / with _  !
               'sensors':['cndc_sensor_1']},
     'C1MS_CM': {'name': 'CNDC2', 'units': 'mS cm-1',
               'sensors':['cndc_sensor_2']},
-    'SBEOX0MM_KG': {'name': 'DOXY1_instr', 'units': 'micromol kg-1',
-              'sensors':['oxy_sensor_1']},
-    'SBEOX1MM_KG': {'name': 'DOXY2_instr', 'units': 'micromol kg-1',
-              'sensors':['oxy_sensor_2']},
-    'SBOX0MM_KG': {'name': 'DOXY1_instr', 'units': 'micromol kg-1',
-              'sensors':['oxy_sensor_1']},
-    'SBOX1MM_KG': {'name': 'DOXY2_instr', 'units': 'micromol kg-1',
-              'sensors':['oxy_sensor_2']},
+    'SBEOX0MM_KG': {'name': 'DOXY1_instr', 'units': 'micromole kg-1',
+              'sensors':['oxy_sensor_1'],
+              'standard_name': 
+              'moles_of_oxygen_per_unit_mass_in_sea_water'},
+    'SBEOX1MM_KG': {'name': 'DOXY2_instr', 'units': 'micromole kg-1',
+              'sensors':['oxy_sensor_2'],
+              'standard_name': 
+              'moles_of_oxygen_per_unit_mass_in_sea_water'},
+    'SBOX0MM_KG': {'name': 'DOXY1_instr', 'units': 'micromole kg-1',
+              'sensors':['oxy_sensor_1'],
+              'standard_name': 
+              'moles_of_oxygen_per_unit_mass_in_sea_water'},
+    'SBOX1MM_KG': {'name': 'DOXY2_instr', 'units': 'micromole kg-1',
+              'sensors':['oxy_sensor_2'],
+              'standard_name': 
+              'moles_of_oxygen_per_unit_mass_in_sea_water'},
     'SBEOX0ML_L': {'name': 'DOXY1_instr', 'units': 'mL l-1',
-              'sensors':['oxy_sensor_1']},
+              'sensors':['oxy_sensor_1'],
+              'standard_name': 
+              'volume_fraction_of_oxygen_in_sea_water'},
     'SBEOX1ML_L': {'name': 'DOXY2_instr', 'units': 'mL l-1',
-              'sensors':['oxy_sensor_2']},
+              'sensors':['oxy_sensor_2'],
+              'standard_name': 
+              'volume_fraction_of_oxygen_in_sea_water'},
     'SBEOX0MG/L': {'name': 'DOXY1_instr', 'units': 'mg l-1',
-              'sensors':['oxy_sensor_1']},
+              'sensors':['oxy_sensor_1'],
+              'standard_name': 
+              'mass_concentration_of_oxygen_in_sea_water'},
     'SBOX1MG/L': {'name': 'DOXY2_instr', 'units': 'mg l-1',
-              'sensors':['oxy_sensor_2']},
+              'sensors':['oxy_sensor_2'],
+              'standard_name': 
+              'mass_concentration_of_oxygen_in_sea_water'},
     'SBEOX0V': {'name': 'OXYV1', 'units': 'volt',
               'sensors':['oxy_sensor_1']},
     'SBEOX1V': {'name': 'OXYV2', 'units': 'volt',
@@ -125,7 +141,6 @@ var_attrs = {
     },
     'CRUISE': {
         'long_name': 'Cruise ID',
-        'cf_role': 'trajectory_id',
     },
     'TEMP': {
         'standard_name': 'sea_water_temperature',
@@ -142,6 +157,7 @@ var_attrs = {
         'units': 'S m-1',
         'long_name': 'electrical conductivity',
     },
+
     'PRES': {
         'standard_name': 'sea_water_pressure',
         'units': 'dbar',
