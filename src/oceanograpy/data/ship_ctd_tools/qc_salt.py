@@ -20,7 +20,8 @@ import ipywidgets as widgets
 from IPython.display import display
 
 
-def setup_sal_qc(salts_excel_sheet, log_excel_sheet, btl_dir, bath_temp,
+def setup_sal_qc(salts_excel_sheet, log_excel_sheet, btl_dir, 
+                 bath_temp = None,
                  sample_column ='Sample:', 
                  salt_column = 'Median -mean offset',):
     """
@@ -36,7 +37,8 @@ def setup_sal_qc(salts_excel_sheet, log_excel_sheet, btl_dir, bath_temp,
     - btl_dir (str): 
         Path to the directory containing CTD .btl files.
     - bath_temp (float): 
-        Bath temperature used for salinity conversion (when PSAL<2).
+        Bath temperature used for salinity conversion (when PSAL<2). If None,
+        we will attempt to read it from the salts sheet.
     - sample_column:
         Header of the column of salts_excel_sheet that contains sample numbers.
     - salt_column:
@@ -56,10 +58,14 @@ def setup_sal_qc(salts_excel_sheet, log_excel_sheet, btl_dir, bath_temp,
     """
     
     # Read sample numbers and salinometer readings from log and salts sheets
+    print('Reading log sheet..', )
     ds_log = read_log_sheet(log_excel_sheet)
+    print('Reading salts sheet..',)
     df_salt = read_salts_sheet(salts_excel_sheet, bath_temp)
 
+
     # Read CTD data from .btl files
+    print('Reading .btl data:',)
     ds_btl = ctd.dataset_from_btl_dir(btl_dir)
 
     # Fill salinometer values into ds_log dataset
@@ -106,8 +112,20 @@ def setup_sal_qc(salts_excel_sheet, log_excel_sheet, btl_dir, bath_temp,
           ({ds_btl.source_files.lower()}).
     '''
     ds_combined.attrs['comment'] = comment
-    ds_combined.attrs['salinometer_bath_temperature'] = float(bath_temp)
 
+    if bath_temp:
+        ds_combined.attrs['salinometer_bath_temperature'] = (
+            f'{float(bath_temp)} C (fixed)')
+    else:
+        bath_temp_min = df_salt['BATH_TEMP'].min()
+        bath_temp_max = df_salt['BATH_TEMP'].max()
+        if bath_temp_min==bath_temp_max:
+            ds_combined.attrs['salinometer_bath_temperature'] = (
+                f'Constant {float(bath_temp_min)} C (read from salts sheet)')
+        else:
+            ds_combined.attrs['salinometer_bath_temperature'] = (
+                f'Variable: {float(bath_temp_min)} to {float(bath_temp_max)} C'
+                ' (read from salts sheet)')
     return ds_combined
 
 
@@ -132,25 +150,34 @@ def read_log_sheet(log_excel_sheet):
     while salinity_start_row==None:
         try:
             salinity_start_row = df_log.index[
-                df_log.iloc[:, try_column].upper() == 'SALINITY'][0]
+                df_log.iloc[:, try_column] == 'Salinity'][0]
         except:
             try_column += 1
-
+            if try_column>10: # Avoid infinite loop if we don't find anything..
+                raise Exception('Failed to find "Salinity" within the first'
+                    ' 30 rows of the salts excel sheet..')
         
     # Loop through salinity rows: Grab row nr and bottle number
     salinity_niskins = []
     salinity_rows = []
     ii = salinity_start_row
+
     still_salt = True
     while still_salt:
         salinity_niskins += [int(df_log.STN[ii])]
         salinity_rows += [ii]
+
         if isinstance(df_log.STN[ii+1], (int, float)):
             if not np.isnan(df_log.STN[ii+1]):
                 ii += 1
+            else:
+                still_salt = False # Stop loop after the final niskin 
         else:
             still_salt = False # Stop loop after the final niskin 
 
+        if ii>1000: # Avoid infinite loop if we don't find anything..
+            raise Exception('Failed to find end of salinity entries within the first'
+                ' 1000 rows of the salts excel sheet..')
     # Put together in a data .xr
     ds_log = xr.Dataset(coords = {'STATION':stations_str, 
                              'NISKIN_NUMBER':salinity_niskins},
@@ -159,19 +186,33 @@ def read_log_sheet(log_excel_sheet):
 
     return ds_log
 
-def read_salts_sheet(salts_excel_sheet, bath_temp,
+def read_salts_sheet(salts_excel_sheet, bath_temp=False,
                      sample_column ='Sample:', 
                      salt_column = 'Median -mean offset',
-                     ):
+                     bath_temp_column = 'Bath Temp',):
     
     #### Read salts file
     df = pd.read_excel(salts_excel_sheet)
-    df_salt = pd.DataFrame({'SAMPLE_NUM' : df[sample_column], 'PSAL':df[salt_column]})
+    df_salt = pd.DataFrame({'SAMPLE_NUM' : df[sample_column], 
+                            'PSAL' : df[salt_column]})
     
+    # Use bath temp if specified
+    if bath_temp:
+        df_salt['BATH_TEMP'] = np.ones(df_salt['PSAL'].shape) * bath_temp
+    # If not, try reading from the file
+    else:
+        try:
+            df_salt['BATH_TEMP'] = df[bath_temp_column]
+        except:
+            raise Exception('Could not find bath temperature '
+                f'("{bath_temp_column}") in {salts_excel_sheet}. '
+                'Consider specifying a fixed bath temperature using the'
+                ' "bath_temp" input parameter.')
+        
     ## Convert C ratio to SP
     for ii, psal in enumerate(df_salt.PSAL):
         if psal<2:
-            df_salt.loc[ii, 'PSAL'] = eos80.salt(psal, bath_temp, 0)
+            df_salt.loc[ii, 'PSAL'] = eos80.salt(psal, df_salt.loc[ii, 'BATH_TEMP'], 0)
             
     return df_salt
 
@@ -215,7 +256,7 @@ def plot_histograms(ds,  min_pres=500, psal_var=None, N=20, figsize=(7, 3.5)):
     SAL_diff = ds[psal_var] - ds.PSAL_SALINOMETER
 
     # Select samples taken at depths greater than the minimum pressure
-    SAL_diff_deep = SAL_diff.where(ds.PRES > min_pres)
+    SAL_diff_deep = SAL_diff.where(ds.PRES > min_pres).astype(float)
 
     # Calculate mean and median values
     SAL_diff_deep_mean = SAL_diff_deep.mean().values
@@ -241,7 +282,7 @@ def plot_histograms(ds,  min_pres=500, psal_var=None, N=20, figsize=(7, 3.5)):
     # Set axis labels and title
     ax.set_xlabel(f'{psal_var} (CTD)- PSAL_SALINOMETER')
     ax.set_ylabel('Frequency')
-    ax.legend()
+    leg = ax.legend()
     ax.set_title(f'Salinity comparison for samples taken at >{min_pres}'
                  f' dbar (n = {N_count})')
     ax.grid()
@@ -291,18 +332,18 @@ def plot_by_station(ds, psal_var='PSAL1', min_pres=500):
     b['PRES'] = ds.PRES.where(ds.PRES.values > float(min_pres))
 
     # Calculate the salinity difference
-    SAL_diff = (b[psal_var] - b.PSAL_SALINOMETER).values.flatten()
+    SAL_diff = (b[psal_var] - b.PSAL_SALINOMETER).values.flatten().astype(float)
 
     # Count number of samples
     N_count = b[psal_var].count().values
 
     # Calculate mean of the salinity difference
-    Sdiff_mean = np.nanmean(SAL_diff)
+    Sdiff_mean = np.nanmean(SAL_diff).astype(float)
 
     # Sort samples by SAMPLE_NUMBER
-    sample_num_sortind = np.argsort(b.SAMPLE_NUMBER.values.flatten())
-    sample_num_sorted = b.SAMPLE_NUMBER.values.flatten()[sample_num_sortind]
-    Sdiff_num_sorted = SAL_diff[sample_num_sortind]
+    sample_num_sortind = np.argsort(b.SAMPLE_NUMBER.values.astype('float').flatten())
+    sample_num_sorted = b.SAMPLE_NUMBER.values.flatten()[sample_num_sortind].astype(float)
+    Sdiff_num_sorted = SAL_diff[sample_num_sortind].astype(float)
     point_labels2 = [f"Sample #{sample_num:.0f} ({pres:.0f} dbar)" for sample_num, pres in zip(
         b['SAMPLE_NUMBER'].values.flatten()[sample_num_sortind], b['PRES'].values.flatten()[sample_num_sortind])]
 
@@ -331,6 +372,8 @@ def plot_by_station(ds, psal_var='PSAL1', min_pres=500):
     mplcursors.cursor(hover=True).connect("add", lambda sel: sel.annotation.set_text(point_labels[sel.target.index]))
 
     # Plotting on ax1
+    #return sample_num_sorted, Sdiff_num_sorted
+
     ax1.fill_between(sample_num_sorted, Sdiff_num_sorted, zorder=2, 
             color='k', lw=0.2, alpha=0.3, label='Bottle file')
     ax1.plot(sample_num_sorted, Sdiff_num_sorted, '.', zorder=2, 
@@ -355,6 +398,8 @@ def plot_by_station(ds, psal_var='PSAL1', min_pres=500):
     ax1.grid()
     leg0 = ax0.legend()
     leg1 = ax1.legend()
+    leg1.set_zorder(0)
+
     fig.suptitle(f'Salinity comparison for samples taken at >{min_pres}'
                  f' dbar (n = {N_count})')
 

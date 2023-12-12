@@ -443,7 +443,7 @@ def calibrate_chl(
     D: xr.Dataset,
     A: float,
     B: float,
-    chl_name_in: Optional[str] = 'CHLA1_fluorescence',
+    chl_name_in: Optional[str] = None,
     chl_name_out: Optional[str] = None,
     verbose: Optional[bool] = True,
     remove_uncal: Optional[bool] = False
@@ -468,7 +468,8 @@ def calibrate_chl(
         Linear coefficient for calibration.
     chl_name_in : str, optional
         Name of the variable containing uncalibrated chlorophyll from the instrument.
-        Default is 'CHLA1_fluorescence'.
+        Default is 'CHLA_fluorescence', will look for 'CHLA1_fluoresence' if thet doesn't 
+        exist.
     chl_name_out : str, optional
         Name of the calibrated chlorophyll variable. If not provided, it is derived from
         chl_name_in. Default is None.
@@ -482,6 +483,25 @@ def calibrate_chl(
     xr.Dataset
         Updated dataset with calibrated chlorophyll variable.
     """
+
+    # Determine the input variable name:
+    if chl_name_in == None:
+        if 'CHLA_fluorescence' in D.keys():
+            chl_name_in = 'CHLA_fluorescence'
+        elif 'CHLA1_fluorescence' in D.keys():
+            chl_name_in = 'CHLA1_fluorescence'
+        else:
+            raise Exception('Did not find "CHLA_fluorescence"'
+            ' or "CHLA1_fluorescence" in dataset. Please specify '
+            'the variable name of uncalibrated chlorophyll using '
+            'the *chl_name_in* flag.')
+    else:
+         if chl_name_in not in D.keys():
+            raise Exception(f'Did not find {chl_name_in}'
+            ' in the dataset. Please specify '
+            'the variable name of uncalibrated chlorophyll using '
+            'the *chl_name_in* flag.')
+         
     # Determine the output variable name for calibrated chlorophyll:
     # If we don't specify a variable name for the calibrated chlorophyll, the
     # default behaviour is to 
@@ -489,7 +509,6 @@ def calibrate_chl(
     #    has one), or 
     # b) Use the uncalibrated chl name with the suffix '_cal' 
     if not chl_name_out:
-        
         if '_instr' in chl_name_in or '_fluorescence' in chl_name_in:
             chl_name_out = chl_name_in.replace('_instr', '').replace('_fluorescence', '')
         else: 
@@ -508,7 +527,9 @@ def calibrate_chl(
         'coefficient_A': A,
         'coefficient_B': B,
         'comment':'No correction for near-surface fluorescence quenching '
-                   '(see e.g. https://doi.org/10.4319/lom.2012.10.483) has been applied.'
+                   '(see e.g. https://doi.org/10.4319/lom.2012.10.483) has been applied.',
+        'processing_level':'Post-recovery calibrations have been applied',
+        'QC_indicator':'good data',
     }
 
     for key, item in new_attrs.items():
@@ -523,7 +544,8 @@ def calibrate_chl(
 
     # Print
     if verbose:
-        print(f'Added calibrated Chl-A ("{chl_name_out}").{remove_str}')
+        print(f'Added calibrated Chl-A ("{chl_name_out}") calculated '
+              f'from variable "{chl_name_in}".{remove_str}')
 
     return D
 
@@ -732,7 +754,9 @@ def hand_remove_points(D, variable, station):
     Note: Use the interactive plot to select points for removal, then 
     click the corresponding buttons for actions.
     """
-    edit.hand_remove_points(D, variable, station)
+    hand_remove = edit.hand_remove_points(D, variable, station)
+    D = hand_remove.d
+    return D
 
 def apply_threshold(D):
     '''
@@ -763,6 +787,7 @@ def apply_offset(D):
     """
 
     edit.apply_offset(D)
+    return D
 
 def drop_vars_pick(D):
     '''

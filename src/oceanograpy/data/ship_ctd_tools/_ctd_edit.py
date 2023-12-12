@@ -394,6 +394,12 @@ def apply_offset(D):
                 if station_buttons.value == 'Single station →':
                     station_sel = station_dropdown.value
                     station_string = f'station {station_sel}'
+                    time_at_station = D['TIME'].where(
+                        D['STATION'] == station_sel, drop=True).values[0]
+                    D[varnm_sel].loc[{'TIME': time_at_station}]  = (
+                        D[varnm_sel].loc[{'TIME': time_at_station}] + offset_value
+                        )
+
                 else:
                     station_string = 'all stations'
                     D[varnm_sel] = D[varnm_sel] + offset_value
