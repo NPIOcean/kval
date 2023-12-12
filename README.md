@@ -4,7 +4,7 @@
 
 Collection of Python functions for working with oceanography data processing and analysis.
 
-Maintained by the Oceanography section at the [Norwegian Polar Institute](www.npolar.no/en). 
+Maintained by the Oceanography section at the [Norwegian Polar Institute](https://www.npolar.no/en/). 
 
 *Current version: 0.1.0*
 
