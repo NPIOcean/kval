@@ -1,14 +1,13 @@
 # oceanogra*py*
 
-
-
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10360163.svg)](https://doi.org/10.5281/zenodo.10360163)
-
-Current version: 0.1.0 
 
 Collection of Python functions for working with oceanography data processing and analysis.
 
 Maintained by the Oceanography section at the [Norwegian Polar Institute](www.npolar.no/en). 
+
+*Current version: 0.1.0*
+
 ____
 <details>
 <summary><strong>CORE FUNCTIONALITY</strong></summary>
