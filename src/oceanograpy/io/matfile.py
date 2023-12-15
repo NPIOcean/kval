@@ -43,13 +43,15 @@ def mat_to_xr_1D(matfile, time_name = 'time', epoch = '1970-01-01'):
     # (Attempt to) parse time
     try:
         time_stamp = _parse_time(data_dict, time_name = time_name)
+        time_num = date2num(time_stamp)
+
         # Remove time variable if we successfully parsed time
         data_dict.pop(time_name)
     except:
         print(f'NOTE: Unable to parse time from the {time_name} field.')
 
     # Collect in an xr Dataset
-    ds = xr.Dataset(coords = {'TIME':time_stamp})
+    ds = xr.Dataset(coords = {'TIME':time_num})
     # Add data variables
     for varnm, item in data_dict.items():
         ds[varnm] = (('TIME'), data_dict[varnm])
@@ -57,7 +59,6 @@ def mat_to_xr_1D(matfile, time_name = 'time', epoch = '1970-01-01'):
     for attrnm, item in attr_dict.items():
         ds.attrs[attrnm] = attr_dict[attrnm]
 
-    
     # Sort chronologically
     ds = ds.sortby('TIME')
     

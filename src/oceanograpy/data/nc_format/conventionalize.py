@@ -72,6 +72,7 @@ def _get_geospatial_bounds_wkt_str(D, decimals = 2):
 
     return wkt_str
 
+
 def _get_time_coverage_duration_str(D):
     '''
     Get the time duration based on first and last time stamp on 
@@ -81,10 +82,12 @@ def _get_time_coverage_duration_str(D):
     duration_str = time.start_end_times_cftime_to_duration(start_dt, end_dt)
     return duration_str
 
-def add_standard_var_attrs_ctd(D, override = False):
+
+
+def add_standard_var_attrs(D, override = False):
     '''
     Add variable attributes 
-    as specified in oceanograpy.data.nc_format.standard_var_attrs_ctd
+    as specified in oceanograpy.data.nc_format.standard_var_attrs
 
     if _std suffix: 
         - Don't use standard_name, valid_min/max
@@ -118,9 +121,9 @@ def add_standard_var_attrs_ctd(D, override = False):
             core_name = varnm
         
         # Normal variables
-        if core_name in _standard_attrs.standard_var_attrs_ctd:
+        if core_name in _standard_attrs.standard_var_attrs:
             var_attrs_dict = (
-                _standard_attrs.standard_var_attrs_ctd[core_name].copy())
+                _standard_attrs.standard_var_attrs[core_name].copy())
             for attr, item in var_attrs_dict.items():
                 if override:
                     D[varnm].attrs[attr] = item
@@ -134,7 +137,9 @@ def add_standard_var_attrs_ctd(D, override = False):
 
         # For .btl files: Add "Average" to long_name attribute
         # Append "standard deviation of" to long_name
-        if 'source_files' in D.attrs and 'long_name' in D[varnm].attrs and D.source_files[-3:].upper == 'BTL':
+        if ('source_files' in D.attrs and 'long_name' in D[varnm].attrs 
+            and D.source_files[-3:].upper == 'BTL'):
+
             long_name = D[varnm].attrs["long_name"]
             long_name_nocap = long_name[0].lower() + long_name[1:]
             if varnm != 'NISKIN_NUMBER' and 'NISKIN_NUMBER' in D[varnm].dims: 
@@ -145,8 +150,8 @@ def add_standard_var_attrs_ctd(D, override = False):
         # Variables with _std suffix    
         if varnm.endswith('_std'):
             varnm_prefix = varnm.replace('_std', '')
-            if varnm_prefix in _standard_attrs.standard_var_attrs_ctd:
-                var_attrs_dict = _standard_attrs.standard_var_attrs_ctd[
+            if varnm_prefix in _standard_attrs.standard_var_attrs:
+                var_attrs_dict = _standard_attrs.standard_var_attrs[
                     varnm_prefix].copy()
 
                 # Don't want to use standard_name for these
@@ -163,7 +168,8 @@ def add_standard_var_attrs_ctd(D, override = False):
                             D[varnm].attrs[attr] = item
 
             # Append "standard deviation of" to long_name
-            if 'source_files' in D.attrs and 'long_name' in D[varnm].attrs and D.source_files[-3:].upper == 'BTL':
+            if ('source_files' in D.attrs and 'long_name' in D[varnm].attrs 
+                and D.source_files[-3:].upper == 'BTL'):
                 long_name = D[varnm].attrs["long_name"]
                 long_name_nocap = long_name[0].lower() + long_name[1:]
                 D[varnm].attrs['long_name'] = ('Standard deviation of '
@@ -178,8 +184,15 @@ def add_standard_var_attrs_ctd(D, override = False):
         # measured on a CTD
 
         if varnm not in ['NISKIN_NUMBER', 'TIME', 'TIME_SAMPLE']: 
-            D[varnm].attrs['coverage_content_type'] = 'physicalMeasurement'
-            D[varnm].attrs['sensor_mount'] = 'mounted_on_shipborne_profiler'
+
+            if override==False and 'coverage_content_type' in D[varnm].attrs:
+                pass
+            else:
+                D[varnm].attrs['coverage_content_type'] = 'physicalMeasurement'
+            if override==False and 'sensor_mount' in D[varnm].attrs:
+                pass
+            else:
+                D[varnm].attrs['sensor_mount'] = 'mounted_on_shipborne_profiler'
         else:
             D[varnm].attrs['coverage_content_type'] = 'coordinate'
 
@@ -195,7 +208,7 @@ def add_standard_glob_attrs_ctd(D, NPI = False, override = False):
 
     If NPI = True, also add NPI standard attribute values for things like
     "institution", "creator_name", etc, as specified in 
-    oceanograpy.data.nc_format.standard_globals_NPI_ctd
+    oceanograpy.data.nc_format.standard_globals_NPI
 
     override: governs whether to override any global attributes that 
     are already present (typically not advised..)
@@ -209,7 +222,7 @@ def add_standard_glob_attrs_ctd(D, NPI = False, override = False):
                 D.attrs[attr] = item
 
     if NPI:
-        for attr, item in _standard_attrs.standard_globals_NPI_ctd.items():
+        for attr, item in _standard_attrs.standard_globals_NPI.items():
             if attr not in D.attrs:
                 D.attrs[attr] = item
             else:
@@ -217,6 +230,38 @@ def add_standard_glob_attrs_ctd(D, NPI = False, override = False):
                     D.attrs[attr] = item
 
     return D
+
+
+def add_standard_glob_attrs_moor(D, NPI = False, override = False):
+    '''
+    Adds standard global variables for a CTD dataset as specified in
+    oceanograpy.data.nc_format.standard_attrs_global_ctd.
+
+    If NPI = True, also add NPI standard attribute values for things like
+    "institution", "creator_name", etc, as specified in 
+    oceanograpy.data.nc_format.standard_globals_NPI_moor
+
+    override: governs whether to override any global attributes that 
+    are already present (typically not advised..)
+    '''
+    
+    for attr, item in _standard_attrs.standard_attrs_global_moored.items():
+        if attr not in D.attrs:
+            D.attrs[attr] = item
+        else:
+            if override:
+                D.attrs[attr] = item
+
+    if NPI:
+        for attr, item in _standard_attrs.standard_globals_NPI.items():
+            if attr not in D.attrs:
+                D.attrs[attr] = item
+            else:
+                if override:
+                    D.attrs[attr] = item
+
+    return D
+
 
 def add_gmdc_keywords_ctd(D, reset = True):
     '''
@@ -241,6 +286,26 @@ def add_gmdc_keywords_ctd(D, reset = True):
 
 
 
+def add_gmdc_keywords_moor(D, reset = True):
+    '''
+    Adds standard GMDC variables a la 
+    "OCEANS>OCEAN TEMPERATURE>WATER TEMPERATURE"
+    reflecting the variables in the file
+    '''
+
+    gmdc_dict = _standard_attrs.gmdc_keyword_dict_moored
+    keywords = []
+
+    for varnm in D.keys():
+        for gmdc_kw in gmdc_dict:
+            if gmdc_kw in varnm:
+                keywords += [gmdc_dict[gmdc_kw]]
+    
+    unique_keywords = list(set(keywords))
+
+    D.attrs['keywords'] = ','.join(unique_keywords)
+
+    return D
 
 
 

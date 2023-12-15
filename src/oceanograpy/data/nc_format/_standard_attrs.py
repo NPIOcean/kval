@@ -1,5 +1,5 @@
 
-standard_var_attrs_ctd = {
+standard_var_attrs = {
     'STATION': {
         'long_name': 'CTD station name',
         'cf_role': 'profile_id',
@@ -106,6 +106,14 @@ standard_var_attrs_ctd = {
         'valid_max' : 12000.0,
         'axis': 'Z',
     },
+    'DEPTH': {
+        'standard_name': 'depth',
+        'units': 'm',
+        'long_name': 'Water depth',
+        'positive':'down',
+        'valid_min' : -1.0,
+        'valid_max' : 12000.0,
+    },
     'SVEL': {
         'standard_name':'speed_of_sound_in_sea_water',
         'units': 'm s-1',
@@ -150,7 +158,23 @@ standard_attrs_global_ctd = {
     'keywords_vocabulary':'NASA/GCMD Science Keywords 9.1.5',
     'standard_name_vocabulary':'CF Standard Name Table v83',
     'iso_topic_category':'oceans',
+    'platform':'Water-based Platforms>Vessels'
 }
+
+standard_attrs_global_moored = {
+    'Conventions':'ACDD-1.3, CF-1.8',
+    'standard_name_vocabulary': 'CF Standard Name Table v74',
+    'source': 'Subsurface mooring',
+    'instrument':'In Situ/Laboratory Instruments>Profilers/Sounders>CTD',
+    'data_set_language':'eng',
+    'keywords_vocabulary':'NASA/GCMD Science Keywords 9.1.5',
+    'standard_name_vocabulary':'CF Standard Name Table v83',
+    'iso_topic_category':'oceans',
+    'platform':'Water-based Platforms>Buoys>Moored>MOORINGS',
+    'sensor_mount':'mounted_on_mooring_line',
+
+}
+
 
 gmdc_keyword_dict_ctd = {
     'PRES':'OCEANS>OCEAN PRESSURE>WATER PRESSURE',
@@ -163,6 +187,21 @@ gmdc_keyword_dict_ctd = {
     'ATTN':'OCEANS>OCEAN OPTICS>ATTENUATION/TRANSMISSION',
     'SVEL':'OCEANS>OCEAN ACOUSTICS>ACOUSTIC VELOCITY',
             }
+
+
+
+gmdc_keyword_dict_moored = {
+    'PRES':'OCEANS>OCEAN PRESSURE>WATER PRESSURE',
+    'TEMP':'OCEANS>OCEAN TEMPERATURE>WATER TEMPERATURE',
+    'CNDC':'OCEANS>SALINITY/DENSITY>CONDUCTIVITY',
+    'PSAL':'OCEANS>SALINITY/DENSITY>SALINITY',
+    'CHLA':'OCEANS>OCEAN OPTICS>CHLOROPHYLL',
+    'DOXY':'OCEANS>OCEAN CHEMISTRY>OXYGEN',
+    'CDOM':'OCEANS>OCEAN CHEMISTRY>ORGANIC MATTER>COLORED DISSOLVED ORGANIC MATTER',
+    'ATTN':'OCEANS>OCEAN OPTICS>ATTENUATION/TRANSMISSION',
+    'SVEL':'OCEANS>OCEAN ACOUSTICS>ACOUSTIC VELOCITY',
+            }
+
 
 missing_globals_ctd = {
     'title': '',
@@ -177,7 +216,7 @@ missing_globals_ctd = {
     'cruise_name':'',
 }
 
-standard_globals_NPI_ctd = {
+standard_globals_NPI = {
     'institution': 'Norwegian Polar Institute (NPI)',
     'license': 'CC-BY 4.0',
     'creator_name':'Norwegian Polar Institute (NPI)',
@@ -224,7 +263,7 @@ global_attrs_options = {
         ['bad data', 'Data have failed one or more tests.'],
         ['nominal value', 
          'Data were not observed but reported. (e.g. instrument target depth.)'],
-        ['inpterpolated value', 
+        ['interpolated value', 
          'Missing data may be interpolated from neighboring data in space or'
          'time'],
         ['missing value', 'This is a fill value']
@@ -245,7 +284,6 @@ global_attrs_ordered = [
     'cruise_name',
     'project',
 
-
     'institution',
 
     'source',
@@ -253,7 +291,6 @@ global_attrs_ordered = [
     'data_set_language',
     'processing_level',
     'license',
-
 
     'creator_name',
     'creator_email',
@@ -272,7 +309,6 @@ global_attrs_ordered = [
     'time_coverage_end',
     'time_coverage_resolution',
     'time_coverage_duration',
-    
 
     'geospatial_lat_max',
     'geospatial_lon_max',

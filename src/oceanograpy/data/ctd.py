@@ -132,7 +132,7 @@ def metadata_auto(D, NPI = True,):
     '''
 
     D = _remove_numbers_in_names(D)
-    D = conventionalize.add_standard_var_attrs_ctd(D)
+    D = conventionalize.add_standard_var_attrs(D)
     D = conventionalize.add_standard_glob_attrs_ctd(D, NPI = NPI, 
                                                     override = False)
     D = conventionalize.add_gmdc_keywords_ctd(D)
