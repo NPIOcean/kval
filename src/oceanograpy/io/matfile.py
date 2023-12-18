@@ -65,16 +65,106 @@ def mat_to_xr_1D(matfile, time_name = 'time', epoch = '1970-01-01'):
     return ds
 
 
-def _parse_matfile_to_dict(matfile):
+
+def mat_to_xr_2D(matfile, time_name = 'time', depth_name_in = 'PRES', depth_name_out = 'PRES', 
+                 epoch = '1970-01-01'):
+    '''
+    Read a .mat file with 2D variables and convert its data to an xarray (xr) Dataset.
+
+    Assumes two dimensions: time and an depth-or pressure-type variable.
+
+    Parameters:
+    - matfile (str): Path to the MATLAB file.
+    - time_name (str): Name of the time variable in the MATLAB file (default is 'time').
+    - depth_name_in (str): Name of the depth variable in the MATLAB file (default is 'PRES').
+    - depth_name_out (str): Name to be used for the depth-type variable in the xarray Dataset (default is 'PRES').
+    - epoch (str): Reference epoch for time conversion, in the format 'YYYY-MM-DD' (default is '1970-01-01').
+
+    Returns:
+    - xr.Dataset: xarray Dataset containing the converted data.
+
+    Notes:
+    - 0-D variables are interpreted as metadata and stored as global attributes.
+    - 
+    - The time variable in the MATLAB file must be in the datenum format (e.g., [737510.3754, ..]).
+
+    The function attempts to parse time and adds data variables to the xarray Dataset. It handles various cases 
+    of variable dimensions.
+
+    If parsing time is unsuccessful, a message is printed, and the time variable remains in the Dataset.
+
+    Variables that do not conform to expected dimensions are skipped, and a message is printed.
+
+    Metadata from the MATLAB file is added as global attributes to the xarray Dataset. The resulting Dataset is 
+    sorted chronologically by time.
+
+    Example:
+    ds = mat_to_xr_2D('example.mat', time_name='time', depth_name_in='pres', depth_name_out='PRES')
+    '''
+    
+    # Read data/metadata from matfile
+    data_dict, attr_dict = _parse_matfile_to_dict(matfile)
+
+    # (Attempt to) parse time
+    try:
+        time_stamp = _parse_time(data_dict, time_name = time_name)
+        time_num = date2num(time_stamp)
+
+        # Remove time variable if we successfully parsed time
+        data_dict.pop(time_name)
+    except:
+        print(f'NOTE: Unable to parse time from the {time_name} field.')
+
+    # Collect in an xr Dataset
+    ds = xr.Dataset(coords = {'TIME':time_num, 
+                              depth_name_out:data_dict[depth_name_in]})
+
+    # Add data variables
+    # (Assigning the coordinates by looking at the dimensionality of the fields)
+    for varnm, item in data_dict.items():
+        dshape = data_dict[varnm].shape  
+        if dshape == (ds.dims['TIME'],):
+            ds[varnm] = (('TIME'), data_dict[varnm])
+        elif dshape == (ds.dims[depth_name_out],):
+            ds[varnm] = ((depth_name_out), data_dict[varnm])
+        elif dshape == (ds.dims['TIME'], ds.dims[depth_name_out]):
+            ds[varnm] = (('TIME', depth_name_out), data_dict[varnm])
+        elif dshape == (ds.dims[depth_name_out], ds.dims['TIME']):
+            ds[varnm] = (('TIME', depth_name_out), data_dict[varnm].T)
+        else:
+            print(f'NOTE: Trouble with variable {varnm} (shape: {data_dict[varnm].shape})- does not seem '
+                f'to fit into either TIME = ({ds.dims["TIME"]}) '
+                f' or {depth_name_out} ({ds.dims[depth_name_out]}).\n-> Skipping this variable')
+
+    # Add metadata
+    for attrnm, item in attr_dict.items():
+        ds.attrs[attrnm] = attr_dict[attrnm]
+
+    # Sort chronologically
+    ds = ds.sortby('TIME')
+    
+    return ds
+
+
+
+
+
+def _parse_matfile_to_dict(matfile, unwrap_dict = True):
     '''
     Use scipy.io.matlab to parse a matfile. 
 
     Will skip variable names containing data of internal Matlab types, 
     e.g. Datetime, which are not accessible outside Matlab.
 
+    Attempts to handle up to three levels of nesting - may not work
+    for terribly complex matfiles. 
+
     Probably only works for <v7.3 (=>7.3 needs its own parser, I think)
 
-    Parameters: - matfile: math to a file with suffix .mat
+    Parameters: 
+    - matfile: math to a file with suffix .mat
+    - unwrap_struct: If the file contents are distributed across multiple 
+      fields:
 
     Returns: 
     - data_dict: Dictionary with variables interpreted as data 
@@ -93,6 +183,7 @@ def _parse_matfile_to_dict(matfile):
     # Identify the name of the structure containing the data
     # (assuming this is the only field not on the format '__[]__')
     data_key_list = []
+
     for dict_key in matfile_dict.keys():
         if not dict_key.startswith('__'):
              data_key_list += [dict_key]
@@ -100,6 +191,7 @@ def _parse_matfile_to_dict(matfile):
     # If there is one such name: Use it to know where to extract data
     if len(data_key_list)==1:
         data_key = data_key_list[0]
+
 
     # If there is more than one: Return an exception fo now (not sure whether this
     # is an issue)   
@@ -114,6 +206,7 @@ def _parse_matfile_to_dict(matfile):
             f'-> Inspect your matfile!')
     
     # Load the dictionary containing the data
+
     ddict = matfile_dict[data_key]
 
     ### 3. SORT VARIABLES INTO DAtA AND ATTRIBUTE ARRAYS
@@ -123,25 +216,57 @@ def _parse_matfile_to_dict(matfile):
     attr_dict = {}
 
     for varnm in variables:
-        parsed_data = ddict[varnm].flatten()[0]
+        parsed_variable = ddict[varnm].flatten()[0]
 
-        # If the variable is of type MatlabOpaque, it cannot be read outside MATLAB
-        # -> Print a message and skip the variable
-        if isinstance(parsed_data, matlab._mio5_params.MatlabOpaque):
-            print(f'NOTE: "{varnm}" is of an internal Matlab class type (e.g. Datetime) '
-                  'which cannot be read outside Matlab -> Skip')
 
-        # If the object is iterable (list, array, etc): Interpret is as a data variable
-        elif isinstance(parsed_data, (list, tuple, np.ndarray)):
-            data_dict[varnm] = parsed_data
+        # If the object is (float, int, str, etc): Interpret is as a global attribute
+        if isinstance(parsed_variable, (int, float, str)):
+            attr_dict[varnm] = parsed_variable
 
-        # Otherwise (float, int, str, etc): Interpret is as a global attribute
-        elif isinstance(parsed_data, (int, float, str)):
-            attr_dict[varnm] = parsed_data
+        # This is none if ddict[varnm] is an array with data or similar
+        # -> assign a variable
+        elif parsed_variable.dtype.fields==None:
+
+            parsed_data = parsed_variable
+            
+            # If the variable is of type MatlabOpaque, it cannot be read outside MATLAB
+            # -> Print a message and skip the variable
+            if isinstance(parsed_data, matlab._mio5_params.MatlabOpaque):
+                print(f'NOTE: "{varnm}" is of an internal Matlab class type (e.g. Datetime) '
+                    'which cannot be read outside Matlab -> Skip')
+
+            # If the object is iterable (list, array, etc): Interpret is as a data variable
+            elif isinstance(parsed_data, (list, tuple, np.ndarray)):
+                data_dict[varnm] = parsed_data
+
+
+
+        # If ddict[varnm] is an array containing other names variables: parse them
+        # -> Loop through variables and add them individualy as variables
+        else:
+            for varnm_internal in parsed_variable.dtype.names:
+                parsed_data = parsed_variable[varnm_internal].flatten()[0]
+
+                # If the variable is of type MatlabOpaque, it cannot be read outside MATLAB
+                # -> Print a message and skip the variable
+                if isinstance(parsed_data, matlab._mio5_params.MatlabOpaque):
+                    print(f'NOTE: "{varnm_internal}" is of an internal Matlab class type (e.g. Datetime) '
+                        'which cannot be read outside Matlab -> Skip')
+
+                # If the object is iterable (list, array, etc): Interpret is as a data variable
+                elif isinstance(parsed_data, (list, tuple, np.ndarray)):
+                    data_dict[varnm_internal] = parsed_data
+
+                # Otherwise (float, int, str, etc): Interpret is as a global attribute
+                elif isinstance(parsed_data, (int, float, str)):
+                    attr_dict[varnm_internal] = parsed_data
+
+
 
     ### 4. RETURN OUTPUT
 
     return data_dict, attr_dict
+
 
 
 def _parse_time(data_dict, time_name = 'time'):
@@ -156,7 +281,7 @@ def _parse_time(data_dict, time_name = 'time'):
         time_stamps = time.matlab_time_to_timestamp(data_dict[time_name])
         return time_stamps
     except: # May have to build other cases here, eventually. 
-        print(f'Unable to parse time from the {time} variable. '
+        print(f'Unable to parse time from the "{time_name}" variable. '
               '(Expecting Matlab datenum format)')
 
 
