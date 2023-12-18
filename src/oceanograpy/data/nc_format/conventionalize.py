@@ -9,9 +9,13 @@ from oceanograpy.util import calc
 from oceanograpy.util import time, user_input
 import numpy as np
 
-def add_range_attrs_ctd(D):
+def add_range_attrs_ctd(D, vertical_var = None):
     '''
-    Add some global attributes based on the data
+    Add some global attributes based on the data.
+
+    "vertical_var" specifies a coordinate from which to extract
+    "geospatial_vertical_" parameters. If nothing is specified, we will
+    look for a variable with attribute "axis":"Z".
     '''
     # Lateral
     D.attrs['geospatial_lat_max'] = D.LATITUDE.max().values
@@ -22,17 +26,22 @@ def add_range_attrs_ctd(D):
     D.attrs['geospatial_bounds_crs'] = 'EPSG:4326'
     
     # Vertical
-    if 'PRES' in D.keys():
-        D.attrs['geospatial_vertical_min'] = D.PRES.min().values
-        D.attrs['geospatial_vertical_max'] = D.PRES.max().values
-        D.attrs['geospatial_vertical_units'] = 'dbar'
-    elif 'DEPTH' in D.keys():
-        D.attrs['geospatial_vertical_min'] = float(D.DEPTH.min().values)
-        D.attrs['geospatial_vertical_max'] = float(D.DEPTH.max().values)
-        D.attrs['geospatial_vertical_units'] = 'm'
 
-    D.attrs['geospatial_vertical_positive'] = 'down'
-    D.attrs['geospatial_bounds_vertical_crs'] = 'EPSG:5831'
+    # If not specified: look for a variable with attribute *axis='Z'*
+    if vertical_var == None:
+        for varnm in list(D.keys()) + list(D.coords.keys()):
+            if 'axis' in D[varnm].attrs:
+                if D[varnm].attrs['axis'].upper() == 'Z':
+                    vertical_var = varnm
+
+    if vertical_var != None:
+
+        D.attrs['geospatial_vertical_min'] = D[vertical_var].min().values
+        D.attrs['geospatial_vertical_max'] = D[vertical_var].max().values
+        D.attrs['geospatial_vertical_units'] = D[vertical_var].units
+
+        D.attrs['geospatial_vertical_positive'] = 'down'
+        D.attrs['geospatial_bounds_vertical_crs'] = 'EPSG:5831'
 
     # Time
     if D.TIME.dtype==np.dtype('datetime64[ns]'):

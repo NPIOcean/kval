@@ -127,6 +127,27 @@ standard_var_attrs = {
         'valid_min' : 0.0,
         'valid_max' : 50.0,
     },
+    'UCUR': {
+        'standard_name':'eastward_sea_water_velocity',
+        'units':'m s-1', 
+        'long_name': "Eastward sea water velocity",
+        'valid_min' : -2.0,
+        'valid_max' : 2.0, 
+        },
+    'VCUR': {
+        'standard_name':'northward_sea_water_velocity',
+        'units':'m s-1', 
+        'long_name': "Northward sea water velocity",
+        'valid_min' : -2.0,
+        'valid_max' : 2.0, 
+        },
+    'WCUR': {
+        'standard_name':'upward_sea_water_velocity',
+        'units':'m s-1', 
+        'long_name': "Upward sea water velocity",
+        'valid_min' : -2.0,
+        'valid_max' : 2.0, 
+        },
     'TIME': {
         'standard_name': 'time',
         'units': 'days since 1970-01-01',
@@ -186,6 +207,8 @@ gmdc_keyword_dict_ctd = {
     'CDOM':'OCEANS>OCEAN CHEMISTRY>ORGANIC MATTER>COLORED DISSOLVED ORGANIC MATTER',
     'ATTN':'OCEANS>OCEAN OPTICS>ATTENUATION/TRANSMISSION',
     'SVEL':'OCEANS>OCEAN ACOUSTICS>ACOUSTIC VELOCITY',
+
+
             }
 
 
@@ -200,6 +223,9 @@ gmdc_keyword_dict_moored = {
     'CDOM':'OCEANS>OCEAN CHEMISTRY>ORGANIC MATTER>COLORED DISSOLVED ORGANIC MATTER',
     'ATTN':'OCEANS>OCEAN OPTICS>ATTENUATION/TRANSMISSION',
     'SVEL':'OCEANS>OCEAN ACOUSTICS>ACOUSTIC VELOCITY',
+    'UCUR':'OCEANS>OCEAN CIRCULATION>OCEAN CURRENTS',
+    'VCUR':'OCEANS>OCEAN CIRCULATION>OCEAN CURRENTS',
+    'WCUR':'OCEANS>OCEAN CIRCULATION>OCEAN CURRENTS',
             }
 
 
@@ -283,27 +309,24 @@ global_attrs_ordered = [
     'comment',
     'cruise_name',
     'project',
+    'project_number',
 
     'institution',
 
     'source',
+    'platform',
     'instrument',
-    'data_set_language',
+    'instrument_serial_number',
+    'sensor_mount',
+    
+    'area',
+    'location',
+    'cruise',
     'processing_level',
+    'QC_indicator',
     'license',
 
-    'creator_name',
-    'creator_email',
-    'creator_type',
-    'creator_institution',
-    'creator_url',
 
-    'publisher_name',
-    'publisher_url',
-    'publisher_email',
-    'publisher_institution',
-
-    'data_assembly_center',
 
     'time_coverage_start',
     'time_coverage_end',
@@ -322,6 +345,22 @@ global_attrs_ordered = [
     'geospatial_vertical_positive',
     'geospatial_vertical_units',
     'geospatial_bounds_vertical_crs',
+
+    'data_set_language',
+
+
+    'data_assembly_center',
+
+    'creator_name',
+    'creator_email',
+    'creator_type',
+    'creator_institution',
+    'creator_url',
+
+    'publisher_name',
+    'publisher_url',
+    'publisher_email',
+    'publisher_institution',
 
     'keywords',
 
