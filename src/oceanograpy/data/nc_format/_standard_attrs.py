@@ -99,7 +99,7 @@ standard_var_attrs = {
     },
     'PRES': {
         'standard_name': 'sea_water_pressure',
-        'units': 'dbar',
+        'units': 'decibar',
         'long_name': 'Pressure due to seawater',
         'positive':'down',
         'valid_min' : -1.0,
@@ -305,20 +305,25 @@ global_attrs_ordered = [
     'history',
     'id',
     'version',
+    'doi',
+    'citation',
     'date_created',
     'comment',
+
+
+    'source',
+    'instrument',
+    'instrument_serial_number',
+    'platform',
+    'site_code',
+    'sensor_mount',
+    
+    'institution',
+
     'cruise_name',
     'project',
     'project_number',
 
-    'institution',
-
-    'source',
-    'platform',
-    'instrument',
-    'instrument_serial_number',
-    'sensor_mount',
-    
     'area',
     'location',
     'cruise',
@@ -388,6 +393,8 @@ variable_attrs_ordered = [
     'standard_name',
     'long_name',
     'comment',
+    'processing_level',
+    'QC_indicator',
     'calibration_formula',
     'coefficient_A',
     'coefficient_B',

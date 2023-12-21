@@ -50,13 +50,20 @@ def mat_to_xr_1D(matfile, time_name = 'time', epoch = '1970-01-01'):
     except:
         print(f'NOTE: Unable to parse time from the {time_name} field.')
 
+
     # Collect in an xr Dataset
     ds = xr.Dataset(coords = {'TIME':time_num})
+    
     # Add data variables
-    for varnm, item in data_dict.items():
-        ds[varnm] = (('TIME'), data_dict[varnm])
+    for varnm in data_dict:
+        try:
+            ds[varnm] = (('TIME'), data_dict[varnm])
+        except:
+            print(f'NOTE: Could not parse the variable "{varnm}" '
+                  f' with shape: {data_dict[varnm].shape} as a TIME variable - expected shape ({ds.dims["TIME"]}). '
+                  ' -> Skipping this variable.')
     # Add metadata
-    for attrnm, item in attr_dict.items():
+    for attrnm in attr_dict:
         ds.attrs[attrnm] = attr_dict[attrnm]
 
     # Sort chronologically
@@ -101,7 +108,7 @@ def mat_to_xr_2D(matfile, time_name = 'time', depth_name_in = 'PRES', depth_name
     Example:
     ds = mat_to_xr_2D('example.mat', time_name='time', depth_name_in='pres', depth_name_out='PRES')
     '''
-    
+
     # Read data/metadata from matfile
     data_dict, attr_dict = _parse_matfile_to_dict(matfile)
 
