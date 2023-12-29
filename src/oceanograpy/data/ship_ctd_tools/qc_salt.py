@@ -218,7 +218,8 @@ def read_salts_sheet(salts_excel_sheet, bath_temp=False,
 
 
 
-def plot_histograms(ds,  min_pres=500, psal_var=None, N=20, figsize=(7, 3.5)):
+def plot_histograms(ds,  min_pres=500,  salinometer_var = 'PSAL_SALINOMETER', 
+                    psal_var=None, N=20, figsize=(7, 3.5)):
     """
     Generate histograms for the difference between a salinity variable and PSAL_SALINOMETER
     for samples taken at depths greater than a specified minimum pressure.
@@ -253,7 +254,7 @@ def plot_histograms(ds,  min_pres=500, psal_var=None, N=20, figsize=(7, 3.5)):
                 'Please specify which variable *psal_var* contains PSAL')
         
     # Calculate the difference between the specified salinity variable and PSAL_SALINOMETER
-    SAL_diff = ds[psal_var] - ds.PSAL_SALINOMETER
+    SAL_diff = ds[psal_var] - ds[salinometer_var]
 
     # Select samples taken at depths greater than the minimum pressure
     SAL_diff_deep = SAL_diff.where(ds.PRES > min_pres).astype(float)
@@ -303,10 +304,11 @@ def plot_histograms(ds,  min_pres=500, psal_var=None, N=20, figsize=(7, 3.5)):
 
 
 
-def plot_by_station(ds, psal_var='PSAL1', min_pres=500):
+def plot_by_sample(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER', 
+                    sample_number_var = 'SAMPLE_NUMBER', min_pres=500):
     """
     Plot salinity comparison for samples taken at depths greater than a specified minimum pressure,
-    organized by station.
+    organized by sample number.
 
     Parameters:
     - ds (xr.Dataset): Input dataset containing salinity variables.
@@ -321,21 +323,21 @@ def plot_by_station(ds, psal_var='PSAL1', min_pres=500):
     organized by station. The 'Close' button allows you to close the plot and the button itself.
 
     Example usage:
-    plot_by_station(ds, psal_var='PSAL1', min_pres=500)
+    plot_by_sample(ds, psal_var='PSAL1', min_pres=500)
     """
 
     # Create a new dataset 'b' with necessary coordinates and variables
     b = xr.Dataset(coords={'NISKIN_NUMBER': ds.NISKIN_NUMBER, 'STATION': ds.STATION})
     b[psal_var] = ds[psal_var].where(ds.PRES.values > float(min_pres))
-    b['PSAL_SALINOMETER'] = ds.PSAL_SALINOMETER.where(ds.PRES.values > float(min_pres))
-    b['SAMPLE_NUMBER'] = ds.SAMPLE_NUMBER.where(ds.PRES.values > float(min_pres))
+    b['PSAL_SALINOMETER'] = ds[salinometer_var].where(ds.PRES.values > float(min_pres))
+    b['SAMPLE_NUMBER'] = ds[sample_number_var].where(ds.PRES.values > float(min_pres))
     b['PRES'] = ds.PRES.where(ds.PRES.values > float(min_pres))
 
     # Calculate the salinity difference
     SAL_diff = (b[psal_var] - b.PSAL_SALINOMETER).values.flatten().astype(float)
 
     # Count number of samples
-    N_count = b[psal_var].count().values
+    N_count = (b[psal_var] - b.PSAL_SALINOMETER).count().values
 
     # Calculate mean of the salinity difference
     Sdiff_mean = np.nanmean(SAL_diff).astype(float)
@@ -344,7 +346,7 @@ def plot_by_station(ds, psal_var='PSAL1', min_pres=500):
     sample_num_sortind = np.argsort(b.SAMPLE_NUMBER.values.astype('float').flatten())
     sample_num_sorted = b.SAMPLE_NUMBER.values.flatten()[sample_num_sortind].astype(float)
     Sdiff_num_sorted = SAL_diff[sample_num_sortind].astype(float)
-    point_labels2 = [f"Sample #{sample_num:.0f} ({pres:.0f} dbar)" for sample_num, pres in zip(
+    point_labels = [f"Sample #{sample_num:.0f} ({pres:.0f} dbar)" for sample_num, pres in zip(
         b['SAMPLE_NUMBER'].values.flatten()[sample_num_sortind], b['PRES'].values.flatten()[sample_num_sortind])]
 
     # Create a figure and subplots
@@ -369,7 +371,130 @@ def plot_by_station(ds, psal_var='PSAL1', min_pres=500):
     ax0.set_xlabel(f'SAMPLE NUMBER')
 
     # Add cursor hover annotations
-    mplcursors.cursor(hover=True).connect("add", lambda sel: sel.annotation.set_text(point_labels[sel.target.index]))
+    mplcursors.cursor(hover=True).connect("add", 
+                lambda sel: sel.annotation.set_text(point_labels[sel.target.index]))
+
+    # Plotting on ax1
+    #return sample_num_sorted, Sdiff_num_sorted
+
+    ax1.fill_between(sample_num_sorted, Sdiff_num_sorted, zorder=2, 
+            color='k', lw=0.2, alpha=0.3, label='Bottle file')
+    ax1.plot(sample_num_sorted, Sdiff_num_sorted, '.', zorder=2, 
+            color='tab:red', lw=0.2, alpha=0.8, label='Salinometer')
+    ax1.axhline(Sdiff_mean, color='tab:blue', lw=1.6, zorder=2, 
+            label=f'Mean = {Sdiff_mean:.2e}', alpha=0.75, ls=':')
+    ax1.set_xlabel(f'SAMPLE NUMBER')
+
+    ax1.set_ylabel(f'{psal_var} $-$ salinometer S')
+
+    # Plotting on ax2
+    ax2.hist(SAL_diff, 20, orientation="horizontal", alpha=0.7, 
+             color='tab:red')
+    ax2.set_ylim(ax1.get_ylim())
+    ax2.grid()
+    ax2.axhline(0, color='k',ls='--')
+    ax2.set_xlabel(f'FREQUENCY')
+    ax2.set_ylabel(f'{psal_var} $-$ salinometer S')
+    ax2.axhline(Sdiff_mean, color='tab:blue', lw=1.6, alpha=0.75, ls=':',
+               label=f'Mean = {Sdiff_mean:.2e}')
+    ax0.grid()
+    ax1.grid()
+    leg0 = ax0.legend()
+    leg1 = ax1.legend()
+    leg1.set_zorder(0)
+
+    fig.suptitle(f'Salinity comparison for samples taken at >{min_pres}'
+                 f' dbar (n = {N_count})')
+
+    plt.tight_layout()
+    
+    # Define a function to close the figure and widgets
+    def close_everything(_):
+        fig = plt.gcf()
+        fig.set_size_inches(0, 0)
+        button_exit.close()
+        plt.close(fig)
+
+    button_exit = widgets.Button(description=f"Close")
+    button_exit.on_click(close_everything)
+    button_exit.layout.width = '200px' 
+    
+    display(button_exit)
+
+
+
+
+
+
+def plot_by_station(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER', 
+                    sample_number_var = 'SAMPLE_NUMBER', min_pres=500):
+    """
+    Plot salinity comparison for samples taken at depths greater than a specified minimum pressure,
+    organized by station.
+
+    Parameters:
+    - ds (xr.Dataset): Input dataset containing salinity variables.
+    - psal_var (str): Name of the salinity variable to compare with PSAL_SALINOMETER.
+                      Defaults to 'PSAL1'.
+    - min_pres (int): Minimum pressure threshold for samples. Defaults to 500.
+
+    Returns:
+    None
+
+    Plots and displays comparisons between the specified salinity variable and PSAL_SALINOMETER
+    organized by station. The 'Close' button allows you to close the plot and the button itself.
+
+    Example usage:
+    plot_by_station(ds, psal_var='PSAL1', min_pres=500)
+    """
+
+    # Create a new dataset 'b' with necessary coordinates and variables
+    b = xr.Dataset(coords={'NISKIN_NUMBER': ds.NISKIN_NUMBER, 'STATION': ds.STATION})
+    b[psal_var] = ds[psal_var].where(ds.PRES.values > float(min_pres))
+    b['PSAL_SALINOMETER'] = ds[salinometer_var].where(ds.PRES.values > float(min_pres))
+    b['SAMPLE_NUMBER'] = ds[sample_number_var].where(ds.PRES.values > float(min_pres))
+    b['PRES'] = ds.PRES.where(ds.PRES.values > float(min_pres))
+
+    # Calculate the salinity difference
+    SAL_diff = (b[psal_var] - b.PSAL_SALINOMETER).values.flatten().astype(float)
+
+    # Count number of samples
+    N_count = (b[psal_var] - b.PSAL_SALINOMETER).count().values
+
+    # Calculate mean of the salinity difference
+    Sdiff_mean = np.nanmean(SAL_diff).astype(float)
+
+    # Sort samples by SAMPLE_NUMBER
+    sample_num_sortind = np.argsort(b.SAMPLE_NUMBER.values.astype('float').flatten())
+    sample_num_sorted = b.SAMPLE_NUMBER.values.flatten()[sample_num_sortind].astype(float)
+    Sdiff_num_sorted = SAL_diff[sample_num_sortind].astype(float)
+    point_labels = [f"Sample #{sample_num:.0f} ({pres:.0f} dbar)" for sample_num, pres in zip(
+        b['SAMPLE_NUMBER'].values.flatten()[sample_num_sortind], b['PRES'].values.flatten()[sample_num_sortind])]
+
+    # Create a figure and subplots
+    fig = plt.figure(figsize=(10, 6))
+    ax0 = plt.subplot2grid((2, 4), (0, 0), colspan=3)
+    ax1 = plt.subplot2grid((2, 4), (1, 0), colspan=3)
+    ax2 = plt.subplot2grid((2, 4), (1, 3), colspan=1)
+
+    fig.canvas.header_visible = False  # Hide the figure header
+
+    # Plotting on ax0
+    ax0.plot(b.SAMPLE_NUMBER.values.flatten(), 
+                b[psal_var].values.flatten(), 
+                '.', color='tab:blue',lw=0.2, alpha=0.6, 
+                label=f'Bottle file {psal_var}', zorder=2,)
+    ax0.plot(b.SAMPLE_NUMBER.values.flatten(), 
+             b.PSAL_SALINOMETER.values.flatten(), 
+             '.', zorder=2, color='tab:orange', lw=0.2, 
+             alpha=0.6, label='Salinometer')
+    
+    ax0.set_ylabel('Practical salinity')
+    ax0.set_xlabel(f'SAMPLE NUMBER')
+
+    # Add cursor hover annotations
+    mplcursors.cursor(hover=True).connect("add", 
+                lambda sel: sel.annotation.set_text(point_labels[sel.target.index]))
 
     # Plotting on ax1
     #return sample_num_sorted, Sdiff_num_sorted

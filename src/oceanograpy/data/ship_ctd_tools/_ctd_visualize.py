@@ -19,6 +19,7 @@ from oceanograpy.maps import quickmap
 from matplotlib.ticker import MaxNLocator
 import cmocean
 import numpy as np
+import mplcursors
 
 def inspect_profiles(d):
 
@@ -302,7 +303,14 @@ def inspect_dual_sensors(D):
 
 
 
-def map(D, height=1000, width=1000, return_fig_ax=False, coast_resolution='50m', figsize=None):
+def map(D, 
+        height=1000, 
+        width=1000, 
+        return_fig_ax=False, 
+        coast_resolution='50m', 
+        figsize=None,
+        station_labels = False, 
+        station_label_alpha = 0.5):
     '''
     Generate a quick map of a cruise using xarray Dataset coordinates.
 
@@ -351,6 +359,25 @@ def map(D, height=1000, width=1000, return_fig_ax=False, coast_resolution='50m',
     
     ax.plot(D.LONGITUDE, D.LATITUDE, '-k', transform=ccrs.PlateCarree(), alpha=0.5)
     ax.plot(D.LONGITUDE, D.LATITUDE, 'or', transform=ccrs.PlateCarree())
+
+#    labels = [f'{sta}' for sta in D.STATION.values]
+
+    # Add labels next to each point
+    if station_labels:
+        if station_labels=='left' or station_labels == True:
+            xytext, ha, va = (-5,0), 'right', 'center'
+        elif station_labels=='right':
+            xytext, ha, va = (5,0), 'left', 'center'
+        elif station_labels=='above':
+            xytext, ha, va = (0,5), 'center', 'bottom'
+        elif station_labels=='below':
+            xytext, ha, va = (0,-5), 'center', 'top'
+
+        for label, x, y in zip(D.STATION.values, D.LONGITUDE, D.LATITUDE):
+            plt.annotate(label, (x, y), textcoords="offset points", 
+                     xytext=xytext, ha=ha, va = va, transform=ccrs.PlateCarree(),
+                     alpha = station_label_alpha, fontsize = 8)
+
 
     plt.tight_layout()
     

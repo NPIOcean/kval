@@ -276,7 +276,8 @@ def add_gmdc_keywords_ctd(D, reset = True):
     '''
     Adds standard GMDC variables a la 
     "OCEANS>OCEAN TEMPERATURE>WATER TEMPERATURE"
-    reflecting the variables in the file
+    reflecting the variables in the dictionary
+    _standard_attrs.gmdc_keyword_dict_ctd
     '''
 
     gmdc_dict = _standard_attrs.gmdc_keyword_dict_ctd
@@ -384,20 +385,6 @@ def set_glob_attr(D, attr):
 
 
 def add_missing_glob(D):
-    '''
-    Prompts the user to fill in information for missing global attrubtes
-    '''
-
-    glob_attrs_dict_ref = _standard_attrs.global_attrs_ordered.copy()
-
-    for attr in glob_attrs_dict_ref:
-        if attr not in D.attrs:
-            set_glob_attr(D, attr)
-
-    return D
-
-
-def add_missing_var(D):
     '''
     Prompts the user to fill in information for missing global attrubtes
     '''

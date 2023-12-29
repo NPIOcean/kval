@@ -56,8 +56,10 @@ def ctds_from_cnv_dir(
     else:
         print(f'Found {number_of_cnv_files} .cnv files in  "{path}".')
 
-    profile_datasets = tools._datasets_from_cnvlist(
-        cnv_files, verbose = verbose, start_time_NMEA = start_time_NMEA)
+    profile_datasets = tools._datasets_from_cnvlist(cnv_files,
+        station_from_filename = station_from_filename,
+        verbose = verbose, start_time_NMEA = start_time_NMEA)
+    
     D = tools.join_cruise(profile_datasets,
         verbose=verbose)
 
@@ -99,7 +101,6 @@ def ctds_from_cnv_list(
 def dataset_from_btl_dir(
     path: str,
     station_from_filename: bool = False,
-    time_warnings: bool = True,
     start_time_NMEA: bool = False,
     time_adjust_NMEA: bool = False,
     verbose: bool = True
@@ -118,7 +119,8 @@ def dataset_from_btl_dir(
     btl_files = tools._btl_files_from_path(path)
     profile_datasets = tools._datasets_from_btllist(
         btl_files, verbose = verbose, start_time_NMEA = start_time_NMEA,
-        time_adjust_NMEA = time_adjust_NMEA)
+        time_adjust_NMEA = time_adjust_NMEA,
+        station_from_filename = station_from_filename)
     D = tools.join_cruise_btl(profile_datasets,
         verbose=verbose)
 
@@ -551,7 +553,6 @@ def calibrate_chl(
 
 
 
-
 def _drop_variables(D, retain_vars = ['TEMP1', 'CNDC1', 'PSAL1', 
                                      'CHLA1', 'PRES'], 
                    drop_vars = None, 
@@ -787,6 +788,7 @@ def apply_offset(D):
     """
 
     edit.apply_offset(D)
+    
     return D
 
 def drop_vars_pick(D):
@@ -831,7 +833,8 @@ def _drop_stations_pick(D):
 
 #### VISUALIZATION (WRAPPER FOR FUNCTIONS IN THE data.ship_ctd_tools._ctd_visualize.py module)
 
-def map(D):
+def map(D, station_labels = False, 
+        station_label_alpha = 0.5):
     '''
     Generate a quick map of the cruise CTD stations.
 
@@ -869,7 +872,7 @@ def map(D):
     - Should produce some grid lines.
     '''
     
-    viz.map(D)
+    viz.map(D, station_labels = station_labels, station_label_alpha = station_label_alpha)
 
 
 def inspect_profiles(D):
