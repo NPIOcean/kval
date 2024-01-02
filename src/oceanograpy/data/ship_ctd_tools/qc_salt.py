@@ -465,11 +465,11 @@ def plot_by_station(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER',
     Sdiff_mean = np.nanmean(SAL_diff).astype(float)
 
     # Sort samples by SAMPLE_NUMBER
-    sample_num_sortind = np.argsort(b.SAMPLE_NUMBER.values.astype('float').flatten())
-    sample_num_sorted = b.SAMPLE_NUMBER.values.flatten()[sample_num_sortind].astype(float)
-    Sdiff_num_sorted = SAL_diff[sample_num_sortind].astype(float)
+    station_sortind = np.argsort(b.SAMPLE_NUMBER.values.astype('float').flatten())
+    sample_num_sorted = b.SAMPLE_NUMBER.values.flatten()[station_sortind].astype(float)
+    Sdiff_num_sorted = SAL_diff[station_sortind].astype(float)
     point_labels = [f"Sample #{sample_num:.0f} ({pres:.0f} dbar)" for sample_num, pres in zip(
-        b['SAMPLE_NUMBER'].values.flatten()[sample_num_sortind], b['PRES'].values.flatten()[sample_num_sortind])]
+        b['SAMPLE_NUMBER'].values.flatten()[station_sortind], b['PRES'].values.flatten()[station_sortind])]
 
     # Create a figure and subplots
     fig = plt.figure(figsize=(10, 6))

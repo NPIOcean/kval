@@ -245,9 +245,30 @@ def to_netcdf(D, path, file_name = None, convention_check = False, add_to_histor
         except:
             file_name = 'CTD_DATASET_NO_NAME'
 
-    file_path = f'{path}{file_name}.nc'
+    if file_name.endswith('.nc'):
+        file_path = f'{path}{file_name}'
+    else:
+        file_path = f'{path}{file_name}.nc'
 
     if add_to_history:
+
+        # Add (empty) history attribute if we don't already have one
+        if not hasattr(D, 'history'):
+            D.attrs['history'] = ''
+
+
+        # Remove old "Creation of this netcdf file" lines
+        if 'Creation of this netcdf file' in D.history:
+            history_lines = D.attrs['history'].split('\n')
+            updated_history = []
+            for line in history_lines:
+                # Check if the line contains "Creation of this netcdf file."
+                # Only preserve lines that do *not*
+                if "Creation of this netcdf file" not in line:
+                    updated_history.append(line)
+        D.attrs['history'] = '\n'.join(updated_history)
+
+        # Add "Creation of this netcdf file" line with current timestamp
         now_time = pd.Timestamp.now().strftime('%Y-%m-%d')
         D.attrs['history'] = D.history + f'\n{now_time}: Creation of this netcdf file.'
         print(f'Updated history attribute. Current content:\n---')

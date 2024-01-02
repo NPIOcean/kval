@@ -19,7 +19,6 @@ from oceanograpy.maps import quickmap
 from matplotlib.ticker import MaxNLocator
 import cmocean
 import numpy as np
-import mplcursors
 
 def inspect_profiles(d):
 
