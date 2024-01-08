@@ -159,7 +159,9 @@ def read_cnv(
 
     header_info = read_header(source_file)
     ds = _read_column_data_xr(source_file, header_info)
+    ds = _remove_duplicate_variables(ds)
     ds = _update_variables(ds, source_file)
+    ds = _remove_duplicate_variables(ds)
     ds = _assign_specified_lat_lon_station(ds, lat, lon, station)
     ds = _convert_time(ds, header_info, 
                        suppress_time_warning = suppress_time_warning,
@@ -201,6 +203,7 @@ def read_cnv(
 
 
     return ds
+
 
 
 def read_btl(source_file, verbose = False, 
@@ -418,6 +421,20 @@ def read_header(filename: str) -> dict:
                 
                 # Break the loop through all lines
                 break
+
+        # Deal with duplicate columns (append DUPLICATE to strings..) 
+        seen = set()
+        duplicate_columns_in_cnv = False
+        for i, item in enumerate(hdict['col_names']):
+            if item in seen:
+                hdict['col_names'][i] = f"{item}_DUPLICATE"
+                hdict['col_longnames'][i] = f"{item} [DUPLICATE]"
+                duplicate_columns_in_cnv = True
+            else:
+                seen.add(item)
+        if duplicate_columns_in_cnv:
+            print('NOTE: Duplicate columns found in cnv! (inspect your .cnv files..)') 
+
 
         # Remove the first ('</Sensors>') and last ('*END*') lines from the SBE history string.
         hdict['SBEproc_hist'] = hdict['SBEproc_hist'] [1:-1]
@@ -918,6 +935,21 @@ def _read_sensor_info(source_file, verbose = False):
 
 ## INTERNAL FUNCTIONS: MODIFY THE DATASET
 
+
+def _remove_duplicate_variables(ds):
+    """
+    Removes variables  ending with '_DUPLICATE'.
+
+    Parameters:
+    - ds (xarray.Dataset): The input xarray Dataset.
+    """
+
+    ds= ds.drop([var for var in ds.variables if var.endswith('_DUPLICATE')])
+
+    return ds
+
+
+
 def _assign_specified_lat_lon_station(ds, lat, lon, station):
     '''
     Assign values to latitude, longitude, station attributes
@@ -1195,7 +1227,7 @@ def _update_variables(ds, source_file):
     for old_name in ds.keys():
         old_name_cap = old_name.upper()
         
-        # For .btl-files we can have valiables with a _std suffix 
+        # For .btl-files we can have variables with a _std suffix 
         if old_name_cap.endswith('_STD'):
             old_name_cap = old_name_cap.replace('_STD', '')
             std_suffix = True
@@ -1210,6 +1242,11 @@ def _update_variables(ds, source_file):
                 new_name = var_dict['name']
             else:
                 new_name = var_dict['name'] + '_std'
+
+            # If we have multiple instances of the same new_name:
+            if new_name in ds.keys():
+                new_name += '#2'
+
 
             unit = var_dict['units']
             ds = ds.rename({old_name:new_name})
