@@ -22,7 +22,7 @@ def quick_map_stere(lon_ctr, lat_ctr, height = 1000, width = 1000,
     ax = plt.axes(projection=projection)
 
     # Map extent
-    ax.set_extent((-height/2*1e3, height/2*1e3, -height/2*1e3, height/2*1e3), 
+    ax.set_extent((-width/2*1e3, width/2*1e3, -height/2*1e3, height/2*1e3),
         crs=projection)
 
     # Land

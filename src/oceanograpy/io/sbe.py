@@ -636,6 +636,12 @@ def _read_SBE_proc_steps(ds, header_info):
     - Appends SBE processing history line to the *history* attribute.
     '''
     SBElines = header_info['SBEproc_hist']
+
+    if SBElines==None:
+        print('NOTE: Unable to read SBE processing history, probably due to '
+              'non-standard header format. ')
+        return ds
+
     ct = 1 # Step counter, SBE steps
     dmy_fmt = '%Y-%m-%d'
 
@@ -1254,6 +1260,10 @@ def _update_variables(ds, source_file):
 
             if 'standard_name' in var_dict:
                 ds[new_name].attrs['standard_name'] = var_dict['standard_name'] 
+
+            if 'reference_scale' in var_dict:
+                ds[new_name].attrs['reference_scale'] = var_dict['reference_scale'] 
+
 
 
             if 'sensors' in var_dict:
