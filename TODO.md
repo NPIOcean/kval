@@ -14,7 +14,11 @@ Started looking at this again, adding some support functions.
 - The name is pretty terrible. Try brainstorming some other ones? Doesn't have to be super descriptive,
   I guess. More important that it is catchy. Maybe something historical? 
 
-  - *frampy* (!)
+  - *frampy*
+  - *bowhead*
+  - *ringsel*
+  - *framheim*
+  
 
 
 ### ØL 20.11
