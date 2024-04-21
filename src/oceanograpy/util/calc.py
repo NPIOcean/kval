@@ -8,6 +8,7 @@ Various utility function for some basic calculations
 
 import numpy as np
 
+
 def custom_round_ud(number, decimals, ud):
     """
     Round a number to a specified number of decimals, forcing rounding

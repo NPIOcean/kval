@@ -18,6 +18,8 @@ def quick_map_stere(lon_ctr, lat_ctr, height = 1000, width = 1000,
     if fig==None:
         fig = plt.figure(figsize = (4, 3))
         return_fig = True
+    else:
+        return_fig = False
 
     ax = plt.axes(projection=projection)
 
