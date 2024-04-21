@@ -1,6 +1,6 @@
-# oceanogra*py*
+# kval - ocean data processing and analysis in Python
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10360163.svg)](https://doi.org/10.5281/zenodo.10360163)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10360163.svg)](https://doi.org/10.5281/zenodo.10360163) - formerly oceanograpy
 
 Collection of Python functions for working with oceanography data processing and analysis.
 
@@ -64,6 +64,10 @@ ____
 <summary><strong>STATUS UPDATES</strong></summary>
 
 ____
+
+STATUS 21.04.24:
+
+Renamed from `oceanograpy` to `kval`
 
 STATUS 08.12.23:
 
