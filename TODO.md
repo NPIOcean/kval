@@ -1,6 +1,21 @@
 # TO DO
 
 
+### ØL 21.04
+
+Started looking at this again, adding some support functions.
+
+- May want to consider splitting up into separate libraries per best CS standard - but I think
+  there are some serious advantages to being self-contained.
+
+  - I think clearly splitting up into sub-packages is not too bad. See e.g. astropy and pycurrents.
+    May stick with this but clearly advertise it in the description of the thing.
+
+- The name is pretty terrible. Try brainstorming some other ones? Doesn't have to be super descriptive,
+  I guess. More important that it is catchy. Maybe something historical? 
+
+  - *frampy* (!)
+
 
 ### ØL 20.11
 
