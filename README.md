@@ -1,12 +1,17 @@
-# kval - ocean data processing and analysis in Python
+![image](development/graphics/kval_banner_0_0_2.png)
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10360163.svg)](https://doi.org/10.5281/zenodo.10360163) - formerly oceanograpy
+
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10360163.svg)](https://doi.org/10.5281/zenodo.10360163) 
 
 Collection of Python functions for working with oceanography data processing and analysis.
 
 Maintained by the Oceanography section at the [Norwegian Polar Institute](https://www.npolar.no/en/). 
 
-*Current version: 0.1.0*
+
+*Note:* This library was until recently called `oceanograpy`
+
+*Current version: 0.2.0*
 
 ____
 <details>
@@ -56,6 +61,27 @@ ____
    Releases will be archived on [zenodo](www.zenodo.org) and given a DOI. 
 
 </details>
+
+____
+
+
+<details>
+<summary><strong>RELEASE NOTES</strong></summary>
+
+- *0.2.0 (under development)*: 
+    - Name change from `oceanograpy` to `kval`.
+    - Introduction of tests.
+    - Packaging and release to `pip` and `conda`.
+    - Removal of NPI-specific content.
+    - Other minor changes.
+
+- 0.1.0: 
+    - Initial release.
+    - Functionality tailored for CTD processing.
+
+</details>
+
+
 
 ____
 
