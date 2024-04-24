@@ -1,8 +1,11 @@
-![image](graphics/kval_banner_0_0_2.png)
+![image](graphics/kval_banner.png)
 
+___
 
+Last release (as `oceanograpy`), *0.0.1*:
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10360163.svg)](https://doi.org/10.5281/zenodo.10360163) 
+___
 
 Collection of Python functions for working with oceanography data processing and analysis.
 
@@ -11,7 +14,7 @@ Maintained by the Oceanography section at the [Norwegian Polar Institute](https:
 
 *Note:* This library was until recently called `oceanograpy`
 
-*Current version: 0.2.0*
+*Version 0.2.0 in development*
 
 ____
 <details>

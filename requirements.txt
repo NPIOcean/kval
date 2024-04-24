@@ -17,3 +17,4 @@ tqdm=4.66.1
 ipympl=0.9.3
 compliance-checker=5.1.0
 xlrd=2.0.1
+pytest==8.1.1
