@@ -43,8 +43,8 @@ TBD:
 import pandas as pd
 import xarray as xr
 import numpy as np
-from oceanograpy.io import _variable_defs as vardef
-from oceanograpy.util import time
+from kval.io import _variable_defs as vardef
+from kval.util import time
 import matplotlib.pyplot as plt
 import re
 from typing import Optional

@@ -2,11 +2,11 @@
 Functions for making netcdfs cf-compliant.
 (Working with xarray datasets)
 '''
-from oceanograpy.util import time
+from kval.util import time
 import cftime
-from oceanograpy.data.nc_format import _standard_attrs
-from oceanograpy.util import calc
-from oceanograpy.util import time, user_input
+from kval.data.nc_format import _standard_attrs
+from kval.util import calc
+from kval.util import time, user_input
 import numpy as np
 
 def add_range_attrs_ctd(D, vertical_var = None):

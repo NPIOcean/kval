@@ -3,11 +3,14 @@ Various short functions for geographical calculations.
 '''
 
 import numpy as np
+from typing import Union, Tuple, Sequence
 
 
-
-def great_circle_distance(lon0, lat0, lon1, lat1, 
-                          earth_radius=6378e3):
+def great_circle_distance(lon0: Union[float, Sequence[float]],
+                          lat0: Union[float, Sequence[float]],
+                          lon1: Union[float, Sequence[float]],
+                          lat1: Union[float, Sequence[float]],
+                          earth_radius: float = 6378e3) -> Union[float, Sequence[float]]:
     """
     Calculate the great circle distance between two points on the Earth's surface.
 
@@ -41,7 +44,11 @@ def great_circle_distance(lon0, lat0, lon1, lat1,
     return dist
 
 
-def closest_coord(lon, lat, lon0, lat0):
+
+def closest_coord(lon: Union[float, Sequence[float]],
+                  lat: Union[float, Sequence[float]],
+                  lon0: float,
+                  lat0: float) -> Tuple[int, int]:    
     '''
     Use the great circle distance to compute the distance between points and returns 
     the index of the point in (lon, lat) with the shortest distance from (lon0, lat0).
