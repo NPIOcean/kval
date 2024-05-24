@@ -1,5 +1,5 @@
 [project]
-name = "oceanograpy"
+name = "kval"
 
 description = "Tools for oceanographic data processing and analysis in Python"
 
@@ -39,4 +39,4 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.urls]
-Homepage = "https://github.com/NPIOcean/oceanograPy/"
+Homepage = "https://github.com/NPIOcean/kval/"

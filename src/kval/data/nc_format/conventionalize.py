@@ -2,11 +2,11 @@
 Functions for making netcdfs cf-compliant.
 (Working with xarray datasets)
 '''
-from oceanograpy.util import time
+from kval.util import time
 import cftime
-from oceanograpy.data.nc_format import _standard_attrs
-from oceanograpy.util import calc
-from oceanograpy.util import time, user_input
+from kval.data.nc_format import _standard_attrs
+from kval.util import calc
+from kval.util import time, user_input
 import numpy as np
 
 def add_range_attrs_ctd(D, vertical_var = None):
@@ -96,7 +96,7 @@ def _get_time_coverage_duration_str(D):
 def add_standard_var_attrs(D, override = False):
     '''
     Add variable attributes 
-    as specified in oceanograpy.data.nc_format.standard_var_attrs
+    as specified in kval.data.nc_format.standard_var_attrs
 
     if _std suffix: 
         - Don't use standard_name, valid_min/max
@@ -213,11 +213,11 @@ def add_standard_var_attrs(D, override = False):
 def add_standard_glob_attrs_ctd(D, NPI = False, override = False):
     '''
     Adds standard global variables for a CTD dataset as specified in
-    oceanograpy.data.nc_format.standard_attrs_global_ctd.
+    kval.data.nc_format.standard_attrs_global_ctd.
 
     If NPI = True, also add NPI standard attribute values for things like
     "institution", "creator_name", etc, as specified in 
-    oceanograpy.data.nc_format.standard_globals_NPI
+    kval.data.nc_format.standard_globals_NPI
 
     override: governs whether to override any global attributes that 
     are already present (typically not advised..)
@@ -244,11 +244,11 @@ def add_standard_glob_attrs_ctd(D, NPI = False, override = False):
 def add_standard_glob_attrs_moor(D, NPI = False, override = False):
     '''
     Adds standard global variables for a CTD dataset as specified in
-    oceanograpy.data.nc_format.standard_attrs_global_ctd.
+    kval.data.nc_format.standard_attrs_global_ctd.
 
     If NPI = True, also add NPI standard attribute values for things like
     "institution", "creator_name", etc, as specified in 
-    oceanograpy.data.nc_format.standard_globals_NPI_moor
+    kval.data.nc_format.standard_globals_NPI_moor
 
     override: governs whether to override any global attributes that 
     are already present (typically not advised..)

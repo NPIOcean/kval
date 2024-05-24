@@ -13,9 +13,9 @@ import matplotlib.pyplot as plt
 import ipywidgets as widgets
 from IPython.display import display
 import cartopy.crs as ccrs
-from oceanograpy.util import time
-from oceanograpy.data.ship_ctd_tools import _ctd_tools 
-from oceanograpy.maps import quickmap
+from kval.util import time
+from kval.data.ship_ctd_tools import _ctd_tools 
+from kval.maps import quickmap
 from matplotlib.ticker import MaxNLocator
 import cmocean
 import numpy as np
