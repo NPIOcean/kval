@@ -1,8 +1,8 @@
 '''
-## OceanograPy.data.ship_ctd.tools
+## Kval.data.ship_ctd.tools
 
 Various functions for making modifications to CTD dataframes in the 
-format produced by OceanograPy.io.cnv:
+format produced by Kval.io.cnv:
 
 - Joining insividual profiles into one ship file.
 - Pressure binning.
@@ -11,7 +11,7 @@ format produced by OceanograPy.io.cnv:
 
 '''
 
-from oceanograpy.io import sbe
+from kval.io import sbe
 import numpy as np
 import xarray as xr
 from tqdm.notebook import tqdm 
