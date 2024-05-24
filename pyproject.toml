@@ -1,5 +1,5 @@
 [project]
-name = "oceanograpy"
+name = "kval"
 
 description = "Tools for oceanographic data processing and analysis in Python"
 
