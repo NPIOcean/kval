@@ -749,7 +749,7 @@ def _read_SBE_proc_steps(ds, header_info):
             else:
                 loop_ss_deckpress_str = 'Yes'
                 
-        if 'loopedit_excl_bad_scans' in line and float(loop_minvel)>0:
+        if 'loopedit_excl_bad_scans' in line:# and float(loop_minvel)>0:
             loop_excl_bad_scans = re.search(r'= (.+)', line).group(1)
             if loop_excl_bad_scans == 'yes':
                 loop_excl_str = 'Bad scans excluded'
@@ -759,14 +759,15 @@ def _read_SBE_proc_steps(ds, header_info):
             if _loop_minvel == 'fixed':
                 minvel_str = f'Minimum velocity (ms-1): {loop_minvel}'
             elif _loop_minvel == 'pct':
-                minvel_str = f('Minimum velocity: {loop_minpct_pct}% of mean '
-                            'velocity within a {loop_minpct_ws}-pt window '
-                            '(>{loop_minpct_minvel} ms-1 for first window).')
+                minvel_str = (f'Minimum velocity: {loop_minpct_pct}% of mean '
+                        f'velocity within a {loop_minpct_ws}-pt window\n'
+                        f'     (>{loop_minpct_minvel} ms-1 for the first'
+                        ' window)')
 
             minvel_str
             sbe_proc_str += [f'{ct}. Loop editing applied.',
-                 (f'   > Parameters: {minvel_str}, '
-                  f'Soak depth range (m): {loop_ss_mindep} to {loop_ss_maxdep}, '
+                 (f'   > Parameters:\n     {minvel_str}. '
+                  f'\n     Soak depth range (m): {loop_ss_mindep} to {loop_ss_maxdep}, '
                   + f'\n   > {loop_excl_str}. '
                   + f'Deck pressure offset: {loop_ss_deckpress_str}.')]
             ct += 1
