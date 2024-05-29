@@ -13,14 +13,12 @@ mat_to_dict below is a good starting point, though.
 
 '''
 
-
-import oceanograpy as opy
 import xarray as xr
 from scipy.io import matlab
 import numpy as np
 import datetime
 from matplotlib.dates import date2num
-from oceanograpy.util import time
+from kval.util import time
 
 
 def mat_to_xr_1D(matfile, time_name = 'time', epoch = '1970-01-01'):

@@ -10,18 +10,18 @@ ship_ctd.tools.py, for example.
 '''
 
 import xarray as xr
-from oceanograpy.data.ship_ctd_tools import _ctd_tools as tools
-from oceanograpy.data.ship_ctd_tools import _ctd_visualize as viz
-from oceanograpy.data.ship_ctd_tools import _ctd_edit as edit
-from oceanograpy.io import matfile
+from kval.data.ship_ctd_tools import _ctd_tools as tools
+from kval.data.ship_ctd_tools import _ctd_visualize as viz
+from kval.data.ship_ctd_tools import _ctd_edit as edit
+from kval.io import matfile
 import re
 from collections import Counter
-from oceanograpy.util import time
+from kval.util import time
 import pandas as pd
-from oceanograpy.data.nc_format import conventionalize, _standard_attrs, check_conventions
+from kval.data.nc_format import conventionalize, _standard_attrs, check_conventions
 import os
 from IPython.display import clear_output
-from oceanograpy.data.nc_format.check_conventions import check_file_with_button
+from kval.data.nc_format.check_conventions import check_file_with_button
 
 ## LOADING AND SAVING DATA
 

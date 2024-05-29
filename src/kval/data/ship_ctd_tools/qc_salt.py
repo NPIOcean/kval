@@ -9,7 +9,7 @@ less hardcoded to work with the FS2014 data (may work with other FS data?)
 Not extensively tested either - will put more work into this module
 once we have a more standardized format.
 '''
-from oceanograpy.data import ctd
+from kval.data import ctd
 import xarray as xr
 import mplcursors
 from seawater import eos80
