@@ -731,23 +731,41 @@ def _read_SBE_proc_steps(ds, header_info):
 
         # Get loop edit details
         if 'loopedit_minVelocity' in line:
-            loop_minvel = re.search(r'= (\d+(\.\d+)?)', line).group(1)                
-        if 'loopedit_surfaceSoak' in line and float(loop_minvel)>0:
+            loop_minvel = re.search(r'= (\d+(\.\d+)?)', line).group(1)     
+            _loop_minvel = 'fixed' # Flag (fixed min speed vs percentage of mean speed)
+
+        if 'loopedit_percentMeanSpeed' in line:
+            loop_minpct_minvel = re.search(r'minV = (\d+(\.\d+)?)', line).group(1)
+            loop_minpct_ws = re.search(r'ws = (\d+(\.\d+)?)', line).group(1)
+            loop_minpct_pct = re.search(r'percent = (\d+(\.\d+)?)', line).group(1)
+            _loop_minvel = 'pct'  # Flag (fixed min speed vs percentage of mean speed)
+
+        if 'loopedit_surfaceSoak' in line:# and float(loop_minvel)>0:
             loop_ss_mindep = re.search(r'minDepth = (\d+(\.\d+)?)', line).group(1)
             loop_ss_maxdep = re.search(r'maxDepth = (\d+(\.\d+)?)', line).group(1)
-            loop_ss_deckpress = re.search(r'useDeckPress = (\d+(\.\d+)?)', line).group(1)
-            if loop_ss_deckpress=='0':
+            _loop_ss_deckpress = re.search(r'useDeckPress = (\d+(\.\d+)?)', line).group(1)
+            if _loop_ss_deckpress=='0':
                 loop_ss_deckpress_str = 'No'
             else:
                 loop_ss_deckpress_str = 'Yes'
+                
         if 'loopedit_excl_bad_scans' in line and float(loop_minvel)>0:
             loop_excl_bad_scans = re.search(r'= (.+)', line).group(1)
             if loop_excl_bad_scans == 'yes':
                 loop_excl_str = 'Bad scans excluded'
             else:
                 loop_excl_str = 'Bad scans not excluded'
+
+            if _loop_minvel == 'fixed':
+                minvel_str = f'Minimum velocity (ms-1): {loop_minvel}'
+            elif _loop_minvel == 'pct':
+                minvel_str = f('Minimum velocity: {loop_minpct_pct}% of mean '
+                            'velocity within a {loop_minpct_ws}-pt window '
+                            '(>{loop_minpct_minvel} ms-1 for first window).')
+
+            minvel_str
             sbe_proc_str += [f'{ct}. Loop editing applied.',
-                 (f'   > Parameters: Minimum velocity (ms-1): {loop_minvel}, '
+                 (f'   > Parameters: {minvel_str}, '
                   f'Soak depth range (m): {loop_ss_mindep} to {loop_ss_maxdep}, '
                   + f'\n   > {loop_excl_str}. '
                   + f'Deck pressure offset: {loop_ss_deckpress_str}.')]
