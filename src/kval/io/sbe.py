@@ -52,6 +52,7 @@ from tqdm.notebook import tqdm
 from typing import Optional
 from itertools import zip_longest
 from matplotlib.dates import date2num
+import warnings
 
 ## KEY FUNCTIONS
 
@@ -170,9 +171,14 @@ def read_cnv(
     ds = _add_header_attrs(ds, header_info, station_from_filename)
     ds = _add_start_time(ds, header_info, 
                              start_time_NMEA = start_time_NMEA)
-    ds = _read_SBE_proc_steps(ds, header_info)
-
+    try:
+        ds = _read_SBE_proc_steps(ds, header_info)
+    except Exception as err:
+        ds.attrs['SBE_processing'] = f'Unable to parse from file.\n(Error: {err}).'
+        raise Warning(f'Unable to parse from file.\n(Error: {err}).')
+    
     ds0 = ds.copy()
+
     
     if apply_flags:
         ds = _apply_flag(ds)
@@ -741,13 +747,18 @@ def _read_SBE_proc_steps(ds, header_info):
             _loop_minvel = 'pct'  # Flag (fixed min speed vs percentage of mean speed)
 
         if 'loopedit_surfaceSoak' in line:# and float(loop_minvel)>0:
-            loop_ss_mindep = re.search(r'minDepth = (\d+(\.\d+)?)', line).group(1)
-            loop_ss_maxdep = re.search(r'maxDepth = (\d+(\.\d+)?)', line).group(1)
-            _loop_ss_deckpress = re.search(r'useDeckPress = (\d+(\.\d+)?)', line).group(1)
-            if _loop_ss_deckpress=='0':
-                loop_ss_deckpress_str = 'No'
+
+            if "do not remove" in line:
+                _loop_ss_remove = False
             else:
-                loop_ss_deckpress_str = 'Yes'
+                loop_ss_mindep = re.search(r'minDepth = (\d+(\.\d+)?)', line).group(1)
+                loop_ss_maxdep = re.search(r'maxDepth = (\d+(\.\d+)?)', line).group(1)
+                _loop_ss_deckpress = re.search(r'useDeckPress = (\d+(\.\d+)?)', line).group(1)
+                if _loop_ss_deckpress=='0':
+                    loop_ss_deckpress_str = 'No'
+                else:
+                    loop_ss_deckpress_str = 'Yes'
+                _loop_ss_remove = True
                 
         if 'loopedit_excl_bad_scans' in line:# and float(loop_minvel)>0:
             loop_excl_bad_scans = re.search(r'= (.+)', line).group(1)
@@ -764,12 +775,18 @@ def _read_SBE_proc_steps(ds, header_info):
                         f'     (>{loop_minpct_minvel} ms-1 for the first'
                         ' window)')
 
-            minvel_str
+            if _loop_ss_remove:
+                loop_ss_str = (f'\n     Soak depth range (m): '
+                    f'{loop_ss_mindep} to {loop_ss_maxdep} ' 
+                    f'(Deck pressure offset: {loop_ss_deckpress_str}).')
+            else:
+                loop_ss_str = '\n     Surface soak not removed. '
+
+
             sbe_proc_str += [f'{ct}. Loop editing applied.',
                  (f'   > Parameters:\n     {minvel_str}. '
-                  f'\n     Soak depth range (m): {loop_ss_mindep} to {loop_ss_maxdep}, '
-                  + f'\n   > {loop_excl_str}. '
-                  + f'Deck pressure offset: {loop_ss_deckpress_str}.')]
+                  + f'{loop_ss_str}'
+                  + f'\n   > {loop_excl_str}. ')]
             ct += 1
 
         # Get wild edit details
@@ -969,7 +986,7 @@ def _remove_duplicate_variables(ds):
     - ds (xarray.Dataset): The input xarray Dataset.
     """
 
-    ds= ds.drop([var for var in ds.variables if var.endswith('_DUPLICATE')])
+    ds= ds.drop_vars([var for var in ds.variables if var.endswith('_DUPLICATE')])
 
     return ds
 
@@ -1208,7 +1225,7 @@ def _remove_up_dncast(ds, keep = 'downcast'):
     -> will likely have to replace with something more sophisticated. 
     '''
     # Index of max pressure, taken as "end of downcast"
-    max_pres_index = int(ds.PRES.argmax().data)
+    max_pres_index = int(np.argmax(ds.PRES.data))
 
     # If the max index is a single value following invalid values,
     # we interpret it as the start of the upcast and use the preceding 
@@ -1317,7 +1334,7 @@ def _change_dims_scan_to_pres(ds):
     '''
     ds = ds.set_coords('PRES')
     ds = ds.swap_dims({'scan_count': 'PRES'})
-    ds = ds.drop('scan_count')
+    ds = ds.drop_vars('scan_count')
 
     return ds
 
@@ -1500,7 +1517,7 @@ def _convert_time_from_elapsed(ds, header_info,
 
     ds['TIME_SAMPLE'] = time_stamp_DSE
     ds.TIME_SAMPLE.attrs['units'] = f'Days since {epoch} 00:00:00'
-    ds = ds.drop('TIME_ELAPSED')
+    ds = ds.drop_vars('TIME_ELAPSED')
 
     return ds
 
@@ -1531,7 +1548,7 @@ def _convert_time_from_juld(ds, header_info, epoch = '1970-01-01',
 
     ds['TIME_SAMPLE'] = (('scan_count'), time_stamp_DSE)
     ds.TIME_SAMPLE.attrs['units'] = f'Days since {epoch} 00:00:00'
-    ds = ds.drop('TIME_JULD')
+    ds = ds.drop_vars('TIME_JULD')
 
     return ds
 
