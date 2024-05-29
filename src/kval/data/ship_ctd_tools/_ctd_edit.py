@@ -3,9 +3,9 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import RectangleSelector
 import ipywidgets as widgets
 from IPython.display import display, clear_output
-from oceanograpy.util import time
-from oceanograpy.data.ship_ctd_tools import _ctd_tools
-from oceanograpy.calc.numbers import order_of_magnitude
+from kval.util import time
+from kval.data.ship_ctd_tools import _ctd_tools
+from kval.calc.numbers import order_of_magnitude
 
 ###########################
 

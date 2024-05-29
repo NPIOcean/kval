@@ -2,11 +2,11 @@
 Functions for making netcdfs cf-compliant.
 (Working with xarray datasets)
 '''
-from oceanograpy.util import time
+from kval.util import time
 import cftime
-from oceanograpy.data.nc_format import _standard_attrs
-from oceanograpy.util import calc
-from oceanograpy.util import time, user_input
+from kval.data.nc_format import _standard_attrs
+from kval.calc import numbers
+from kval.util import time, user_input
 import numpy as np
 
 def add_range_attrs_ctd(D, vertical_var = None):
@@ -70,10 +70,10 @@ def _get_geospatial_bounds_wkt_str(D, decimals = 2):
     
     '''
 
-    lat_max = calc.custom_round_ud(D.geospatial_lat_max, decimals, 'up')
-    lat_min = calc.custom_round_ud(D.geospatial_lat_min, decimals, 'dn')
-    lon_max = calc.custom_round_ud(D.geospatial_lon_max, decimals, 'up')
-    lon_min = calc.custom_round_ud(D.geospatial_lon_min, decimals, 'dn')
+    lat_max = numbers.custom_round_ud(D.geospatial_lat_max, decimals, 'up')
+    lat_min = numbers.custom_round_ud(D.geospatial_lat_min, decimals, 'dn')
+    lon_max = numbers.custom_round_ud(D.geospatial_lon_max, decimals, 'up')
+    lon_min = numbers.custom_round_ud(D.geospatial_lon_min, decimals, 'dn')
 
     corner_dict = (lon_min, lat_min, lon_min, lat_max, lon_max, lat_max, 
                     lon_max, lat_min, lon_min, lat_min)

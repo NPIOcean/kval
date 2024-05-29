@@ -1,5 +1,5 @@
 [project]
-name = "oceanograpy"
+name = "kval"
 
 description = "Tools for oceanographic data processing and analysis in Python"
 
@@ -8,7 +8,7 @@ version = "0.1.0"
 readme = "README.md"
 
 authors = [
-  { name = "Øyvind Lundesgaard", email = "oyvind.lundesgaard@npolar.no" }, 
+  { name = "Øyvind Foss", email = "oyvind.foss@npolar.no" }, 
 ]
 
 maintainers = [
@@ -39,4 +39,4 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.urls]
-Homepage = "https://github.com/NPIOcean/oceanograPy/"
+Homepage = "https://github.com/NPIOcean/kval/"
