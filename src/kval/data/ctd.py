@@ -92,7 +92,8 @@ def ctds_from_cnv_list(
     - D (xarray.Dataset): Joined CTD dataset.
     """
     profile_datasets = tools._datasets_from_cnvlist(
-        cnv_list, verbose = verbose, start_time_NMEA = start_time_NMEA)
+        cnv_list, verbose = verbose, start_time_NMEA = start_time_NMEA,
+        station_from_filename = station_from_filename)
     D = tools.join_cruise(profile_datasets,
         verbose=verbose)
     return D
