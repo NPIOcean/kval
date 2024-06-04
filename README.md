@@ -1,20 +1,19 @@
 ![image](graphics/kval_banner.png)
 
-___
-
-Last release (as `oceanograpy`), *0.0.1*:
-
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10360163.svg)](https://doi.org/10.5281/zenodo.10360163) 
-___
-
 Collection of Python functions for working with oceanography data processing and analysis.
 
 Maintained by the Oceanography section at the [Norwegian Polar Institute](https://www.npolar.no/en/). 
+___
 
+Last release,`0.0.2-beta`:
+
+[![DOI](https://zenodo.org/badge/711439231.svg)](https://zenodo.org/doi/10.5281/zenodo.10360162)
+
+___
 
 *Note:* This library was until recently called `oceanograpy`
 
-*Version 0.2.0 in development*
+*In active development.*
 
 ____
 <details>
@@ -37,6 +36,8 @@ ____
 <details>
 <summary><strong>GENERAL PRINCIPLES</strong></summary>
 
+*Note: These are aspirational guidelines and not always adhered to in the current code structure. We will try to get there!*
+
 ###### Code
 
 - Written in Python (>=3.8).
@@ -45,6 +46,9 @@ ____
     - Intermediate operations using, e.g., `numpy` or `pandas` objects are fine, but the end user should only interact with `Datasets`.
 - Code should adhere to [PEP8](https://peps.python.org/pep-0008/) style guide, and all functions should have docstrings.
 - All functionality should have associated [pytest](https://docs.pytest.org/en/7.4.x/) tests.
+    - Unit tests of individual functions are found in `tests/unit_tests/`. Its directory structure and contents should mirror that of `src/kval`.
+    - Tests of more complex functionality (e.g. processing pipelines using multiple modules) should be put in  `tests/functional_tests/`.
+    - A collection of sample data to be used in testing is found in `tests/test_data/`. Should aim to cover a wide range of input data, but we also don't want this to become *too* bulky.
 
 ###### Metadata
 
@@ -71,14 +75,17 @@ ____
 <details>
 <summary><strong>RELEASE NOTES</strong></summary>
 
-- *0.2.0 (under development)*: 
-    - Name change from `oceanograpy` to `kval`.
-    - Introduction of tests.
-    - Packaging and release to `pip` and `conda`.
+- *0.3.0 (in development)*: 
+    - Packaging and hopefully release to PyPi and conda-forge.
     - Removal of NPI-specific content.
+    - Work on ensuring complete reproducability of the CTD processing functionality.
+ 
+- *0.2.0*: 
+    - Name change from `oceanograpy` to `kval`.
+    - Introduction of test suite.
     - Other minor changes.
 
-- 0.1.0: 
+- *0.1.0:* 
     - Initial release.
     - Functionality tailored for CTD processing.
 
