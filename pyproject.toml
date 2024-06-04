@@ -3,7 +3,7 @@ name = "kval"
 
 description = "Tools for oceanographic data processing and analysis in Python"
 
-version = "0.1.0"
+version = "0.2.0-beta"
 
 readme = "README.md"
 

@@ -496,7 +496,7 @@ def _read_column_data_xr(source_file, header_info):
 
     '''
     df = pd.read_csv(source_file, header = header_info['hdr_end_line']+1,
-                 delim_whitespace=True, encoding = 'latin-1',
+                 sep='\\s+', encoding = 'latin-1',
                  names = header_info['col_names'])
     
     # Convert to xarray DataFrame
@@ -527,7 +527,7 @@ def _read_btl_column_data_xr(source_file, header_info, verbose = False):
 
     # Read column data to dataframe
     df_all = pd.read_fwf(source_file, skiprows = header_info['start_line_btl_data'], 
-        delim_whitespace = True, names = header_info['col_names'] + ['avg_std'], 
+        sep='\\s+', names = header_info['col_names'] + ['avg_std'], 
         encoding = 'latin-1')
     
     # Read the primary (avg) and second (std rows)
@@ -721,7 +721,7 @@ def _read_SBE_proc_steps(ds, header_info):
                     + f' seconds applied to: {" ".join(lp_vars_B)}.']
                 ct += 1
             except:
-                print('FYI: Looks like filter A was not applied to any variables.')
+                print('FYI: Looks like filter B was not applied to any variables.')
 
         # Get cell thermal mass correction details 
         if 'celltm_alpha' in line:
