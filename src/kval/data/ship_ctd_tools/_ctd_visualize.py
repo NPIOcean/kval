@@ -487,7 +487,7 @@ def ctd_contours(D):
                 x_data = D[xvar]
                 x_label = 'Latitude'
             elif xvar == 'Profile #':
-                x_data = np.arange(D.dims['TIME'])
+                x_data = np.arange(D.sizes['TIME'])
                 x_label = 'Profile #'
             else:
                 raise ValueError(f"Invalid value for xvar: {xvar}")
@@ -505,7 +505,7 @@ def ctd_contours(D):
             cb.locator = MaxNLocator(nbins=6)  # Adjust the number of ticks as needed
             cb.update_ticks()
 
-            axn.plot(x_data, np.zeros(D_sorted.dims['TIME']), '|k', clip_on = False, zorder = 0)
+            axn.plot(x_data, np.zeros(D_sorted.sizes['TIME']), '|k', clip_on = False, zorder = 0)
 
             axn.set_title(varnm)
 
