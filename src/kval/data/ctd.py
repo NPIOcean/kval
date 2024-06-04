@@ -50,8 +50,7 @@ def ctds_from_cnv_dir(
     cnv_files = tools._cnv_files_from_path(path)
     number_of_cnv_files = len(cnv_files)
     if number_of_cnv_files==0:
-        raise Exception(f'Did not find any .cnv files in the specified directory ("{pfrom IPython.display import clear_output
-ath}").'
+        raise Exception(f'Did not find any .cnv files in the specified directory ("{path}").'
                         ' Is there an error in the path?')
     else:
         print(f'Found {number_of_cnv_files} .cnv files in  "{path}".')
@@ -144,7 +143,16 @@ def metadata_auto(D, NPI = True,):
     D = _reorder_attrs(D)
 
     return D
-from IPython.display import clear_output
+
+def quick_metadata_check(D,):
+    # Consider moving to conventionalize.py?
+    # (Or maybe keep this one CTD specific)
+
+    print('--  QUICK METADATA CHECK --')
+    print('NOTE: Not comprehensive! A true check is done on export to netcdf.')
+
+    print('\n# GLOBAL #')
+
 
 
     ### GLOBAL
@@ -184,19 +192,6 @@ from IPython.display import clear_output
                     print(f'- {varnm}: Possibly missing {var_attr}')
                     any_missing = True
             if not any_missing:
-                    print(f'- {varnm}: OK')
-
-    other_dict = {
-        'LATITUDE':['units', 'standard_name', 'long_name', 'axis'],
-        'LONGITUDE':['units', 'standard_name', 'long_name', 'axis'],
-        'STATION':['cf_role', 'long_name'],
-        'CRUISE':['long_name'],
-        }
-    for varnm, _attrs_dict_ref_var in other_dict.items():
-        if varnm in D:
-            any_missing = False
-            for var_attr in _attrs_dict_ref_var:
-                if var_attr not in D[varnm].attrs:
                     print(f'- {varnm}: Possibly missing {var_attr}')
                     any_missing = True
             if not any_missing:
