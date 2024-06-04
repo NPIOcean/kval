@@ -35,7 +35,6 @@ TBD:
     - Pretty decent already
 - Consider usign the *logging module*
 
-
 '''
 
 ## IMPORTS
@@ -43,16 +42,13 @@ TBD:
 import pandas as pd
 import xarray as xr
 import numpy as np
-from kval.io import _variable_defs as vardef
+from kval.file import _variable_defs as vardef
 from kval.util import time
 import matplotlib.pyplot as plt
 import re
 from typing import Optional
 from tqdm.notebook import tqdm 
-from typing import Optional
 from itertools import zip_longest
-from matplotlib.dates import date2num
-import warnings
 
 ## KEY FUNCTIONS
 
@@ -269,6 +265,9 @@ def read_header(filename: str) -> dict:
     """
     Reads a SBE .cnv (or .hdr, .btl) file and returns a dictionary with various
     metadata parameters extracted from the header.
+
+    NOTE: This is a very bulky and ad-hoc function - but it does seem to 
+          do a reasonable job in the test cases tried so far.
 
     NOTE: Only tested for .cnv and .btl.
 
@@ -632,7 +631,7 @@ def _read_SBE_proc_steps(ds, header_info):
     a more easily readable format and storing the information as the global
     variable *SBE_processing*.
 
-    This is a long and clunky function. This is mainly because the input
+    NOTE: This is a long and clunky function. This is mainly because the input
     format is clunky. 
 
     Also:

@@ -368,26 +368,7 @@ def mat_to_xr(matfile, struct_name = None, pressure_name = 'PR', time_name = 'TI
             varnms_1d += [varnm]
 
     varnms_2d.remove('TIME')
-    
-    if False:
-        varnms_2d.remove(pressure_name)
 
-
-        # Get the pressure grid (and check that is the same for all variables..)
-        PRES = []
-        for level_pres in data_dict[pressure_name]:
-            level_pres_valid = level_pres[~np.isnan(level_pres)]
-
-            pres_unique = np.unique(level_pres_valid)
-            
-            if len(pres_unique)>1:
-                raise Exception(f'{pressure_name} is'
-                    ' different across profiles!'
-                    '\n-> cannot load this as a gridded dataset.')
-            elif len(pres_unique)==0:
-                PRES += [np.nan]
-            else:
-                PRES += [pres_unique[0]]
 
     # Parse time from  [2015,    9,   17,   22,   19,   33] format.
     # -> Replace the TIME field with parsed datetime times
@@ -418,6 +399,8 @@ def mat_to_xr(matfile, struct_name = None, pressure_name = 'PR', time_name = 'TI
 
 def mat_to_xr_old(matfile, struct_name = 'CTD', pressure_name = 'PR'):
     """
+    (DEPRECaTED - TO BE REMOVED)
+
     Convert MATLAB .mat file to an xarray Dataset.
 
     (Perhaps slightly hardcoded for ATWAIN 2015 dataset. Should test more

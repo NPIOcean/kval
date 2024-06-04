@@ -13,14 +13,13 @@ import xarray as xr
 from kval.data.ship_ctd_tools import _ctd_tools as tools
 from kval.data.ship_ctd_tools import _ctd_visualize as viz
 from kval.data.ship_ctd_tools import _ctd_edit as edit
-from kval.io import matfile
+from kval.file import matfile
 import re
 from collections import Counter
 from kval.util import time
 import pandas as pd
 from kval.data.nc_format import conventionalize, _standard_attrs, check_conventions
 import os
-from IPython.display import clear_output
 from kval.data.nc_format.check_conventions import check_file_with_button
 
 ## LOADING AND SAVING DATA
@@ -51,7 +50,8 @@ def ctds_from_cnv_dir(
     cnv_files = tools._cnv_files_from_path(path)
     number_of_cnv_files = len(cnv_files)
     if number_of_cnv_files==0:
-        raise Exception(f'Did not find any .cnv files in the specified directory ("{path}").'
+        raise Exception(f'Did not find any .cnv files in the specified directory ("{pfrom IPython.display import clear_output
+ath}").'
                         ' Is there an error in the path?')
     else:
         print(f'Found {number_of_cnv_files} .cnv files in  "{path}".')
@@ -144,16 +144,8 @@ def metadata_auto(D, NPI = True,):
     D = _reorder_attrs(D)
 
     return D
+from IPython.display import clear_output
 
-
-def quick_metadata_check(D,):
-    # Consider moving to conventionalize.py?
-    # (Or maybe keep this one CTD specific)
-
-    print('--  QUICK METADATA CHECK --')
-    print('NOTE: Not comprehensive! A true check is done on export to netcdf.')
-
-    print('\n# GLOBAL #')
 
     ### GLOBAL
     attrs_dict_ref = _standard_attrs.global_attrs_ordered.copy()
@@ -824,7 +816,8 @@ def drop_vars_pick(D):
     to select variables to remove. The removal is performed by clicking the "Drop variables"
     button. The removed variables are also printed to the output.
 
-    After running this function, D will be updated.
+    After running this function, D will be updated.from IPython.display import clear_output
+
 
     Note: This class utilizes IPython widgets for interactive use within a Jupyter environment.
     '''

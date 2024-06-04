@@ -11,7 +11,7 @@ format produced by OceanograPy.io.cnv:
 
 '''
 
-from kval.io import sbe
+from kval.file import sbe
 import numpy as np
 import xarray as xr
 from tqdm.notebook import tqdm 
