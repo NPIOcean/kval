@@ -70,7 +70,13 @@ def inspect_profiles(d):
 
         station_time_string = time.convert_timenum_to_datetime(profile.TIME, d.TIME.units)
         ax.set_title(f'Station: {d["STATION"].values[station_index]}, {station_time_string}')
-        ax.set_xlabel(f'{variable} [{d[variable].units}]')
+
+        if 'units' in d[variable].attrs:
+            var_unit_ = d[variable].units
+        else:
+            var_unit_ = 'no unit specified'
+
+        ax.set_xlabel(f'{variable} [{var_unit_}]')
         ax.set_ylabel('PRES')
         ax.invert_yaxis()
         ax.grid()
@@ -186,8 +192,15 @@ def inspect_dual_sensors(D):
 
         station_time_string = time.convert_timenum_to_datetime(profile_1.TIME, D.TIME.units)
         fig.suptitle(f'Station: {D["STATION"].values[station_index]}, {station_time_string}')
-        ax[0].set_xlabel(f'{D[variable1].units}')
-        ax[1].set_xlabel(f'{D[variable1].units}')
+
+
+        if 'units' in D[variable1].attrs:
+            var_unit_1_ = D[variable1].units
+        else:
+            var_unit_1_ = 'no unit specified'
+
+        ax[0].set_xlabel(f'{var_unit_1_}')
+        ax[1].set_xlabel(f'{var_unit_1_}')
         ax[0].set_title('Dual sensor profiles')
         ax[1].set_title('Dual sensor difference')
         
@@ -499,7 +512,13 @@ def ctd_contours(D):
                 x_data = D_sorted[xvar] 
 
             C = axn.contourf(x_data, D_sorted.PRES, D_sorted[varnm].T, cmap=colormap, levels = 30)
-            cb = plt.colorbar(C, ax=axn, label=D_sorted[varnm].units)
+
+            if 'units' in D_sorted[varnm].attrs:
+                var_unit_ = D_sorted[varnm].units
+            else:
+                var_unit_ = 'no unit specified'
+
+            cb = plt.colorbar(C, ax=axn, label=var_unit_)
             
             # Set colorbar ticks using MaxNLocator
             cb.locator = MaxNLocator(nbins=6)  # Adjust the number of ticks as needed
