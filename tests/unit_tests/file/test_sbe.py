@@ -1,7 +1,7 @@
 import numpy as np
 import xarray as xr
 import pytest
-from kval.io import sbe
+from kval.file import sbe
 import glob2
 import os
 
