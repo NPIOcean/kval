@@ -9,7 +9,7 @@ from kval.calc import numbers
 from kval.util import time, user_input
 import numpy as np
 
-def add_range_attrs_ctd(D, vertical_var = None):
+def add_range_attrs(D, vertical_var = None):
     '''
     Add some global attributes based on the data.
 
