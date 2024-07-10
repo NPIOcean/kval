@@ -58,7 +58,8 @@ def mat_to_xr_1D(matfile, time_name = 'time', epoch = '1970-01-01'):
             ds[varnm] = (('TIME'), data_dict[varnm])
         except:
             print(f'NOTE: Could not parse the variable "{varnm}" '
-                  f' with shape: {data_dict[varnm].shape} as a TIME variable - expected shape ({ds.dims["TIME"]}). '
+                  f' with shape: {data_dict[varnm].shape} as a TIME variable'
+                  f' - expected shape ({ds.sizes["TIME"]}). '
                   ' -> Skipping this variable.')
     # Add metadata
     for attrnm in attr_dict:
@@ -128,18 +129,20 @@ def mat_to_xr_2D(matfile, time_name = 'time', depth_name_in = 'PRES', depth_name
     # (Assigning the coordinates by looking at the dimensionality of the fields)
     for varnm, item in data_dict.items():
         dshape = data_dict[varnm].shape  
-        if dshape == (ds.dims['TIME'],):
+        if dshape == (ds.sizes['TIME'],):
             ds[varnm] = (('TIME'), data_dict[varnm])
-        elif dshape == (ds.dims[depth_name_out],):
+        elif dshape == (ds.sizes[depth_name_out],):
             ds[varnm] = ((depth_name_out), data_dict[varnm])
-        elif dshape == (ds.dims['TIME'], ds.dims[depth_name_out]):
+        elif dshape == (ds.sizes['TIME'], ds.sizes[depth_name_out]):
             ds[varnm] = (('TIME', depth_name_out), data_dict[varnm])
-        elif dshape == (ds.dims[depth_name_out], ds.dims['TIME']):
+        elif dshape == (ds.sizes[depth_name_out], ds.sizes['TIME']):
             ds[varnm] = (('TIME', depth_name_out), data_dict[varnm].T)
         else:
-            print(f'NOTE: Trouble with variable {varnm} (shape: {data_dict[varnm].shape})- does not seem '
-                f'to fit into either TIME = ({ds.dims["TIME"]}) '
-                f' or {depth_name_out} ({ds.dims[depth_name_out]}).\n-> Skipping this variable')
+            print(f'NOTE: Trouble with variable {varnm} (shape: '
+                  f'{data_dict[varnm].shape})- does not seem '
+                f'to fit into either TIME = ({ds.sizes["TIME"]}) '
+                f' or {depth_name_out} ({ds.sizes[depth_name_out]}).'
+                '\n-> Skipping this variable')
 
     # Add metadata
     for attrnm, item in attr_dict.items():
