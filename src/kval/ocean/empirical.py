@@ -1,7 +1,7 @@
 '''
 EMPIRICAL.PY
 
-Collection of empirical formulas used in oceanpgraphy.
+Collection of empirical formulas used in oceanography.
 '''
 
 def windstress(wsp, z = 10, rho_air = 1.2):
