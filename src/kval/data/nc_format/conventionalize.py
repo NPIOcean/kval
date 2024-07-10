@@ -16,45 +16,65 @@ def add_range_attrs_ctd(D, vertical_var = None):
     "vertical_var" specifies a coordinate from which to extract
     "geospatial_vertical_" parameters. If nothing is specified, we will
     look for a variable with attribute "axis":"Z".
+
+    - LATITUDE, LONGITUDE variables are required in order to set
+      geospatial range attributes
+    - TIME variable is required in order to set
+      time_coverage range attributes
+    - Vertical coordinate variable (see above) is required in order to set
+      geospatial_vertical range attributes
     '''
+
     # Lateral
-    D.attrs['geospatial_lat_max'] = D.LATITUDE.max().values
-    D.attrs['geospatial_lon_max'] = D.LONGITUDE.max().values
-    D.attrs['geospatial_lat_min'] = D.LATITUDE.min().values
-    D.attrs['geospatial_lon_min'] = D.LONGITUDE.min().values
-    D.attrs['geospatial_bounds'] = _get_geospatial_bounds_wkt_str(D)
-    D.attrs['geospatial_bounds_crs'] = 'EPSG:4326'
-    
+    try:
+        D.attrs['geospatial_lat_max'] = D.LATITUDE.max().values
+        D.attrs['geospatial_lon_max'] = D.LONGITUDE.max().values
+        D.attrs['geospatial_lat_min'] = D.LATITUDE.min().values
+        D.attrs['geospatial_lon_min'] = D.LONGITUDE.min().values
+        D.attrs['geospatial_bounds'] = _get_geospatial_bounds_wkt_str(D)
+        D.attrs['geospatial_bounds_crs'] = 'EPSG:4326'
+    except:
+        print('Did not find LATITUDE, LONGITUDE variables '
+              '-> Could not set "geospatial" attributes.')
+        
+
     # Vertical
 
-    # If not specified: look for a variable with attribute *axis='Z'*
-    if vertical_var == None:
-        for varnm in list(D.keys()) + list(D.coords.keys()):
-            if 'axis' in D[varnm].attrs:
-                if D[varnm].attrs['axis'].upper() == 'Z':
-                    vertical_var = varnm
+    try:
+        # If not specified: look for a variable with attribute *axis='Z'*
+        if vertical_var == None:
+            for varnm in list(D.keys()) + list(D.coords.keys()):
+                if 'axis' in D[varnm].attrs:
+                    if D[varnm].attrs['axis'].upper() == 'Z':
+                        vertical_var = varnm
 
-    if vertical_var != None:
+        if vertical_var != None:
 
-        D.attrs['geospatial_vertical_min'] = D[vertical_var].min().values
-        D.attrs['geospatial_vertical_max'] = D[vertical_var].max().values
-        D.attrs['geospatial_vertical_units'] = D[vertical_var].units
+            D.attrs['geospatial_vertical_min'] = D[vertical_var].min().values
+            D.attrs['geospatial_vertical_max'] = D[vertical_var].max().values
+            D.attrs['geospatial_vertical_units'] = D[vertical_var].units
 
-        D.attrs['geospatial_vertical_positive'] = 'down'
-        D.attrs['geospatial_bounds_vertical_crs'] = 'EPSG:5831'
-
+            D.attrs['geospatial_vertical_positive'] = 'down'
+            D.attrs['geospatial_bounds_vertical_crs'] = 'EPSG:5831'
+    except:
+        print('Did not find vertical variable '
+        '-> Could not set "geospatial_vertical" attributes.')
     # Time
-    if D.TIME.dtype==np.dtype('datetime64[ns]'):
-        start_time, end_time = D.TIME.min(), D.TIME.max()
-    else:
-        start_time = cftime.num2date(D.TIME.min().values, D.TIME.units)
-        end_time = cftime.num2date(D.TIME.max().values, D.TIME.units)
-    D.attrs['time_coverage_start'] = time.datetime_to_ISO8601(start_time)
-    D.attrs['time_coverage_end'] = time.datetime_to_ISO8601(end_time)
-    D.attrs['time_coverage_resolution'] = 'variable'
-    D.attrs['time_coverage_duration'] = _get_time_coverage_duration_str(D)
-
+    try:
+        if D.TIME.dtype==np.dtype('datetime64[ns]'):
+            start_time, end_time = D.TIME.min(), D.TIME.max()
+        else:
+            start_time = cftime.num2date(D.TIME.min().values, D.TIME.units)
+            end_time = cftime.num2date(D.TIME.max().values, D.TIME.units)
+        D.attrs['time_coverage_start'] = time.datetime_to_ISO8601(start_time)
+        D.attrs['time_coverage_end'] = time.datetime_to_ISO8601(end_time)
+        D.attrs['time_coverage_resolution'] = 'variable'
+        D.attrs['time_coverage_duration'] = _get_time_coverage_duration_str(D)
+    except:
+        print('Did not find TIME variable '
+        '-> Could not set "time_coverage" attributes.')
     return D
+
 
 def _get_geospatial_bounds_wkt_str(D, decimals = 2):
     '''
@@ -420,10 +440,6 @@ def add_missing_glob(D):
 
     for attr in glob_attrs_dict_ref:
         if attr not in D.attrs:
-
-
-
-
             set_glob_attr(D, attr)
 
     return D
