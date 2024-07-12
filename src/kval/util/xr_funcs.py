@@ -45,4 +45,27 @@ def rename_attr(D, old_name, new_name, explicit=True):
                   " (Original attribute not found)")
 
 
+def add_attrs_from_dict(D, attr_dict, override=True):
+    """
+    Assign attributes to an xarray.Dataset from a dictionary.
 
+    `attr_dict` should map {attr_key: attr_value}.
+
+    Examples:
+    - For global attributes of the Dataset, use 
+      `add_attrs_from_dict(dataset, attr_dict)`.
+    - For variable-specific attributes within the Dataset, 
+      use `add_attrs_from_dict(dataset[var_name], attr_dict)`.
+
+    Parameters:
+    - dataset (xarray.Dataset): The dataset to which attributes will be added.
+    - attr_dict (dict): Dictionary mapping attribute keys to their values.
+    - override (bool, optional): If False, existing attributes will not be 
+                                 overridden. Defaults to True.
+    """
+
+    for key, value in attr_dict.items():
+        if key in D.attrs and not override:
+            continue  # Skip if attribute exists and override is False
+        else:
+            D.attrs[key] = value  # Assign attribute to the dataset

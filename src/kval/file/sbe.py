@@ -56,6 +56,7 @@ def read_cnv(
     source_file: str,
     apply_flags: Optional[bool] = True,
     profile: Optional[str] = 'downcast',
+    remove_surface_soak: Optional[bool] = True,
     time_dim: Optional[bool] = False,
     inspect_plot: Optional[bool] = False,
     start_scan: Optional[int] = None,
@@ -1234,12 +1235,12 @@ def _remove_up_dncast(ds, keep = 'downcast'):
         max_pres_index -= 1
 
     if keep == 'upcast':
-        # Remove everything *after* pressure max
+        # Remove everything *before* pressure max
         ds = ds.isel({'scan_count':slice(max_pres_index+1, None)})
         ds.attrs['profile_direction'] = 'upcast'
 
     elif keep in ['dncast', 'downcast']:
-        # Remove everything *before* pressure max
+        # Remove everything *after* pressure max
         ds = ds.isel({'scan_count':slice(None, max_pres_index+1)})
         ds.attrs['profile_direction'] = 'downcast'
 
@@ -1247,6 +1248,51 @@ def _remove_up_dncast(ds, keep = 'downcast'):
         raise Exception('"keep" must be either "upcast" or "dncast"') 
 
     return ds
+
+
+## UNUSED
+def _remove_surface_soak(ds, scans_window = 10, cutoff_speed = 0, max_p = 100, 
+                         apply_to_flag = True):
+    '''
+    Removes surface soak period based on the pressure record.
+
+    Looks for a profile starting point where 
+    1. Low-pass filtered speed [delta pressure / delta time] is below a certain threshold.
+    2. Pressure is less than a threshold value.  
+    
+    Should only be used for downcasts..
+
+
+    NOTE: Starting to look good, but not using this for now.
+    - May be able to solve my problems by fossling with SBE processing parameters..
+    '''
+
+
+    # Calculate dPRES/dTIME
+    dPRES = ds['PRES'].diff('scan_count')
+    dTIME = ds['TIME_SAMPLE'].diff('scan_count')*86400
+    dPRES_dTIME = dPRES / dTIME
+
+    # Apply LPF (rolling mean) to dPRES/dTIME
+    dPRES_dTIME_LPF = dPRES_dTIME.rolling(scan_count=scans_window, center=True).mean()
+
+    # Evaluate speed threshold criterion
+    is_above_speed_threshold = dPRES_dTIME_LPF > cutoff_speed
+    # Evaluate pressure threshold criterion
+    is_below_pressure_threshold = ds.isel({'scan_count':slice(1, None)}).PRES<max_p
+    # Combine nto single boolean array
+    both_criteria = is_above_speed_threshold*is_below_pressure_threshold
+
+    # Take the profile start as the last index in the record where the combined criteria go 
+    # from False to True  
+    both_criteria_diff = np.diff(both_criteria*1)
+    profile_start = np.where(both_criteria_diff==1)[0][-1]
+
+    # Remove everything before the *profile_start* index.
+    ds = ds.isel({'scan_count':slice(profile_start)})
+
+    return ds
+
 
 def _update_variables(ds, source_file):
     '''

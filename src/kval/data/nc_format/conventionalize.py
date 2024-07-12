@@ -4,7 +4,7 @@ Functions for making netcdfs cf-compliant.
 '''
 from kval.util import time
 import cftime
-from kval.data.nc_format import _standard_attrs
+from kval.data.nc_format import _standard_attrs, _standard_attrs_org
 from kval.calc import numbers
 from kval.util import time, user_input
 import numpy as np
@@ -68,7 +68,7 @@ def add_range_attrs(D, vertical_var = None):
             end_time = cftime.num2date(D.TIME.max().values, D.TIME.units)
         D.attrs['time_coverage_start'] = time.datetime_to_ISO8601(start_time)
         D.attrs['time_coverage_end'] = time.datetime_to_ISO8601(end_time)
-        D.attrs['time_coverage_resolution'] = 'variable'
+        D.attrs['time_coverage_resolution'] = 'variable' ## Note: Should not be variable for fixed sampling rate instruments!!! -> Fix this.
         D.attrs['time_coverage_duration'] = _get_time_coverage_duration_str(D)
     except:
         print('Did not find TIME variable '
@@ -112,8 +112,7 @@ def _get_time_coverage_duration_str(D):
     return duration_str
 
 
-
-def add_standard_var_attrs(D, override = False):
+def add_standard_var_attrs(D, ctd_prof = False, override = False):
     '''
     Add variable attributes 
     as specified in oceanograpy.data.nc_format.standard_var_attrs
@@ -167,7 +166,8 @@ def add_standard_var_attrs(D, override = False):
         # For .btl files: Add "Average" to long_name attribute
         # Append "standard deviation of" to long_name
         if ('source_files' in D.attrs and 'long_name' in D[varnm].attrs 
-            and D.source_files[-3:].upper == 'BTL'):
+            and D.source_files[-3:].upper == 'BTL'
+            and ctd_prof):
 
             long_name = D[varnm].attrs["long_name"]
             long_name_nocap = long_name[0].lower() + long_name[1:]
@@ -177,7 +177,7 @@ def add_standard_var_attrs(D, override = False):
 
 
         # Variables with _std suffix    
-        if varnm.endswith('_std'):
+        if varnm.endswith('_std') and ctd_prof:
             varnm_prefix = varnm.replace('_std', '')
             if varnm_prefix in _standard_attrs.standard_var_attrs:
                 var_attrs_dict = _standard_attrs.standard_var_attrs[
@@ -212,32 +212,58 @@ def add_standard_var_attrs(D, override = False):
         # Add some variable attributes that should be standard for anything
         # measured on a CTD
 
-        if varnm not in ['NISKIN_NUMBER', 'TIME', 'TIME_SAMPLE']: 
+        if ctd_prof:
+            if varnm not in ['NISKIN_NUMBER', 'TIME', 'TIME_SAMPLE']: 
 
-            if override==False and 'coverage_content_type' in D[varnm].attrs:
-                pass
+                if override==False and 'coverage_content_type' in D[varnm].attrs:
+                    pass
+                else:
+                    D[varnm].attrs['coverage_content_type'] = 'physicalMeasurement'
+                if override==False and 'sensor_mount' in D[varnm].attrs:
+                    pass
+                else:
+                    D[varnm].attrs['sensor_mount'] = 'mounted_on_shipborne_profiler'
             else:
-                D[varnm].attrs['coverage_content_type'] = 'physicalMeasurement'
-            if override==False and 'sensor_mount' in D[varnm].attrs:
-                pass
-            else:
-                D[varnm].attrs['sensor_mount'] = 'mounted_on_shipborne_profiler'
-        else:
-            D[varnm].attrs['coverage_content_type'] = 'coordinate'
+                D[varnm].attrs['coverage_content_type'] = 'coordinate'
 
-        if varnm in ['SCAN', 'nbin']:
-            D[varnm].attrs['coverage_content_type'] 
+            if varnm in ['SCAN', 'nbin']:
+                D[varnm].attrs['coverage_content_type'] 
+        
     return D
 
 
-def add_standard_glob_attrs_ctd(D, NPI = False, override = False):
+def add_standard_glob_attrs_org(D, override = False, org = 'npi'):
+    '''
+    Adds standard organization, specific global variables for a CTD dataset as specified in
+    kval.data.nc_format._standard_attrs_org.
+
+
+    Includes  standard attribute values for things like
+    "institution", "creator_name", etc.
+
+    'org' is the organiztion (currently only 'npi' available)
+
+
+    override: governs whether to override any global attributes that 
+    are already present (typically not advised..)
+    '''
+    
+    org_attrs = _standard_attrs_org.standard_globals_org[org.lower()]
+
+    for attr, item in org_attrs.items():
+        if attr not in D.attrs:
+            D.attrs[attr] = item
+        else:
+            if override:
+                D.attrs[attr] = item
+
+    return D
+
+
+def add_standard_glob_attrs_ctd(D, override = False):
     '''
     Adds standard global variables for a CTD dataset as specified in
     oceanograpy.data.nc_format.standard_attrs_global_ctd.
-
-    If NPI = True, also add NPI standard attribute values for things like
-    "institution", "creator_name", etc, as specified in 
-    oceanograpy.data.nc_format.standard_globals_NPI
 
     override: governs whether to override any global attributes that 
     are already present (typically not advised..)
@@ -250,25 +276,13 @@ def add_standard_glob_attrs_ctd(D, NPI = False, override = False):
             if override:
                 D.attrs[attr] = item
 
-    if NPI:
-        for attr, item in _standard_attrs.standard_globals_NPI.items():
-            if attr not in D.attrs:
-                D.attrs[attr] = item
-            else:
-                if override:
-                    D.attrs[attr] = item
-
     return D
 
 
-def add_standard_glob_attrs_moor(D, NPI = False, override = False):
+def add_standard_glob_attrs_moor(D, override = False, org = None):
     '''
     Adds standard global variables for a CTD dataset as specified in
-    oceanograpy.data.nc_format.standard_attrs_global_ctd.
-
-    If NPI = True, also add NPI standard attribute values for things like
-    "institution", "creator_name", etc, as specified in 
-    oceanograpy.data.nc_format.standard_globals_NPI_moor
+    oceanograpy.data.nc_format.standard_attrs_global_moored.
 
     override: governs whether to override any global attributes that 
     are already present (typically not advised..)
@@ -280,14 +294,6 @@ def add_standard_glob_attrs_moor(D, NPI = False, override = False):
         else:
             if override:
                 D.attrs[attr] = item
-
-    if NPI:
-        for attr, item in _standard_attrs.standard_globals_NPI.items():
-            if attr not in D.attrs:
-                D.attrs[attr] = item
-            else:
-                if override:
-                    D.attrs[attr] = item
 
     return D
 

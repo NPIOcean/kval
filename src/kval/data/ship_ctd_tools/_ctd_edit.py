@@ -88,7 +88,10 @@ class hand_remove_points:
         self.button_exit_nochange.on_click(self.exit_and_discard)
         self.button_exit_nochange.layout.width = '200px' 
 
-        self.text_widget = widgets.HTML(value="Drag a rectangle to select points  ")
+        self.text_widget = widgets.HTML(value=(
+            'Drag a rectangle to select points. '
+            '<span style="color: gray;">Click icons on right side of the plot'
+            ' to zoom/move/save (click again to regain cursor).</span>'))
         
         self.button_remove = widgets.Button(description="Remove selected")
         self.button_remove.on_click(self.remove_selected)
@@ -103,17 +106,18 @@ class hand_remove_points:
         self.button_restart.style.button_color = 'yellow'  # You can use any valid CSS color
 
 
-        self.buttons_container_1 = widgets.HBox([self.text_widget, self.button_apply_var, 
+        self.buttons_container_1 = widgets.HBox([self.button_apply_var, 
                                                 self.button_exit_nochange])
         self.buttons_container_2 = widgets.HBox([
             self.button_remove, self.button_forget, self.button_restart])
-
+        self.buttons_container_3 = widgets.HBox([self.text_widget])
         
         # Add an Output widget to capture the print statement
         self.output_widget = widgets.Output()
 
         self.widgets_all = widgets.VBox([self.buttons_container_1,  
-                                         widgets.Output(), self.buttons_container_2,])
+                                         widgets.Output(), self.buttons_container_2,
+                                         self.buttons_container_3,])
 
         # Display the widgets
         display(self.widgets_all)
