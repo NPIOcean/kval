@@ -96,7 +96,8 @@ def inspect_profiles(d):
         layout=widgets.Layout(width='500px')  # Set the width of the slider
     )
 
-    profile_vars = _ctd_tools._get_profile_variables(d)
+    profile_vars = _ctd_tools._get_profile_variables(
+                        d, profile_var = profile_varnm)
 
     # Create the dropdown for selecting a variable
     variable_dropdown = widgets.Dropdown(
@@ -472,6 +473,18 @@ def ctd_contours(D):
     ipywidgets library for interactive elements.
     """
 
+    # Assign the profile variable to PRES (profile files) or 
+    # NISKIN_NUMBER (btl or water sample files)
+    if 'PRES' in D.dims:
+        y_varnm = 'PRES'
+    elif 'NISKIN_NUMBER' in D.dims:
+        y_varnm = 'NISKIN_NUMBER'
+
+    if 'units' in D[y_varnm].attrs:
+        y_label = f'{y_varnm} [{D[y_varnm].units}]'
+    else:
+        y_label = f'{y_varnm}'
+
     # Function to update plots based on variable, xvar, and max depth selection
     def update_plots(variable1, variable2, xvar, max_depth):
 
@@ -511,7 +524,8 @@ def ctd_contours(D):
                 D_sorted = D.sortby(xvar)
                 x_data = D_sorted[xvar] 
 
-            C = axn.contourf(x_data, D_sorted.PRES, D_sorted[varnm].T, cmap=colormap, levels = 30)
+            C = axn.contourf(x_data, D_sorted[y_varnm], D_sorted[varnm].T, 
+                             cmap=colormap, levels = 30)
 
             if 'units' in D_sorted[varnm].attrs:
                 var_unit_ = D_sorted[varnm].units
@@ -524,15 +538,17 @@ def ctd_contours(D):
             cb.locator = MaxNLocator(nbins=6)  # Adjust the number of ticks as needed
             cb.update_ticks()
 
-            axn.plot(x_data, np.zeros(D_sorted.sizes['TIME']), '|k', clip_on = False, zorder = 0)
+            axn.plot(x_data, np.zeros(D_sorted.sizes['TIME']), '|k', 
+                     clip_on = False, zorder = 0)
 
             axn.set_title(varnm)
 
-            conts = axn.contour(x_data, D_sorted.PRES, D_sorted[varnm].T, colors = 'k', 
-                                linewidths = 0.8, alpha = 0.2, levels = cb.get_ticks()[::2])
+            conts = axn.contour(x_data, D_sorted[y_varnm], D_sorted[varnm].T, 
+                        colors = 'k', linewidths = 0.8, alpha = 0.2, 
+                        levels = cb.get_ticks()[::2])
 
             axn.set_facecolor('lightgray')
-            axn.set_ylabel('PRES [dbar]')
+            axn.set_ylabel(y_label)
 
         ax[1].set_xlabel(x_label)
         ax[0].set_ylim(max_depth, 0)
@@ -541,7 +557,8 @@ def ctd_contours(D):
         plt.show()
 
     # Get the list of available variables
-    available_variables = _ctd_tools._get_profile_variables(D)
+    available_variables = _ctd_tools._get_profile_variables(
+        D, profile_var = y_varnm)
 
     # Create dropdowns for variable selection
     variable_dropdown1 = widgets.Dropdown(options=available_variables, 
@@ -566,8 +583,8 @@ def ctd_contours(D):
     close_button.on_click(close_plot)
 
     # Create slider for max depth selection
-    max_depth_slider = widgets.IntSlider(min=1, max=D.PRES[-1].values, step=1, 
-                                         value=D.PRES[-1].values, description='Max depth [m]:')
+    max_depth_slider = widgets.IntSlider(min=1, max=D[y_varnm][-1].values, step=1, 
+                                         value=D[y_varnm][-1].values, description='Max depth [m]:')
 
     # Use interactive to update plots based on variable, xvar, and max depth selection
     out = widgets.interactive_output(update_plots, 

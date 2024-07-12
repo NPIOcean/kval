@@ -1,3 +1,4 @@
+### Defines some standard metadata attributes for various 
 
 standard_var_attrs = {
     'STATION': {
@@ -127,6 +128,42 @@ standard_var_attrs = {
         'valid_min' : 0.0,
         'valid_max' : 50.0,
     },
+
+   'NTRI': {
+        'standard_name':'mole_concentration_of_nitrite_in_sea_water',
+        'units': 'mmol m-3',
+        'long_name': 'Nitrite (NO2-N)',
+        'valid_min' : -0.1,
+        'valid_max' : 50.0,
+    },
+
+   'NTRA': {
+        'standard_name':'mole_concentration_of_nitrate_in_sea_water',
+        'units': 'mmol m-3',
+        'long_name': 'Nitrate (NO3-N)',
+        'valid_min' : -0.1,
+        'valid_max' : 50.0,
+    },
+
+
+   'PHOS': {
+        'standard_name':'mole_concentration_of_phosphate_in_sea_water',
+        'units': 'mmol m-3',
+        'long_name': 'Phosphate (PO4-P)',
+        'valid_min' : -0.1,
+        'valid_max' : 50.0,
+    },
+
+
+   'DO18': {
+        'standard_name':'isotope_ratio_of_18O_to_16O_in_sea_water_excluding_solutes_and_solids',
+        'units': '1',
+        'long_name': 'Per mille deviation in ratio of stable isotopes oxygen-18 and oxygen-16 (excluding Solutes and Solids) ',
+        'valid_min' : -10,
+        'valid_max' : 10,
+    },
+
+
     'UCUR': {
         'standard_name':'eastward_sea_water_velocity',
         'units':'m s-1', 
@@ -148,6 +185,8 @@ standard_var_attrs = {
         'valid_min' : -2.0,
         'valid_max' : 2.0, 
         },
+
+
     'TIME': {
         'standard_name': 'time',
         'units': 'days since 1970-01-01',
@@ -166,6 +205,10 @@ standard_var_attrs = {
         'long_name': 'latitude',
         'axis':'Y',
     }
+
+
+
+
 }
 
 
@@ -193,7 +236,6 @@ standard_attrs_global_moored = {
     'iso_topic_category':'oceans',
     'platform':'Water-based Platforms>Buoys>Moored>MOORINGS',
     'sensor_mount':'mounted_on_mooring_line',
-
 }
 
 
@@ -207,8 +249,6 @@ gmdc_keyword_dict_ctd = {
     'CDOM':'OCEANS>OCEAN CHEMISTRY>ORGANIC MATTER>COLORED DISSOLVED ORGANIC MATTER',
     'ATTN':'OCEANS>OCEAN OPTICS>ATTENUATION/TRANSMISSION',
     'SVEL':'OCEANS>OCEAN ACOUSTICS>ACOUSTIC VELOCITY',
-
-
             }
 
 
@@ -240,23 +280,6 @@ missing_globals_ctd = {
     'acknowledgement':'',
     'version':'',
     'cruise_name':'',
-}
-
-standard_globals_NPI = {
-    'institution': 'Norwegian Polar Institute (NPI)',
-    'license': 'CC-BY 4.0',
-    'creator_name':'Norwegian Polar Institute (NPI)',
-    'creator_email':'post@npolar.no',
-    'creator_type':'institution',
-    'creator_institution':'Norwegian Polar Institute (NPI)',
-    'data_assembly_center':'NO/NPI',
-    'naming_authority':'npolar.no',
-    'instrument_vocabulary':'NASA/GCMD Instrument Keywords Version 17.2',
-    'creator_url':'www.npolar.no',
-    'publisher_name':'Norwegian Polar Institute (NPI)',
-    'publisher_url':'www.npolar.no',
-    'publisher_email':'post@npolar.no',
-    'publisher_institution':'Norwegian Polar Institute (NPI)',
 }
 
 
@@ -421,48 +444,3 @@ variable_attrs_necessary = [
     'QC_indicator',
 ]
 
-
-
-
-### GLOBAL ATTRIBUTE IMPORTANCE ###
-# necessity codes:
-# REQ: Required, HREC: Highly recommended, REC: Recommended, SUG: Suggested 
-
-global_attrs_desc_importance = {
-    'title':{
-        'necessity':'REQ',
-        'description':'''A short phrase or sentence describing the dataset. In
-                      many discovery systems, the title will be displayed in the
-                      results list from a search, and therefore should be human
-                      readable and reasonable to display in a list of such
-                      names. This attribute is also recommended by the NetCDF
-                      Users Guide and the CF conventions. E.g.: "CF-1.10, ACDD-1.3"'''
-    },
-    'summary': {
-        'necessity': 'REQ',
-        'description': '''A paragraph describing the dataset, analogous to an
-                       abstract for a paper.'''
-    },
-    'keywords': {
-        'necessity': 'REQ',
-        'description': '''A comma-separated list of key words and/or phrases.
-                       Keywords may be common words or phrases, terms from a
-                       controlled vocabulary (GCMD is often used), or URIs for
-                       terms from a controlled vocabulary (see also
-                       "keywords_vocabulary" attribute).'''
-    },
-    'id': {
-        'necessity': 'REQ',
-        'description': '''A unique identifier for the dataset. It is recommended
-                      to provide a stable and unique identifier for better data
-                      management and tracking.'''
-    },
-    'Conventions': {
-        'necessity': 'REQ',
-        'description': ''' 	A comma-separated list of the conventions that are
-                       followed by the dataset. For files that follow this
-                       version of ACDD, include the string 'ACDD-1.3'. (This
-                       attribute is described in the NetCDF Users Guide.)'''
-
-    }
-}
