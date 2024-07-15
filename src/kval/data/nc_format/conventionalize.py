@@ -132,7 +132,7 @@ def add_standard_var_attrs(D, ctd_prof = False, override = False):
 
     for varnm in list(D.data_vars) + list(D.coords):
     
-        # Check if varnm ends with a suffix
+        # Check if varnm ends with a number suffix (e.g. PSAL1, TEMP2)
         try:
             number = float(varnm[-1]) # Goes to except if not a number
             core_name = varnm[:-1]
@@ -148,6 +148,12 @@ def add_standard_var_attrs(D, ctd_prof = False, override = False):
             long_name_add = ''
             core_name = varnm
         
+        # Remove suffix to get the "core name", e.g. "CNDC" from "CNDC_CTD"
+        # (this is what we look for when comparing with the attribute 
+        # dictionary)
+        core_name = core_name.split('_')[0]
+
+
         # Normal variables
         if core_name in _standard_attrs.standard_var_attrs:
             var_attrs_dict = (
