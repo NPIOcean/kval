@@ -123,7 +123,8 @@ def dataset_from_btl_dir(
         station_from_filename = station_from_filename)
     D = tools.join_cruise_btl(profile_datasets,
         verbose=verbose)
-
+    D = D.transpose()
+    
     return D
 
 

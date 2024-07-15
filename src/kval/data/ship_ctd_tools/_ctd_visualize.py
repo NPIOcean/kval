@@ -44,8 +44,22 @@ def inspect_profiles(d):
     Note: This function utilizes Matplotlib for plotting and ipywidgets for interactive controls.
     """
 
+
+    # Assign the profile variable to PRES (profile files) or 
+    # NISKIN_NUMBER (btl or water sample files)
+    if 'PRES' in d.dims:
+        y_varnm = 'PRES'
+    elif 'NISKIN_NUMBER' in d.dims:
+        y_varnm = 'NISKIN_NUMBER'
+
+    if 'units' in d[y_varnm].attrs:
+        y_label = f'{y_varnm} [{d[y_varnm].units}]'
+    else:
+        y_label = f'{y_varnm}'
+
+
     # Function to create a profile plot
-    def plot_profile(station_index, variable):
+    def plot_profile(station_index, variable, y_varnm, y_label):
 
         # Close previous figure if there is one..
         try:
@@ -60,13 +74,21 @@ def inspect_profiles(d):
         for nn, station in enumerate(d['STATION']):
             if nn != station_index:  # Skip the selected profile
                 profile =  d[variable].where(d['STATION'] == station, drop=True).squeeze()
-                ax.plot(profile, d['PRES'], color='tab:blue', lw=0.5, alpha=0.4)
+                ax.plot(profile, d[y_varnm], color='tab:blue', lw=0.5, alpha=0.4)
+
+        # Choose a marker size depending on the number of points in a profile
+        # (Want larger circles if we have many points, e.g. for bottle data)
+        Nz = len(d[y_varnm])
+        if Nz>100: 
+            ms = 2
+        else:
+            ms = 2 + (100-Nz)*0.05 
 
         # Plot the selected profile in color
         profile = d[variable].isel(TIME=station_index)
 
-        ax.plot(profile, d['PRES'], alpha=0.8, lw=0.7, color='k')
-        ax.plot(profile, d['PRES'], '.', ms=2, alpha=1, color='tab:orange')
+        ax.plot(profile, d[y_varnm], alpha=0.8, lw=0.7, color='k')
+        ax.plot(profile, d[y_varnm], '.', ms=ms, alpha=1, color='tab:orange')
 
         station_time_string = time.convert_timenum_to_datetime(profile.TIME, d.TIME.units)
         ax.set_title(f'Station: {d["STATION"].values[station_index]}, {station_time_string}')
@@ -77,7 +99,7 @@ def inspect_profiles(d):
             var_unit_ = 'no unit specified'
 
         ax.set_xlabel(f'{variable} [{var_unit_}]')
-        ax.set_ylabel('PRES')
+        ax.set_ylabel(y_label)
         ax.invert_yaxis()
         ax.grid()
         fig.canvas.header_visible = False  # Hide the figure header
@@ -97,7 +119,7 @@ def inspect_profiles(d):
     )
 
     profile_vars = _ctd_tools._get_profile_variables(
-                        d, profile_var = profile_varnm)
+                        d, profile_var = y_varnm)
 
     # Create the dropdown for selecting a variable
     variable_dropdown = widgets.Dropdown(
@@ -129,7 +151,10 @@ def inspect_profiles(d):
 
     # Use interactive_output to create interactive controls
     output = widgets.interactive_output(
-        plot_profile, {'station_index': station_index_slider, 'variable': variable_dropdown}
+        plot_profile, {'station_index': station_index_slider, 
+                       'variable': variable_dropdown,
+                       'y_varnm': widgets.fixed(y_varnm), 
+                       'y_label':widgets.fixed(y_label)},
     )
 
 
