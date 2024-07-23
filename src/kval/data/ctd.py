@@ -217,7 +217,10 @@ def check_metadata(D):
 
 ###########
 
-def to_netcdf(D, path, file_name = None, convention_check = False, add_to_history = True):
+def to_netcdf(D, path, 
+        file_name = None, convention_check = False, 
+        add_to_history = True,
+        verbose = True):
     '''
     Export xarray Dataset to netCDF.
     Using the 'id' attribute as file name if file_name not specified
@@ -260,9 +263,10 @@ def to_netcdf(D, path, file_name = None, convention_check = False, add_to_histor
         # Add "Creation of this netcdf file" line with current timestamp
         now_time = pd.Timestamp.now().strftime('%Y-%m-%d')
         D.attrs['history'] = D.history + f'\n{now_time}: Creation of this netcdf file.'
-        print(f'Updated history attribute. Current content:\n---')
-        print(D.history)
-        print('---')
+        if verbose:
+            print(f'Updated history attribute. Current content:\n---')
+            print(D.history)
+            print('---')
 
     # Save the file          
     try:
@@ -283,7 +287,8 @@ def to_netcdf(D, path, file_name = None, convention_check = False, add_to_histor
             # User does not want to override
             print("Operation canceled. File not overridden.")
 
-    print(f'Exported netCDF file as: {path}{file_name}.nc')
+    if verbose:
+        print(f'Exported netCDF file as: {path}{file_name}.nc')
 
     if convention_check:
         print('Running convention checker:')

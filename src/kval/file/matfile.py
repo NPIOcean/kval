@@ -21,7 +21,8 @@ from matplotlib.dates import date2num
 from kval.util import time
 
 
-def mat_to_xr_1D(matfile, time_name = 'time', epoch = '1970-01-01'):
+def mat_to_xr_1D(matfile, time_name = 'time', epoch = '1970-01-01', 
+                 verbose = True):
     '''
     Read a matfile to an xr Dataset. 
     
@@ -46,7 +47,8 @@ def mat_to_xr_1D(matfile, time_name = 'time', epoch = '1970-01-01'):
         # Remove time variable if we successfully parsed time
         data_dict.pop(time_name)
     except:
-        print(f'NOTE: Unable to parse time from the {time_name} field.')
+        if verbose:
+            print(f'NOTE: Unable to parse time from the {time_name} field.')
 
 
     # Collect in an xr Dataset
@@ -57,10 +59,11 @@ def mat_to_xr_1D(matfile, time_name = 'time', epoch = '1970-01-01'):
         try:
             ds[varnm] = (('TIME'), data_dict[varnm])
         except:
-            print(f'NOTE: Could not parse the variable "{varnm}" '
-                  f' with shape: {data_dict[varnm].shape} as a TIME variable'
-                  f' - expected shape ({ds.sizes["TIME"]}). '
-                  ' -> Skipping this variable.')
+            if verbose:
+                print(f'NOTE: Could not parse the variable "{varnm}" '
+                    f' with shape: {data_dict[varnm].shape} as a TIME variable'
+                    f' - expected shape ({ds.sizes["TIME"]}). '
+                    ' -> Skipping this variable.')
     # Add metadata
     for attrnm in attr_dict:
         ds.attrs[attrnm] = attr_dict[attrnm]
