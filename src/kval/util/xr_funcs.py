@@ -6,7 +6,7 @@ Various generalized wrapper functions for working with xarray Datasets
 
 import xarray as xr
 
-def rename_attr(D, old_name, new_name, explicit=True):
+def rename_attr(D, old_name, new_name, verbose=True):
     """
     Rename an attribute in an xarray Dataset.
 
@@ -37,10 +37,10 @@ def rename_attr(D, old_name, new_name, explicit=True):
     """
     if old_name in D.attrs:
         D.attrs[new_name] = D.attrs.pop(old_name)
-        if explicit:
+        if verbose:
             print(f"Renamed attribute '{old_name}' to '{new_name}'.")
     else:
-        if explicit:
+        if verbose:
             print(f"Could not rename attribute '{old_name}' to '{new_name}'."
                   " (Original attribute not found)")
 
