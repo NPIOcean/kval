@@ -71,8 +71,8 @@ def add_range_attrs(D, vertical_var = None):
         D.attrs['time_coverage_resolution'] = 'variable' ## Note: Should not be variable for fixed sampling rate instruments!!! -> Fix this.
         D.attrs['time_coverage_duration'] = _get_time_coverage_duration_str(D)
     except:
-        print('Did not find TIME variable '
-        '-> Could not set "time_coverage" attributes.')
+        print('Did not find TIME variable (or TIME variable lacks "units" attribute)'
+        '\n-> Could not set "time_coverage" attributes.')
     return D
 
 
