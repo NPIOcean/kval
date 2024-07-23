@@ -255,7 +255,7 @@ def to_netcdf(D, path, file_name = None, convention_check = False, add_to_histor
                 # Only preserve lines that do *not*
                 if "Creation of this netcdf file" not in line:
                     updated_history.append(line)
-        D.attrs['history'] = '\n'.join(updated_history)
+            D.attrs['history'] = '\n'.join(updated_history)
 
         # Add "Creation of this netcdf file" line with current timestamp
         now_time = pd.Timestamp.now().strftime('%Y-%m-%d')
