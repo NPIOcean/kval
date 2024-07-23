@@ -34,11 +34,6 @@ dependencies = [
   "xlrd>=2.0.1"
 ]
 
-[project.optional-dependencies]
-dev = [
-  "pytest==8.1.1",
- ]
-
 
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
@@ -51,6 +46,12 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Topic :: Scientific/Engineering :: Oceanography",
 ]
+
+
+[project.optional-dependencies]
+dev = [
+  "pytest==8.1.1",
+ ]
 
 [build-system]
 requires = ["hatchling"]
