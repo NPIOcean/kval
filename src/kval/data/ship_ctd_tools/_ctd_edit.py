@@ -232,6 +232,8 @@ class hand_remove_points:
         # Indexer used to access this specific profile
         time_loc = dict(TIME=self.d['TIME'].isel(TIME=self.station_index))
         # Set remove-flagged indices to NaN
+
+        ## HERE: CALL XR FUNCTION AND PRODUCE EXACT RECORD!
         self.d[self.varnm].loc[time_loc] = np.where(self.remove_bool, 
                                     np.nan, self.d[self.varnm].loc[time_loc])
         
@@ -353,7 +355,6 @@ def apply_offset(D):
     value_textbox.style.description_width = '150px'  # Adjust the width as needed
     
 
-
     # Dropdown for selecting a single profile
     station_dropdown = widgets.Dropdown(
         options=list(D.STATION.values),  # Assuming keys are profile names
@@ -372,18 +373,14 @@ def apply_offset(D):
         value=False,
         description='Apply offset',
         disabled=False,
-        button_style='success', # 'success', 'info', 'warning', 'danger' or ''
-       # tooltip='Description',
-       # icon='check' # (FontAwesome names without the `fa-` prefix)
+        button_style='success', 
         )
 
     exit_button = widgets.ToggleButton(
         value=False,
         description='Exit',
         disabled=False,
-        button_style='danger', # 'success', 'info', 'warning', 'danger' or ''
-       # tooltip='Description',
-       # icon='check' # (FontAwesome names without the `fa-` prefix)
+        button_style='danger', 
         )
     
     def on_apply_button_click(change):
