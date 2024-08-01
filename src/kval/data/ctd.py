@@ -273,19 +273,19 @@ def to_netcdf(D, path,
         D.to_netcdf(file_path)
     
     # If the file already exists, we may get a permission error. If so, ask  
-    # the user whether to delete the old file and override. 
+    # the user whether to delete the old file and overwrite. 
     except PermissionError:
         user_input = input(f"The file {file_path} already exists. "
-                           "Do you want to override it? (y/n): ")
+                           "Do you want to overwrite it? (y/n): ")
     
         if user_input.lower() in ['yes', 'y']:
             # User wants to override the file
             os.remove(file_path)
             D.to_netcdf(file_path)
-            print(f"File {file_path} overridden.")
+            print(f"File {file_path} overwritten.")
         else:
-            # User does not want to override
-            print("Operation canceled. File not overridden.")
+            # User does not want to overwrite
+            print("Operation canceled. File not overwritten.")
 
     if verbose:
         print(f'Exported netCDF file as: {path}{file_name}.nc')
