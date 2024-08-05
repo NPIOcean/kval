@@ -500,7 +500,7 @@ def bin_to_pressure(ds, dp = 1):
     time_vars = [var_name for var_name, var in ds.variables.items() 
                  if 'TIME' in var.dims and len(var.dims) == 1]
     # Make a copy with only the pressure-dimensional variables
-    ds_pres = ds.drop(time_vars)
+    ds_pres = ds.drop_vars(time_vars)
 
     # Define the bins over which to average
     pmax = float(ds_pres.PRES.max())
@@ -592,8 +592,8 @@ def _datasets_from_cnvlist(cnv_list,
         try:
             dataset_list += [sbe.read_cnv(fn, time_dim=True, 
                             station_from_filename = station_from_filename,
-                            suppress_time_warning=~verbose,
-                            suppress_latlon_warning=~verbose,
+                            suppress_time_warning=not verbose,
+                            suppress_latlon_warning=not verbose,
                             start_time_NMEA = start_time_NMEA)]
         except:
             print(f'\n*NOTE*: Could not read file {fn}.')
