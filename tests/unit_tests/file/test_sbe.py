@@ -49,7 +49,6 @@ def test_read_cnv_returns_xarray_dataset(file_list_test_cnvs_single):
     assert all(isinstance(ds, xr.Dataset) for ds in datasets), "Failed to load all test .cnv files to xarray.Dataset"
 
 
-
 def test_read_btl_returns_xarray_dataset(file_list_test_btls_single):
     '''
     Test that the read_btl function returns an xr Dataset for a bunch of 

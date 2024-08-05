@@ -45,5 +45,4 @@ def test_ctds_from_cnv_dir_returns_dataset(dir_list_test_cnvs):
         dataset = ctd.ctds_from_cnv_dir(cnvlist)
         datasets.append(dataset)
 
-
     assert all(isinstance(ds, xr.Dataset) for ds in datasets), "Failed to load all test .cnv file collections to xarray.Dataset"
