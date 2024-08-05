@@ -154,8 +154,6 @@ def quick_metadata_check(D,):
 
     print('\n# GLOBAL #')
 
-
-
     ### GLOBAL
     attrs_dict_ref = _standard_attrs.global_attrs_ordered.copy()
 
