@@ -9,14 +9,14 @@ jobs:
 
     strategy:
       matrix:
-        python-version: [3.8, 3.9, 3.10, 3.11, 3.12]
+        python-version: [3.8, 3.9, 3.10, 3.11, 3.12]  # Remove unsupported Python versions
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3  # Use the latest version of actions/checkout
 
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4  # Use the latest version of actions/setup-python
       with:
         python-version: ${{ matrix.python-version }}
 
