@@ -74,10 +74,10 @@ def ctds_from_cnv_dir(
         
         # Add python scipt snipped to reproduce this operation
         D.PROCESSING.attrs['python_script'] += (
-            'from kval.data import ctd\n'
+            'from kval import data\n'
             +'cnv_dir = "./" # Path to directory containing *source_files*.\n'
             +'\n# Load all .cnv files and join together into a single xarray Dataset:\n'
-            +'ds = ctd.ctds_from_cnv_dir(cnv_dir,\n'
+            +'ds = data.ctd.ctds_from_cnv_dir(cnv_dir,\n'
             +f'    station_from_filename={station_from_filename},\n'
             +f'    start_time_NMEA={start_time_NMEA},\n'
             +f'    processing_variable={processing_variable})'
@@ -124,10 +124,10 @@ def ctds_from_cnv_list(
         
         # Add python scipt snipped to reproduce this operation
         D.PROCESSING.attrs['python_script'] += (
-            'from kval.data import ctd\n'
+            'from kval import data\n'
             +'cnv_list = [{files}] # A list of strings specifying paths to all files in *source_files*.\n'
             +'\n# Load all .cnv files and join together into a single xarray Dataset:\n'
-            +'ds = ctd.ctds_from_cnv_list(cnv_list,\n'
+            +'ds = data.ctd.ctds_from_cnv_list(cnv_list,\n'
             +f'    station_from_filename={station_from_filename},\n'
             +f'    start_time_NMEA={start_time_NMEA},\n'
             +f'    processing_variable={processing_variable})'
