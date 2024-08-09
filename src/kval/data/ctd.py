@@ -20,6 +20,7 @@ import pandas as pd
 from kval.metadata import conventionalize, _standard_attrs, check_conventions
 import os
 from kval.metadata.check_conventions import check_file_with_button
+from typing import Optional
 
 ## LOADING AND SAVING DATA
 
@@ -378,80 +379,8 @@ def to_csv(D, outfile):
 
 ############
 
-def metadata_to_txt(D, outfile):
-    """
-    Write metadata information from an xarray.Dataset to a text file.
-
-    Parameters:
-    - D (xarray.Dataset): The dataset containing metadata.
-    - outfile (str): Output file path for the text file. If the path doesn't
-      end with '.txt', it will be appended.
-
-    Returns:
-    None: The function writes metadata to the specified text file.
-
-    Example:
-    >>> metadata_to_txt(D, 'metadata_output')
-
-    NOTE: This function is pretty general. Consider putting it somethere else!
-    """
-
-    # Ensure the output file has a '.txt' extension
-    if not outfile.endswith('.txt'):
-        outfile += '.txt'
-
-    # Open the text file for writing
-    with open(outfile, 'w') as f:
-        # Create the file header based on the presence of 'id' attribute
-        if hasattr(D, 'id'):
-            file_header = f'FILE METADATA FROM: {D.id}'
-        else:
-            file_header = f'FILE METADATA'
-
-        # Print the file header with formatting
-        print('#'*80, file=f)
-        print(f'####  {file_header:<68}  ####', file=f)
-        print('#'*80, file=f)
-        print('\n' + '#'*27, file=f)
-        print('### GLOBAL ATTRIBUTES   ###', file=f)
-        print('#'*27, file=f)
-        print('', file=f)
-
-        # Print global attributes
-        for key, item in D.attrs.items():
-            print(f'# {key}:', file=f)
-            print(item, file=f)
-
-        print('', file=f)
-        print('#'*27, file=f)
-        print('### VARIABLE ATTRIBUTES ###', file=f)
-        print('#'*27, file=f)
-
-        # Get all variable names (coordinates and data variables)
-        all_vars = list(D.coords.keys()) + list(D.data_vars.keys())
-
-        # Iterate through variables
-        for varnm in all_vars:
-            print('\n' + '-'*50, file=f)
-
-            # Print variable name with indication of coordinate status
-            if varnm in D.coords:
-                print(f'{varnm} (coordinate)', file=f)
-            else:
-                print(f'{varnm}', file=f)
-
-            print('-'*50, file=f)
-
-            # Print variable attributes
-            for key, item in D[varnm].attrs.items():
-                print(f'# {key}:', file=f)
-                print(item, file=f)
-
-
 ## APPLYING CORRECTIONS ETC
 
-import xarray as xr
-from typing import Optional
 
 def calibrate_chl(
     D: xr.Dataset,
