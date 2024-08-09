@@ -4,7 +4,7 @@ Functions for making netcdfs cf-compliant.
 '''
 from kval.util import time
 import cftime
-from kval.data.nc_format import _standard_attrs, _standard_attrs_org
+from kval.nc_format import _standard_attrs, _standard_attrs_org
 from kval.calc import numbers
 from kval.util import time, user_input
 import numpy as np

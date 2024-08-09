@@ -18,9 +18,9 @@ import re
 from collections import Counter
 from kval.util import time
 import pandas as pd
-from kval.data.nc_format import conventionalize, _standard_attrs, check_conventions
+from kval.nc_format import conventionalize, _standard_attrs, check_conventions
 import os
-from kval.data.nc_format.check_conventions import check_file_with_button
+from kval.nc_format.check_conventions import check_file_with_button
 
 ## LOADING AND SAVING DATA
 
