@@ -23,6 +23,7 @@ ____
 
 - `file`: Converting to and from various file format (e.g. read CTD .cnv data to netCDF) 
 - `data`: Data post-processing and QC (e.g. CTD post-processing)
+- `metadata`: Handling and standardizing metadata according to CF conventions
 - `plots`: Various tools to help make nice (matplotlib) figures
 - `map`: Tools for making maps
 - `geo`: Geographical calculations (coordinate transformations, point-to-point distances etc)  
