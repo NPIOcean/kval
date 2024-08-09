@@ -1,0 +1,318 @@
+################################################################################
+####  FILE METADATA FROM: Unknown                                           ####
+################################################################################
+
+###########################
+### GLOBAL ATTRIBUTES   ###
+###########################
+
+# history:
+2017-09-24 to 2017-09-24: Data collection.
+2018-07-23: Processed to .cnv using SBE software (details in "SBE_processing").
+2024-08-09: Post-processing.
+# source:
+CTD profiles from SBE911+
+# instrument:
+In Situ/Laboratory Instruments>Profilers/Sounders>CTD
+# platform:
+Water-based Platforms>Vessels
+# institution:
+Norwegian Polar Institute (NPI)
+# license:
+CC-BY 4.0
+# time_coverage_start:
+2017-09-24T17:52:49Z
+# time_coverage_end:
+2017-09-24T20:16:23Z
+# time_coverage_resolution:
+variable
+# time_coverage_duration:
+P0000-00-00T02:23:34
+# geospatial_lat_max:
+80.112
+# geospatial_lon_max:
+10.7464
+# geospatial_lat_min:
+80.0429
+# geospatial_lon_min:
+9.8747
+# geospatial_bounds:
+POLYGON ((9.87 80.04, 9.87 80.12, 10.75 80.12, 10.75 80.04, 9.87 80.04))
+# geospatial_bounds_crs:
+EPSG:4326
+# geospatial_vertical_min:
+3.0
+# geospatial_vertical_max:
+529.0
+# geospatial_vertical_positive:
+down
+# geospatial_vertical_units:
+dbar
+# geospatial_bounds_vertical_crs:
+EPSG:5831
+# data_set_language:
+eng
+# data_assembly_center:
+NO/NPI
+# creator_name:
+Norwegian Polar Institute (NPI)
+# creator_email:
+post@npolar.no
+# creator_type:
+institution
+# creator_institution:
+Norwegian Polar Institute (NPI)
+# creator_url:
+www.npolar.no
+# publisher_name:
+Norwegian Polar Institute (NPI)
+# publisher_url:
+www.npolar.no
+# publisher_email:
+post@npolar.no
+# publisher_institution:
+Norwegian Polar Institute (NPI)
+# keywords:
+OCEANS>SALINITY/DENSITY>CONDUCTIVITY>CONDUCTIVITY PROFILES,OCEANS>OCEAN OPTICS>CHLOROPHYLL>CHLOROPHYLL CONCENTRATION,OCEANS>OCEAN TEMPERATURE>OCEAN TEMPERATURE PROFILES,OCEANS>SALINITY/DENSITY>OCEAN SALINITY>OCEAN SALINITY PROFILES
+# binned:
+1 decibars (SBE software)
+# source_files:
+E.g. AT285.HEX, AT285.XMLCON -> AT285.CNV
+# featureType:
+profile
+# standard_name_vocabulary:
+CF Standard Name Table v83
+# instrument_vocabulary:
+NASA/GCMD Instrument Keywords Version 17.2
+# keywords_vocabulary:
+NASA/GCMD Science Keywords 9.1.5
+# iso_topic_category:
+oceans
+# Conventions:
+ACDD-1.3, CF-1.8
+# naming_authority:
+npolar.no
+
+###########################
+### VARIABLE ATTRIBUTES ###
+###########################
+
+--------------------------------------------------
+PRES (coordinate)
+--------------------------------------------------
+# units:
+dbar
+# sensor_serial_number:
+0972
+# sensor_calibration_date:
+20-Feb-14 
+# coverage_content_type:
+coordinate
+# standard_name:
+sea_water_pressure
+# long_name:
+Pressure due to seawater
+# positive:
+down
+# valid_min:
+-1.0
+# valid_max:
+12000.0
+# axis:
+Z
+
+--------------------------------------------------
+TIME (coordinate)
+--------------------------------------------------
+# units:
+Days since 1970-01-01 00:00
+# standard_name:
+time
+# long_name:
+Start time of profile
+# comment:
+Source: "start_time" header line
+# axis:
+T
+
+--------------------------------------------------
+TEMP
+--------------------------------------------------
+# units:
+degree_Celsius
+# standard_name:
+sea_water_temperature
+# long_name:
+Sea water temperature
+# sensor_serial_number:
+2400
+# sensor_calibration_date:
+11-Apr-17
+# valid_min:
+-3.0
+# valid_max:
+40.0
+# sensor_mount:
+mounted_on_shipborne_profiler
+# reference_scale:
+ITS-90
+# coverage_content_type:
+physicalMeasurement
+
+--------------------------------------------------
+PTEMP
+--------------------------------------------------
+# units:
+degree_Celsius
+# sensor_serial_number:
+2400
+# sensor_calibration_date:
+11-Apr-17
+# sensor_mount:
+mounted_on_shipborne_profiler
+# coverage_content_type:
+physicalMeasurement
+
+--------------------------------------------------
+CNDC
+--------------------------------------------------
+# units:
+mS cm-1
+# standard_name:
+sea_water_electrical_conductivity
+# long_name:
+Seawater electrical conductivity
+# sensor_serial_number:
+3234
+# sensor_calibration_date:
+12Apr-17
+# valid_min:
+0.0
+# valid_max:
+50.0
+# sensor_mount:
+mounted_on_shipborne_profiler
+# coverage_content_type:
+physicalMeasurement
+
+--------------------------------------------------
+PSAL
+--------------------------------------------------
+# units:
+1
+# standard_name:
+sea_water_practical_salinity
+# long_name:
+Practical salinity
+# sensor_serial_number:
+2400, 3234
+# sensor_calibration_date:
+11-Apr-17, 12Apr-17
+# valid_min:
+2.0
+# valid_max:
+41.0
+# sensor_mount:
+mounted_on_shipborne_profiler
+# reference_scale:
+PSS-78
+# coverage_content_type:
+physicalMeasurement
+
+--------------------------------------------------
+SIGTH
+--------------------------------------------------
+# units:
+kg m-3
+# long_name:
+Sigma-theta density
+# sensor_serial_number:
+2400, 3234
+# sensor_calibration_date:
+11-Apr-17, 12Apr-17
+# valid_min:
+0.0
+# valid_max:
+50.0
+# sensor_mount:
+mounted_on_shipborne_profiler
+# coverage_content_type:
+physicalMeasurement
+
+--------------------------------------------------
+CHLA_fluorescence
+--------------------------------------------------
+# units:
+mg m-3
+# standard_name:
+chlorophyll_concentration_in_sea_water
+# long_name:
+Chlorophyll-A
+# sensor_serial_number:
+FLRTD-1547
+# sensor_calibration_date:
+4-Jan-16
+# valid_min:
+-1.9
+# valid_max:
+100.0
+# sensor_mount:
+mounted_on_shipborne_profiler
+# coverage_content_type:
+physicalMeasurement
+
+--------------------------------------------------
+SBE_FLAG
+--------------------------------------------------
+# units:
+
+
+--------------------------------------------------
+STATION
+--------------------------------------------------
+# long_name:
+CTD station ID
+# cf_role:
+profile_id
+
+--------------------------------------------------
+LATITUDE
+--------------------------------------------------
+# units:
+degree_north
+# standard_name:
+latitude
+# long_name:
+latitude
+# axis:
+Y
+
+--------------------------------------------------
+LONGITUDE
+--------------------------------------------------
+# units:
+degree_east
+# standard_name:
+longitude
+# long_name:
+longitude
+# axis:
+X
+
+--------------------------------------------------
+CRUISE
+--------------------------------------------------
+# long_name:
+Cruise ID
+
+--------------------------------------------------
+PROCESSING
+--------------------------------------------------
+# long_name:
+(Empty variable). Attributes describe processing history of the dataset.
+# SBE_processing:
+SBE SOFTWARE PROCESSING STEPS (extracted from .cnv file header):
+1. Raw data read from e.g. AT285.HEX, AT285.XMLCON.
+2. Bin averaged (1 decibars).
+   > Bad scans not excluded, skipped over 0 initial scans.
+   > (No surface bin).

@@ -10,7 +10,7 @@ import xarray as xr
 from kval.metadata import check_conventions, conventionalize
 import os
 from pathlib import Path
-
+import numpy as np
 
 #### MODIFY METADATA
 
@@ -26,7 +26,72 @@ def add_now_as_date_created(D):
     return D
 
 
+def add_processing_history_var(D: xr.Dataset, source_files = None, post_processing = True, py_script = True):
+    '''
+    Adds a `PROCESSING` variable to the given xarray Dataset `D` to store metadata about the processing history.
 
+    This function creates an empty `PROCESSING` variable within the dataset, where various processing history 
+    details will be stored as attributes. Specifically, it performs the following actions:
+    
+    - Creates a `PROCESSING` variable with no data and assigns it an attribute describing its purpose.
+    - If the dataset has a global attribute `SBE_processing`, it moves this attribute to the `PROCESSING` 
+      variable's attributes and then removes it from the global attributes.
+
+    The processing history can include:
+    - SBE automated processing history
+    - kval post-processing history
+    - Details of Python scripts used for processing
+    - A list of Python packages required to run the scripts
+
+    Parameters:
+    -----------
+    D : xr.Dataset
+        The xarray Dataset to which the `PROCESSING` variable will be added.
+    source_files can be a list ['/../dir/sta001.cnv', '/../dir/sta002.cnv'] or a single file 'D220.rsk'
+    any path names will be stripped
+
+    Returns:
+    --------
+    xr.Dataset
+        The modified xarray Dataset with the `PROCESSING` variable and updated attributes.
+    '''
+
+    D['PROCESSING'] = xr.DataArray(data=None, dims=[], 
+        attrs={'long_name': 'Empty variable whose attributes describe processing history of the dataset.',
+               'comment':'** NOTE: Experimental for now - testing this as '
+               'a way of underway documenting. **\n\n'})
+
+
+    if 'SBE_processing' in D.attrs:
+        D.PROCESSING.attrs['SBE_processing'] = D.SBE_processing
+        del D.attrs['SBE_processing']
+        D['PROCESSING'].attrs['comment'] += ('# SBE_processing #:\nDescription'
+            ' of automated editing applied using SeaBird software before '
+            'post-processing in python.\n')
+
+    if source_files is not None:
+        if isinstance(source_files, str):
+            source_file_string = os.path.basename(source_files) 
+        elif isinstance(source_files, (list, np.ndarray)):
+            file_names = sorted([os.path.basename(path) 
+                                 for path in np.sort(source_files)])
+            source_file_string = ', '.join(file_names)
+        D['PROCESSING'].attrs['source_files'] = source_file_string
+        D['PROCESSING'].attrs['comment'] += ('# source_files #:\nList of '
+            'files produced by SBE processing.\n')
+
+    if post_processing:
+        D['PROCESSING'].attrs['post_processing'] = ''
+        D['PROCESSING'].attrs['comment'] += ('# post_processing #:\n'
+            'Description of post-processing starting with *source_files*.\n')
+
+    if py_script:
+        D['PROCESSING'].attrs['python_script'] = ''
+        D['PROCESSING'].attrs['comment'] += ('# python_script #:\n'
+            'Python script for reproducing post-processing from *source_files*.\n')
+
+
+    return D
 
 #### HELPER FUNCTIONS   
 
