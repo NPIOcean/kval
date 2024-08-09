@@ -7,7 +7,9 @@ Various functions to be applied to generalized datasets.
 from kval.util import time
 import pandas as pd
 import xarray as xr
-
+from kval.metadata import check_conventions, conventionalize
+import os
+from pathlib import Path
 
 
 #### MODIFY METADATA
@@ -26,44 +28,72 @@ def add_now_as_date_created(D):
 
 
 
-def reorder_attrs(D):
+#### HELPER FUNCTIONS   
+
+#### EXPORT
+
+def to_netcdf(D: xr.Dataset, path: str, file_name: str = None, convention_check: bool = False, add_to_history: bool = True, verbose: bool = True):
     """
-    Reorder global and variable attributes of a dataset based on the 
-    specified order in _standard_attrs.
-
-    Parameters:
-        ds (xarray.Dataset): The dataset containing global attributes.
-        ordered_list (list): The desired order of global attributes.
-
-    Returns:
-        xarray.Dataset: The dataset with reordered global attributes.
+    Export xarray Dataset to netCDF.
+    Using the 'id' attribute as file name if file_name not specified (if that doesn't exist, use 'CTD_DATASET_NO_NAME').
     """
-    ### GLOBAL
-    reordered_list = _reorder_list(D.attrs, 
-                                  _standard_attrs.global_attrs_ordered)
-    attrs_dict = D.attrs
-    D.attrs = {}
-    for attr_name in reordered_list:
-        D.attrs[attr_name] = attrs_dict[attr_name]
+    # Ensure path is a Path object
+    path = Path(path)
 
-    ### VARIABLE
-    for varnm in D.data_vars:
-        reordered_list_var = _reorder_list(D[varnm].attrs, 
-                      _standard_attrs.variable_attrs_ordered)
-        var_attrs_dict = D[varnm].attrs
-        D[varnm].attrs = {}
-        for attr_name in reordered_list_var:
-            D[varnm].attrs[attr_name] = var_attrs_dict[attr_name]
-    return D
+    # Add current date as creation date
+    D = add_now_as_date_created(D)
+    D = conventionalize.reorder_attrs(D)
 
+    # Determine file name
+    if file_name is None:
+        file_name = getattr(D, 'id', 'DATASET_NO_NAME')
 
+    # Ensure file name ends with '.nc'
+    if not file_name.endswith('.nc'):
+        file_name += '.nc'
 
-    #### HELPER FUNCTIONS   
+    # Construct file path
+    file_path = path / file_name
 
-    #### EXPORT
+    if add_to_history:
+        # Add or update the history attribute
+        if 'history' not in D.attrs:
+            D.attrs['history'] = ''
+        
+        if 'Creation of this netcdf file' in D.attrs['history']:
+            history_lines = D.attrs['history'].split('\n')
+            updated_history = [line for line in history_lines if "Creation of this netcdf file" not in line]
+            D.attrs['history'] = '\n'.join(updated_history)
 
+        now_time = pd.Timestamp.now().strftime('%Y-%m-%d')
+        D.attrs['history'] += f'\n{now_time}: Creation of this netcdf file.'
+        
+        if verbose:
+            print(f'Updated history attribute. Current content:\n---')
+            print(D.attrs['history'])
+            print('---')
 
-##### Export
+    # Save the dataset to NetCDF
+    try:
+        D.to_netcdf(file_path)
+    
+    except PermissionError:
+        # Handle file overwrite if permission error occurs
+        user_input = input(f"The file {file_path} already exists. Do you want to overwrite it? (y/n): ")
+        if user_input.lower() in ['yes', 'y']:
+            os.remove(file_path)
+            D.to_netcdf(file_path)
+            print(f"File {file_path} overwritten.")
+        else:
+            print("Operation canceled. File not overwritten.")
+
+    if verbose:
+        print(f'Exported netCDF file as: {file_path}')
+
+    if convention_check:
+        print('Running convention checker:')
+        check_conventions.check_file(file_path)
+
 
 def metadata_to_txt(D: xr.Dataset, outfile: str) -> None:
     """

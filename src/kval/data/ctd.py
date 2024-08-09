@@ -16,11 +16,12 @@ from kval.data.ship_ctd_tools import _ctd_edit as edit
 from kval.file import matfile
 from kval.data import dataset
 from kval.util import time
-import pandas as pd
-from kval.metadata import conventionalize, _standard_attrs, check_conventions
-import os
+from kval.metadata import conventionalize, _standard_attrs
 from kval.metadata.check_conventions import check_file_with_button
 from typing import Optional
+
+# Want to be able to use these functions directly..
+from kval.data.dataset import metadata_to_txt, to_netcdf
 
 ## LOADING AND SAVING DATA
 
@@ -140,7 +141,6 @@ def metadata_auto(D, NPI = True,):
     D = conventionalize.add_standard_glob_attrs_org(D)
     D = conventionalize.add_gmdc_keywords_ctd(D)
     D = conventionalize.add_range_attrs(D)
-
     D = conventionalize.reorder_attrs(D)
 
     return D
@@ -211,86 +211,6 @@ def check_metadata(D):
     '''
 
     check_file_with_button(D)
-
-
-###########
-
-def to_netcdf(D, path, 
-        file_name = None, convention_check = False, 
-        add_to_history = True,
-        verbose = True):
-    '''
-    Export xarray Dataset to netCDF.
-    Using the 'id' attribute as file name if file_name not specified
-    (if that doesn't exist, use 'CTD_DATASET_NO_NAME').
-    '''
-    # Consider moving to a more general module?
-
-    D = dataset.add_now_as_date_created(D)
-    D = conventionalize.reorder_attrs(D)
-
-    if file_name == None:
-        try:
-            file_name = D.id
-        except:
-            file_name = 'CTD_DATASET_NO_NAME'
-
-    if file_name.endswith('.nc'):
-        file_path = f'{path}{file_name}'
-    else:
-        file_path = f'{path}{file_name}.nc'
-
-    if add_to_history:
-
-        # Add (empty) history attribute if we don't already have one
-        if not hasattr(D, 'history'):
-            D.attrs['history'] = ''
-
-
-        # Remove old "Creation of this netcdf file" lines
-        if 'Creation of this netcdf file' in D.history:
-            history_lines = D.attrs['history'].split('\n')
-            updated_history = []
-            for line in history_lines:
-                # Check if the line contains "Creation of this netcdf file."
-                # Only preserve lines that do *not*
-                if "Creation of this netcdf file" not in line:
-                    updated_history.append(line)
-            D.attrs['history'] = '\n'.join(updated_history)
-
-        # Add "Creation of this netcdf file" line with current timestamp
-        now_time = pd.Timestamp.now().strftime('%Y-%m-%d')
-        D.attrs['history'] = D.history + f'\n{now_time}: Creation of this netcdf file.'
-        if verbose:
-            print(f'Updated history attribute. Current content:\n---')
-            print(D.history)
-            print('---')
-
-    # Save the file          
-    try:
-        D.to_netcdf(file_path)
-    
-    # If the file already exists, we may get a permission error. If so, ask  
-    # the user whether to delete the old file and overwrite. 
-    except PermissionError:
-        user_input = input(f"The file {file_path} already exists. "
-                           "Do you want to overwrite it? (y/n): ")
-    
-        if user_input.lower() in ['yes', 'y']:
-            # User wants to override the file
-            os.remove(file_path)
-            D.to_netcdf(file_path)
-            print(f"File {file_path} overwritten.")
-        else:
-            # User does not want to overwrite
-            print("Operation canceled. File not overwritten.")
-
-    if verbose:
-        print(f'Exported netCDF file as: {path}{file_name}.nc')
-
-    if convention_check:
-        print('Running convention checker:')
-        check_conventions.check_file(file_path)
 
 
 #############
