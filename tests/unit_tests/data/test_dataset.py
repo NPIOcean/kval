@@ -3,7 +3,9 @@ import xarray as xr
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from kval.data import dataset  # Assuming the function is in xr_funcs module
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+from kval.data import dataset  # Replace with the actual path to your module
 
 # Define a fixture for a mock dataset
 @pytest.fixture
@@ -55,10 +57,81 @@ def mock_dataset() -> xr.Dataset:
     
     return ds
 
+## TEST NETCDF EXPORT
+
+def test_to_netcdf_default_filename(mock_dataset):
+    """
+    Test the to_netcdf function to ensure default file naming works correctly.
+    """
+    with TemporaryDirectory() as tmpdir:
+        file_path = Path(tmpdir) / 'test_dataset.nc'
+        print(file_path, 'AAAA')
+        # Call the function with no file_name
+        dataset.to_netcdf(mock_dataset, tmpdir)
+        
+        # Check that the file was created with the default name
+        assert file_path.exists()
 
 
+def test_to_netcdf_custom_filename(mock_dataset):
+    """
+    Test the to_netcdf function to ensure custom file naming works correctly.
+    """
+    with TemporaryDirectory() as tmpdir:
+        file_path = Path(tmpdir) / 'custom_file.nc'
+        
+        # Call the function with a custom file_name
+        dataset.to_netcdf(mock_dataset, tmpdir, file_name='custom_file')
+        
+        # Check that the file was created with the custom name
+        assert file_path.exists()
 
 
+def test_to_netcdf_file_overwrite(mock_dataset):
+    """
+    Test the to_netcdf function to ensure file overwrite behavior works correctly.
+    """
+    with TemporaryDirectory() as tmpdir:
+        file_path = Path(tmpdir) / 'overwrite_test.nc'
+        
+        # Create an initial file with arbitrary content
+        with open(file_path, 'wb') as f:
+            f.write(b'Initial content')
+        
+        # Mock user input to automatically overwrite
+        with patch('builtins.input', return_value='y'):
+            dataset.to_netcdf(mock_dataset, tmpdir, file_name='overwrite_test')
+        
+        # Check that the file was overwritten
+        assert file_path.exists()
+        
+        # Optionally, check the file's content length or other characteristics
+        # This check depends on what you expect in the file.
+        # For NetCDF files, you might check specific metadata or attributes.
+        # Here, we just ensure the file size is greater than the initial file size.
+        assert file_path.stat().st_size > len(b'Initial content')
+
+
+def test_to_netcdf_verbose_output(mock_dataset):
+    """
+    Test the to_netcdf function to ensure verbose output works correctly.
+    """
+    with TemporaryDirectory() as tmpdir:
+        with patch('builtins.print') as mock_print:
+            dataset.to_netcdf(mock_dataset, tmpdir, verbose=True)
+            assert mock_print.called
+
+def test_to_netcdf_convention_check(mock_dataset):
+    """
+    Test the to_netcdf function to ensure convention checker is called.
+    """
+    with TemporaryDirectory() as tmpdir:
+        with patch('kval.data.dataset.check_conventions.check_file') as mock_check:
+            dataset.to_netcdf(mock_dataset, tmpdir, convention_check=True)
+            mock_check.assert_called_once_with(Path(tmpdir) / 'test_dataset.nc')
+
+
+# TEST METADATA EXPORT
 
 def test_metadata_to_txt(mock_dataset):
     """
@@ -84,7 +157,6 @@ def test_metadata_to_txt(mock_dataset):
     assert 'units:\ndegC' in content
     assert 'long_name:\nTest Temperature' in content
     
-
     # Verify that attributes appear directly after the correct variable name
     temp_index = content.index('TEMP')
     ocean_index = content.index('OCEAN')
@@ -101,7 +173,6 @@ def test_metadata_to_txt(mock_dataset):
     # Check that we have no unit entry or one long_name entry under OCEAN 
     assert content[ocean_index:station_index].count('units:') == 0
     assert content[ocean_index:station_index].count('long_name:') == 0
-
 
     # Clean up the file after test
     Path(outfile).unlink()
