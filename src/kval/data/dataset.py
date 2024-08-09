@@ -83,7 +83,8 @@ def add_processing_history_var(D: xr.Dataset, source_files = None, post_processi
     if post_processing:
         D['PROCESSING'].attrs['post_processing'] = ''
         D['PROCESSING'].attrs['comment'] += ('# post_processing #:\n'
-            'Description of post-processing starting with *source_files*.\n')
+            'Description of post-processing starting with *source_files*.\n'
+            '(Note: Indexing in the PRES dimension starts at 0 - for MATLAB add 1 to the index).\n')
 
     if py_script:
         D['PROCESSING'].attrs['python_script'] = ''

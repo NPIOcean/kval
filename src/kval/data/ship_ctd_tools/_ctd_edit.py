@@ -4,6 +4,7 @@ from matplotlib.widgets import RectangleSelector
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 from kval.util import time
+from kval.data import edit
 from kval.data.ship_ctd_tools import _ctd_tools
 from kval.calc.numbers import order_of_magnitude
 
@@ -24,7 +25,7 @@ class hand_remove_points:
     ```
     Note: Use the interactive plot to select points for removal, then click the corresponding buttons for actions.
     """
-    def __init__(self, d, varnm, station):
+    def __init__(self, d, varnm, TIME_index):
         """
         Initialize the HandRemovePoints instance.
 
@@ -33,17 +34,25 @@ class hand_remove_points:
         - varnm (str): The name of the variable to visualize and edit.
         - station (str): The name of the station.
         """
-        if station not in d.STATION:
-            raise Exception(f'Invalid station ("{station}")')
+
         if varnm not in d.data_vars:
             raise Exception(f'Invalid variable ("{varnm}")')
         
-        # Find the index where d.STATION == station
-        self.station_index = (d['STATION'] == station).argmax(dim='TIME').item()
+
+
+        self.TIME_index = TIME_index
         
+
         self.varnm = varnm
         self.d = d
-        self.var_data = d.isel(TIME=self.station_index)[varnm]
+        
+
+        
+        self.var_data = d.isel(TIME=TIME_index)[varnm]
+        if 'STATION' in d.keys():
+            self.station = d.isel(TIME=TIME_index).STATION.item()
+        else:
+            self.station = 'N/A'
         self.PRES = d.PRES
         self.Npres = len(d.PRES) 
         
@@ -59,9 +68,9 @@ class hand_remove_points:
         self.ax.set_xlabel(f'{varnm} [{self.d[varnm].units}]')
         self.ax.set_ylabel(f'PRES [{self.PRES.units}]')
         self.ax.grid()
-        station_time_string = time.convert_timenum_to_datetime(self.d.TIME.values[self.station_index], d.TIME.units)
+        station_time_string = time.convert_timenum_to_datetime(self.d.TIME.values[TIME_index], d.TIME.units)
         self.fig.canvas.header_visible = False  # Hide the figure header
-        self.ax.set_title(f'Station: {station}: {station_time_string}')
+        self.ax.set_title(f'Station: {self.station}: {station_time_string}')
         plt.tight_layout()
 
 
@@ -230,15 +239,36 @@ class hand_remove_points:
         """
 
         # Indexer used to access this specific profile
-        time_loc = dict(TIME=self.d['TIME'].isel(TIME=self.station_index))
+        time_loc = dict(TIME=self.d['TIME'].isel(TIME=self.TIME_index))
         # Set remove-flagged indices to NaN
 
         ## HERE: CALL XR FUNCTION AND PRODUCE EXACT RECORD!
         self.d[self.varnm].loc[time_loc] = np.where(self.remove_bool, 
                                     np.nan, self.d[self.varnm].loc[time_loc])
         
+
+        self.remove_inds = np.where(self.remove_bool)[0]
+        self.d = edit.remove_points_profile(self.d, self.varnm, self.TIME_index, self.remove_inds)
+
+        # If we have a PROCESSING field:
+        if hasattr(self.d, 'PROCESSING'):
+            prof_num = self.TIME_index + 1
+            N_profs = self.d.sizes['TIME']
+
+            self.d.PROCESSING.attrs['post_processing'] += (
+                f'Manually edited out (->NaN) the following points from profile {prof_num}/{N_profs} (STATION= {self.station}): '
+                f'\n{self.remove_inds}\n')
+
+            
+            self.d.PROCESSING.attrs['python_script'] += (
+                f'\n\n# Manually removing points from the {self.varnm} variable (from the TIME/STATION index {self.TIME_index}):'
+                f'\nds = edit.remove_points_profile(ds, "{self.varnm}", {self.TIME_index}, [{', '.join(map(str, self.remove_inds))}])')
+
+
         # Count how many points we removed
         self.points_removed = np.sum(self.remove_bool)
+
+
 
         # Add info as a variable attribute
         if 'manual_editing' in self.d[self.varnm].attrs.keys(): 
@@ -260,8 +290,8 @@ class hand_remove_points:
         with self.output_widget:
             clear_output(wait=True)
             print(f'APPLIED TO DATASET - Removed {self.points_removed} point(s)')
-        
         self.close_everything()
+
 
     def exit_and_discard(self, button):
         """
