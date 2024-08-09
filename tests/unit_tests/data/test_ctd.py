@@ -1,9 +1,7 @@
-import numpy as np
 import xarray as xr
 import pytest
 from kval.data import ctd
 import glob2
-import os
 
 
 @pytest.fixture

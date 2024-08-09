@@ -17,9 +17,9 @@ from kval.file import matfile
 from kval.data import dataset
 from kval.util import time
 import pandas as pd
-from kval.nc_format import conventionalize, _standard_attrs, check_conventions
+from kval.metadata import conventionalize, _standard_attrs, check_conventions
 import os
-from kval.nc_format.check_conventions import check_file_with_button
+from kval.metadata.check_conventions import check_file_with_button
 
 ## LOADING AND SAVING DATA
 
