@@ -59,7 +59,7 @@ def inspect_profiles(d):
 
 
     # Function to create a profile plot
-    def plot_profile(station_index, variable, y_varnm, y_label):
+    def plot_profile(TIME_index, variable, y_varnm, y_label):
 
         # Close previous figure if there is one..
         try:
@@ -71,9 +71,9 @@ def inspect_profiles(d):
         fig, ax = plt.subplots()
 
         # Plot all profiles in black in the background
-        for nn, station in enumerate(d['STATION']):
-            if nn != station_index:  # Skip the selected profile
-                profile =  d[variable].where(d['STATION'] == station, drop=True).squeeze()
+        for nn in np.arange(d.sizes['TIME']):
+            if nn != TIME_index:  # Skip the selected profile
+                profile =  d[variable].isel(TIME=nn, drop=True).squeeze()
                 ax.plot(profile, d[y_varnm], color='tab:blue', lw=0.5, alpha=0.4)
 
         # Choose a marker size depending on the number of points in a profile
@@ -85,14 +85,20 @@ def inspect_profiles(d):
             ms = 2 + (100-Nz)*0.05 
 
         # Plot the selected profile in color
-        profile = d[variable].isel(TIME=station_index)
+        profile = d[variable].isel(TIME=TIME_index)
 
         ax.plot(profile, d[y_varnm], alpha=0.8, lw=0.7, color='k')
         ax.plot(profile, d[y_varnm], '.', ms=ms, alpha=1, color='tab:orange')
 
-        station_time_string = time.convert_timenum_to_datetime(profile.TIME, d.TIME.units)
-        ax.set_title(f'Station: {d["STATION"].values[station_index]}, {station_time_string}')
+        time_string = time.convert_timenum_to_datetime(
+            profile.TIME, d.TIME.units)
+        if 'STATION' in d:
+            station = d["STATION"].values[TIME_index]
+        else:
+            station = 'N/A'
 
+        ax.set_title(
+            f'Station: {d["STATION"].values[TIME_index]}, {time_string}')
         if 'units' in d[variable].attrs:
             var_unit_ = d[variable].units
         else:
@@ -108,11 +114,17 @@ def inspect_profiles(d):
         plt.show()
 
     # Get the descriptions for the slider
-    station_descriptions = [str(station) for station in d['STATION'].values]
+    time_values = [nn for nn in np.arange(d.sizes['TIME'])]
+    if 'STATION' in d:
+        time_descriptions = [
+            f'{nn} ({station})' for nn, station in 
+            enumerate(d['STATION'].values)]
+    else:
+        time_descriptions = time_values
 
     # Create the slider for selecting a station
-    station_index_slider = widgets.IntSlider(
-        min=0, max=len(d['STATION']) - 1, step=1, value=0, description='Profile #:',
+    time_index_slider = widgets.IntSlider(
+        min=0, max=len(d['TIME']) - 1, step=1, value=0, description='Profile #:',
         continuous_update=False,
         style={'description_width': 'initial'},
         layout=widgets.Layout(width='500px')  # Set the width of the slider
@@ -129,29 +141,29 @@ def inspect_profiles(d):
     )
 
     # Create the dropdown for selecting a station
-    station_dropdown = widgets.Dropdown(
-        options=station_descriptions,
-        value=station_descriptions[0],
-        description='Station:'
+    time_option_tuples = [(desc, val) for desc, val 
+                 in zip(time_descriptions, time_values)]
+    time_ind_dropdown = widgets.Dropdown(
+        options=time_option_tuples,
+        value=time_values[0],
+        description='TIME index:'
     )
 
     # Update slider value when dropdown changes
     def update_slider_from_dropdown(change):
-        station_index = station_descriptions.index(change.new)
-        station_index_slider.value = station_index
+        time_index_slider.value = time_values.index(change.new)
 
     # Update dropdown value when slider changes
     def update_dropdown_from_slider(change):
-        station_description = str(d['STATION'].values[change.new])
-        station_dropdown.value = station_description
+        time_ind_dropdown.value = time_values[change.new]
 
     # Link slider and dropdown
-    station_dropdown.observe(update_slider_from_dropdown, names='value')
-    station_index_slider.observe(update_dropdown_from_slider, names='value')
+    time_ind_dropdown.observe(update_slider_from_dropdown, names='value')
+    time_index_slider.observe(update_dropdown_from_slider, names='value')
 
     # Use interactive_output to create interactive controls
     output = widgets.interactive_output(
-        plot_profile, {'station_index': station_index_slider, 
+        plot_profile, {'TIME_index': time_index_slider, 
                        'variable': variable_dropdown,
                        'y_varnm': widgets.fixed(y_varnm), 
                        'y_label':widgets.fixed(y_label)},
@@ -172,8 +184,8 @@ def inspect_profiles(d):
 
     # Display the widgets in a vertically stacked layout
     widgets_collected = widgets.VBox([
-        widgets.HBox([station_index_slider, close_button]),
-        widgets.HBox([variable_dropdown, station_dropdown]),
+        widgets.HBox([time_index_slider, close_button]),
+        widgets.HBox([variable_dropdown, time_ind_dropdown]),
         output])
     display(widgets_collected)
 
@@ -313,6 +325,7 @@ def inspect_dual_sensors(D):
     def update_dropdown_from_slider(change):
         station_description = str(D['STATION'].values[change.new])
         station_dropdown.value = station_description
+
 
     # Link slider and dropdown
     station_dropdown.observe(update_slider_from_dropdown, names='value')

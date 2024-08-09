@@ -97,10 +97,10 @@ class hand_remove_points:
         self.button_exit_nochange.on_click(self.exit_and_discard)
         self.button_exit_nochange.layout.width = '200px' 
 
-        self.text_widget = widgets.HTML(value=(
-            'Drag a rectangle to select points. '
-            '<span style="color: gray;">Click icons on right side of the plot'
-            ' to zoom/move/save (click again to regain cursor).</span>'))
+        self.text_widget1 = widgets.HTML(value=(
+            'Drag a rectangle to select points. '))
+        self.text_widget2 = widgets.HTML(value=(    '<span style="color: gray;">Click icons on left side of the plot'
+            ' to zoom/move/save (click icon again to regain cursor).</span>'))
         
         self.button_remove = widgets.Button(description="Remove selected")
         self.button_remove.on_click(self.remove_selected)
@@ -119,7 +119,8 @@ class hand_remove_points:
                                                 self.button_exit_nochange])
         self.buttons_container_2 = widgets.HBox([
             self.button_remove, self.button_forget, self.button_restart])
-        self.buttons_container_3 = widgets.HBox([self.text_widget])
+        self.buttons_container_3 = widgets.HBox([ 
+            widgets.VBox([self.text_widget1, self.text_widget2])])
         
         # Add an Output widget to capture the print statement
         self.output_widget = widgets.Output()
@@ -259,10 +260,9 @@ class hand_remove_points:
                 f'Manually edited out (->NaN) the following points from profile {prof_num}/{N_profs} (STATION= {self.station}): '
                 f'\n{self.remove_inds}\n')
 
-            
             self.d.PROCESSING.attrs['python_script'] += (
                 f'\n\n# Manually removing points from the {self.varnm} variable (from the TIME/STATION index {self.TIME_index}):'
-                f'\nds = edit.remove_points_profile(ds, "{self.varnm}", {self.TIME_index}, [{', '.join(map(str, self.remove_inds))}])')
+                f'\nds = data.edit.remove_points_profile(ds, "{self.varnm}", {self.TIME_index}, [{', '.join(map(str, self.remove_inds))}])')
 
 
         # Count how many points we removed
