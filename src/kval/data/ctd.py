@@ -14,8 +14,7 @@ from kval.data.ship_ctd_tools import _ctd_tools as tools
 from kval.data.ship_ctd_tools import _ctd_visualize as viz
 from kval.data.ship_ctd_tools import _ctd_edit as edit
 from kval.file import matfile
-import re
-from collections import Counter
+from kval.data import dataset
 from kval.util import time
 import pandas as pd
 from kval.nc_format import conventionalize, _standard_attrs, check_conventions
@@ -134,14 +133,14 @@ def metadata_auto(D, NPI = True,):
     more nicely formatted for publication.
     '''
 
-    D = _remove_numbers_in_names(D)
+    D = conventionalize.remove_numbers_in_var_names(D)
     D = conventionalize.add_standard_var_attrs(D)
-    D = conventionalize.add_standard_glob_attrs_ctd(D, NPI = NPI, 
-                                                    override = False)
+    D = conventionalize.add_standard_glob_attrs_ctd(D, override = False)
+    D = conventionalize.add_standard_glob_attrs_org(D)
     D = conventionalize.add_gmdc_keywords_ctd(D)
-    D = conventionalize.add_range_attrs_ctd(D)
+    D = conventionalize.add_range_attrs(D)
 
-    D = _reorder_attrs(D)
+    D = conventionalize.reorder_attrs(D)
 
     return D
 
@@ -226,8 +225,8 @@ def to_netcdf(D, path,
     '''
     # Consider moving to a more general module?
 
-    D = _add_now_as_date_created(D)
-    D = _reorder_attrs(D)
+    D = dataset.add_now_as_date_created(D)
+    D = conventionalize.reorder_attrs(D)
 
     if file_name == None:
         try:
@@ -660,91 +659,7 @@ def set_attr_var(D, variable, attr):
     D = conventionalize.set_var_attr(D, variable, attr)
     return D
 
-def _remove_numbers_in_names(D):
-    '''
-    Remove numbers from variable names like "TEMP1", "PSAL2".
 
-    If more than one exists (e.g. "TEMP1", "TEMP2") -> don't change anything.
-    '''
-    # Get variable names
-    all_varnms = [varnm for varnm in D.data_vars]
-
-    # Get number-stripped names 
-    varnms_stripped = [re.sub(r'\d', '', varnm) for varnm in all_varnms]
-
-    # Identify duplicates 
-    counter = Counter(varnms_stripped)
-    duplicates = [item for item, count in counter.items() if count > 1]
-
-    # Strip names
-    for varnm in all_varnms:
-        if re.sub(r'\d', '', varnm) not in duplicates:
-            varnm_stripped = re.sub(r'\d', '', varnm)
-            D = D.rename_vars({varnm:varnm_stripped})
-
-    return D
-
-def _add_now_as_date_created(D):
-    '''
-    Add a global attribute "date_created" with todays date.
-    '''
-    now_time = pd.Timestamp.now()
-    now_str = time.datetime_to_ISO8601(now_time)
-
-    D.attrs['date_created'] = now_str
-
-    return D
-
-
-def _reorder_attrs(D):
-    """
-    Reorder global and variable attributes of a dataset based on the 
-    specified order in _standard_attrs.
-
-    Parameters:
-        ds (xarray.Dataset): The dataset containing global attributes.
-        ordered_list (list): The desired order of global attributes.
-
-    Returns:
-        xarray.Dataset: The dataset with reordered global attributes.
-    """
-    ### GLOBAL
-    reordered_list = _reorder_list(D.attrs, 
-                                  _standard_attrs.global_attrs_ordered)
-    attrs_dict = D.attrs
-    D.attrs = {}
-    for attr_name in reordered_list:
-        D.attrs[attr_name] = attrs_dict[attr_name]
-
-    ### VARIABLE
-    for varnm in D.data_vars:
-        reordered_list_var = _reorder_list(D[varnm].attrs, 
-                      _standard_attrs.variable_attrs_ordered)
-        var_attrs_dict = D[varnm].attrs
-        D[varnm].attrs = {}
-        for attr_name in reordered_list_var:
-            D[varnm].attrs[attr_name] = var_attrs_dict[attr_name]
-    return D
-
-
-
-def _reorder_list(input_list, ordered_list):
-    '''
-    reorder a list input_list according to the order specified in ordered_list
-    '''
-    # Create a set of existing attributes for quick lookup
-    existing_attributes = set(input_list)
-
-    # Extract ordered attributes that exist in the dataset
-    ordered_attributes = [attr for attr in ordered_list if attr in existing_attributes]
-
-    # Add any remaining attributes that are not in the ordered list
-    remaining_attributes = [attr for attr in input_list if attr not in ordered_attributes]
-
-    # Concatenate the ordered and remaining attributes
-    reordered_attributes = ordered_attributes + remaining_attributes
-
-    return reordered_attributes
 
 #### EDITING (WRAPPER FOR FUNCTIONS IN THE data.ship_ctd_tools._ctd_edit.py module)
 

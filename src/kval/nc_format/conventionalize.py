@@ -8,6 +8,9 @@ from kval.nc_format import _standard_attrs, _standard_attrs_org
 from kval.calc import numbers
 from kval.util import time, user_input
 import numpy as np
+import re
+from collections import Counter
+
 
 def add_range_attrs(D, vertical_var = None):
     '''
@@ -21,7 +24,7 @@ def add_range_attrs(D, vertical_var = None):
       geospatial range attributes
     - TIME variable is required in order to set
       time_coverage range attributes
-    - Vertical coordinate variable (see above) is required in order to set
+    - Vertical coordinate variable (see above) isadd_standard_glob_attrs_ctd required in order to set
       geospatial_vertical range attributes
     '''
 
@@ -74,6 +77,99 @@ def add_range_attrs(D, vertical_var = None):
         print('Did not find TIME variable (or TIME variable lacks "units" attribute)'
         '\n-> Could not set "time_coverage" attributes.')
     return D
+
+
+
+def add_now_as_date_created(D):
+    '''
+    Add a global attribute "date_created" with todays date.
+    '''
+    now_time = pd.Timestamp.now()
+    now_str = time.datetime_to_ISO8601(now_time)
+
+    D.attrs['date_created'] = now_str
+
+    return D
+
+
+
+
+def reorder_attrs(D):
+    """
+    Reorder global and variable attributes of a dataset based on the 
+    specified order in _standard_attrs.
+
+    Parameters:
+        ds (xarray.Dataset): The dataset containing global attributes.
+        ordered_list (list): The desired order of global attributes.
+
+    Returns:
+        xarray.Dataset: The dataset with reordered global attributes.
+    """
+    ### GLOBAL
+    reordered_list = _reorder_list(D.attrs, 
+                                  _standard_attrs.global_attrs_ordered)
+    attrs_dict = D.attrs
+    D.attrs = {}
+    for attr_name in reordered_list:
+        D.attrs[attr_name] = attrs_dict[attr_name]
+
+    ### VARIABLE
+    for varnm in D.data_vars:
+        reordered_list_var = _reorder_list(D[varnm].attrs, 
+                      _standard_attrs.variable_attrs_ordered)
+        var_attrs_dict = D[varnm].attrs
+        D[varnm].attrs = {}
+        for attr_name in reordered_list_var:
+            D[varnm].attrs[attr_name] = var_attrs_dict[attr_name]
+    return D
+
+
+
+def remove_numbers_in_var_names(D):
+    '''
+    Remove numbers from variable names like "TEMP1", "PSAL2".
+
+    If more than one exists (e.g. "TEMP1", "TEMP2") -> don't change anything.
+    '''
+    # Get variable names
+    all_varnms = [varnm for varnm in D.data_vars]
+
+    # Get number-stripped names 
+    varnms_stripped = [re.sub(r'\d', '', varnm) for varnm in all_varnms]
+
+    # Identify duplicates 
+    counter = Counter(varnms_stripped)
+    duplicates = [item for item, count in counter.items() if count > 1]
+
+    # Strip names
+    for varnm in all_varnms:
+        if re.sub(r'\d', '', varnm) not in duplicates:
+            varnm_stripped = re.sub(r'\d', '', varnm)
+            D = D.rename_vars({varnm:varnm_stripped})
+
+    return D
+
+
+def _reorder_list(input_list, ordered_list):
+    '''
+    Reorder a list input_list according to the order specified in ordered_list
+    '''
+    # Create a set of existing attributes for quick lookup
+    existing_attributes = set(input_list)
+
+    # Extract ordered attributes that exist in the dataset
+    ordered_attributes = [attr for attr in ordered_list if attr in existing_attributes]
+
+    # Add any remaining attributes that are not in the ordered list
+    remaining_attributes = [attr for attr in input_list if attr not in ordered_attributes]
+
+    # Concatenate the ordered and remaining attributes
+    reordered_attributes = ordered_attributes + remaining_attributes
+
+    return reordered_attributes
+
+
 
 
 def _get_geospatial_bounds_wkt_str(D, decimals = 2):
@@ -266,7 +362,7 @@ def add_standard_glob_attrs_org(D, override = False, org = 'npi'):
     return D
 
 
-def add_standard_glob_attrs_ctd(D, override = False):
+def add_standard_glob_attrs_ctd(D, override = False, org = False):
     '''
     Adds standard global variables for a CTD dataset as specified in
     oceanograpy.data.nc_format.standard_attrs_global_ctd.

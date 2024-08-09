@@ -48,7 +48,7 @@ ____
 - All functionality should have associated [pytest](https://docs.pytest.org/en/7.4.x/) tests.
     - Unit tests of individual functions are found in `tests/unit_tests/`. Its directory structure and contents should mirror that of `src/kval`.
     - Tests of more complex functionality (e.g. processing pipelines using multiple modules) should be put in  `tests/functional_tests/`.
-    - A collection of sample data to be used in testing is found in `tests/test_data/`. Should aim to cover a wide range of input data, but we also don't want this to become *too* bulky.
+    - A collection of sample data to be used in testing is found in `tests/test_data/`. Should aim to cover a wide range of input data, but we also don't want this to become *too* bulky - try to keep file size to a minimum.
 
 ###### Metadata
 
@@ -75,9 +75,10 @@ ____
 <details>
 <summary><strong>RELEASE NOTES</strong></summary>
 
-- *0.3.0 (in development)*: 
+- *0.1.0 (in development)*: 
     - Packaging and hopefully release to PyPi and conda-forge.
     - Removal of NPI-specific content.
+    - Some refactoring.
     - Work on ensuring complete reproducability of the CTD processing functionality.
  
 - *0.2.0*: 
