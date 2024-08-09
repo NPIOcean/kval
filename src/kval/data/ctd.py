@@ -19,6 +19,7 @@ from kval.util import time
 from kval.metadata import conventionalize, _standard_attrs
 from kval.metadata.check_conventions import check_file_with_button
 from typing import Optional
+import numpy as np
 
 # Want to be able to use these functions directly..
 from kval.data.dataset import metadata_to_txt, to_netcdf
@@ -31,7 +32,9 @@ def ctds_from_cnv_dir(
     time_warnings: bool = True,
     verbose: bool = True,
     start_time_NMEA = False,
+    processing_variable = True,
 ) -> xr.Dataset:
+    
     """
     Create CTD datasets from CNV files in the specified path.
 
@@ -47,6 +50,7 @@ def ctds_from_cnv_dir(
 
     Returns:
     - D (xarray.Dataset): Joined CTD dataset.
+
     """
     cnv_files = tools._cnv_files_from_path(path)
     number_of_cnv_files = len(cnv_files)
@@ -62,10 +66,25 @@ def ctds_from_cnv_dir(
     
     D = tools.join_cruise(profile_datasets,
         verbose=verbose)
+    
+    # Add PROCESSING variable
+    if processing_variable:
+        D = dataset.add_processing_history_var(D, source_files = np.sort(cnv_files) )
+        D.attrs['history'] = D.history.replace('"SBE_processing"', '"PROCESSING.SBE_processing"')
+        
+        # Add python scipt snipped to reproduce this operation
+        D.PROCESSING.attrs['python_script'] += (
+            'from kval.data import ctd\n'
+            +'cnv_dir = "./" # Path to directory containing *source_files*.\n'
+            +'\n# Load all .cnv files and join together into a single xarray Dataset:\n'
+            +'ds = ctd.ctds_from_cnv_dir(cnv_dir,\n'
+            +f'    station_from_filename={station_from_filename},\n'
+            +f'    start_time_NMEA={start_time_NMEA},\n'
+            +f'    processing_variable={processing_variable})'
+            )   
+
 
     return D
-
-
 
 
 def ctds_from_cnv_list(
@@ -74,6 +93,7 @@ def ctds_from_cnv_list(
     time_warnings: bool = True,
     verbose: bool = True,
     start_time_NMEA = False,
+    processing_variable = True,
 ) -> xr.Dataset:
     """
     Create CTD datasets from CNV files in the specified path.
@@ -96,6 +116,23 @@ def ctds_from_cnv_list(
         station_from_filename = station_from_filename)
     D = tools.join_cruise(profile_datasets,
         verbose=verbose)
+    
+    # Add PROCESSING variable
+    if processing_variable:
+        D = dataset.add_processing_history_var(D, source_files = np.sort(cnv_list) )
+        D.attrs['history'] = D.history.replace('"SBE_processing"', '"PROCESSING.SBE_processing"')
+        
+        # Add python scipt snipped to reproduce this operation
+        D.PROCESSING.attrs['python_script'] += (
+            'from kval.data import ctd\n'
+            +'cnv_list = [{files}] # A list of strings specifying paths to all files in *source_files*.\n'
+            +'\n# Load all .cnv files and join together into a single xarray Dataset:\n'
+            +'ds = ctd.ctds_from_cnv_list(cnv_list,\n'
+            +f'    station_from_filename={station_from_filename},\n'
+            +f'    start_time_NMEA={start_time_NMEA},\n'
+            +f'    processing_variable={processing_variable})'
+            )   
+
     return D
 
 
