@@ -282,6 +282,11 @@ def inspect_dual_sensors(D):
     )
 
     variable_pairs = _find_variable_pairs(D)
+
+    if variable_pairs==[]:
+        print('Cannot inspect dual sensors bacause we no dual sensors were found in the dataset..')
+        return
+    
     variable_pairs_labels = [f'{var_pair[0]} and {var_pair[1]}' for var_pair in variable_pairs]
     variable_pairs_dict = {vlab: vpair for vlab, vpair in zip(variable_pairs_labels, variable_pairs)}
 
