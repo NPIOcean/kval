@@ -4,10 +4,9 @@ from matplotlib.widgets import RectangleSelector
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 from kval.util import time
-from kval.data import edit
+from kval.data import edit, ctd
 from kval.data.ship_ctd_tools import _ctd_tools
 from kval.calc.numbers import order_of_magnitude
-
 ###########################
 
 class hand_remove_points:
@@ -326,6 +325,7 @@ class hand_remove_points:
             
 ################################################################################
 
+
 def apply_offset(D):
     """
     Apply an offset to selected variables in a given xarray Dataset.
@@ -337,15 +337,9 @@ def apply_offset(D):
     (all stations or a single station), entering the offset value, and applying or exiting.
 
     The offset information is stored as metadata in the dataset's variable attributes.
-
-    Examples:
-    ```python
-    apply_offset(my_dataset)
-    ```
-
-    Note: This function utilizes IPython widgets for interactive use within a Jupyter environment.
     """
-    vars = _ctd_tools._get_profile_variables(D)
+
+    vars = list(D.data_vars.keys())
 
     var_buttons = widgets.RadioButtons(
         options=vars,
@@ -354,46 +348,30 @@ def apply_offset(D):
     )
     
     station_buttons = widgets.ToggleButtons(
-    options=['All stations', 'Single station →', ],
-    description='Apply offset to:',
-    disabled=False,
-    button_style='', # 'success', 'info', 'warning', 'danger' or ''
-    tooltips=['Apply an offset only to the profile from this particular station', 
-        'Apply an offset to every single profile in the dataset'],
+        options=['All stations', 'Single station →'],
+        description='Apply offset to:',
+        disabled=False,
+        button_style='',
+        tooltips=['Apply an offset to every single profile in the dataset',
+                  'Apply an offset only to the profile from this particular station']
     )
 
     value_textbox = widgets.Text(
-    #value='Enter a value',
-    placeholder='Enter a numerical value',
-    disabled=False   
+        placeholder='Enter a numerical value',
+        disabled=False   
     )
-    value_label = widgets.Label(value=f'Value of offset:')
+    value_label = widgets.Label(value='Value of offset:')
     value_widget = widgets.VBox([value_label, value_textbox])
-
-
-    # Function to update the description of value_textbox
-    def update_description(change):
-        selected_variable = change['new']
-        # Assuming you have a function to get units based on the selected variable
-        units = D[var_buttons.value].units
-        value_label.value = f'Value of offset ({units}):'
-
-    # Attach the update_description function to the observe method of var_buttons
-    var_buttons.observe(update_description, names='value')
-
-    # Increase the width of the description
-    value_textbox.style.description_width = '150px'  # Adjust the width as needed
-    
 
     # Dropdown for selecting a single profile
     station_dropdown = widgets.Dropdown(
-        options=list(D.STATION.values),  # Assuming keys are profile names
-        value=D.STATION.values[0],  # Set default value
+        options=list(D.STATION.values) if 'STATION' in D else [],
+        value=D.STATION.values[0] if 'STATION' in D else None,
         disabled=False,
-        style={'description_width': 'initial'},  # Adjust width
+        style={'description_width': 'initial'}
     )
     
-  # Align items to the flex-end to move the dropdown to the bottom of the HBox
+    # Align items to the flex-end to move the dropdown to the bottom of the HBox
     hbox_layout = widgets.Layout(align_items='flex-end')
     
     # Create an HBox with station_buttons and station_dropdown
@@ -403,51 +381,54 @@ def apply_offset(D):
         value=False,
         description='Apply offset',
         disabled=False,
-        button_style='success', 
-        )
+        button_style='success'
+    )
 
     exit_button = widgets.ToggleButton(
         value=False,
         description='Exit',
         disabled=False,
-        button_style='danger', 
-        )
+        button_style='danger'
+    )
     
+    output_widget = widgets.Output()
+
+    # Function to update the description of value_textbox
+    def update_description(change):
+        selected_variable = change['new']
+        units = D[selected_variable].attrs.get('units', 'unknown')
+        value_label.value = f'Value of offset ({units}):'
+
     def on_apply_button_click(change):
         if change['new']:
-            if value_textbox.value != '':
-    
+            if value_textbox.value:
                 varnm_sel = var_buttons.value
                 offset_value = float(value_textbox.value)
-                units = D[varnm_sel].units
-                var_attrs = D[varnm_sel].attrs
-                
+                units = D[varnm_sel].attrs.get('units', 'unknown')
+
                 if station_buttons.value == 'Single station →':
                     station_sel = station_dropdown.value
                     station_string = f'station {station_sel}'
-                    time_at_station = D['TIME'].where(
-                        D['STATION'] == station_sel, drop=True).values[0]
-                    D[varnm_sel].loc[{'TIME': time_at_station}]  = (
-                        D[varnm_sel].loc[{'TIME': time_at_station}] + offset_value
-                        )
+                    time_at_station = D['TIME'].where(D['STATION'] == station_sel, drop=True).values[0]
+                    D[varnm_sel].loc[{'TIME': time_at_station}] += offset_value
 
                 else:
                     station_string = 'all stations'
-                    D[varnm_sel] = D[varnm_sel] + offset_value
-    
-                D[varnm_sel].attrs = var_attrs
+                    D_offset = ctd.offset(D.copy(), varnm_sel, offset_value)
+                    D[varnm_sel] = D_offset[varnm_sel]
+                    D['PROCESSING'] = D_offset['PROCESSING'] 
+
 
                 offset_metadata = f"Applied offset of {offset_value} [{units}] ({station_string})"
-                
                 if 'applied_offset' in D[varnm_sel].attrs:
                     D[varnm_sel].attrs['applied_offset'] += f'\n{offset_metadata}'
                 else:
                     D[varnm_sel].attrs['applied_offset'] = offset_metadata
-                    
+ 
                 var_buttons.close()
                 hbox_station.close()
                 hbox_enter_value.close()
-    
+                
                 with output_widget:
                     clear_output(wait=True)
                     print(f'-> {varnm_sel}: {offset_metadata}')
@@ -456,36 +437,35 @@ def apply_offset(D):
                 var_buttons.close()
                 hbox_station.close()
                 hbox_enter_value.close()
-    
+                
                 with output_widget:
                     clear_output(wait=True)
-                    print(f' No offset value was entered -> Exited without changing anything. ')
-                    
+                    print('No offset value was entered -> Exited without changing anything.')
+
     def on_exit_button_click(change):
         if change['new']:
-            
             var_buttons.close()
             hbox_station.close()
             hbox_enter_value.close()
 
             with output_widget:
                 clear_output(wait=True)
-                print(f' -> Exited without changing anything. ')
+                print('-> Exited without changing anything.')
+
+    # Attach the update_description function to the observe method of var_buttons
+    var_buttons.observe(update_description, names='value')
 
     apply_button.observe(on_apply_button_click, names='value')
     exit_button.observe(on_exit_button_click, names='value')
 
-    # Create an HBox with station_buttons and station_dropdown
+    # Create an HBox with value_widget, apply_button, and exit_button
     hbox_enter_value = widgets.HBox([value_widget, apply_button, exit_button], layout=hbox_layout)
-
 
     display(var_buttons)
     display(hbox_station)
     display(hbox_enter_value)
-
-    # Add an Output widget to capture the print statement when we are done
-    output_widget = widgets.Output()
     display(output_widget)
+
 
 #########################################################################
 
@@ -895,13 +875,14 @@ def threshold_edit(d):
             # Count non-nan values in the dataset
             count_valid_before = int(d[variable].count())
     
-            d[variable] = edit.threshold(ds=d, variable = variable, 
-                        max_val = max_value, min_val = min_value)[variable]
+            d_thr = ctd.threshold(ds=d, variable = variable, 
+                        max_val = max_value, min_val = min_value)
+            d[variable] = d_thr[variable]
+            d['PROCESSING'] = d_thr['PROCESSING'] 
 
-
+                 
             # If we have a PROCESSING field:
-            if hasattr(d, 'PROCESSING'):
-                print('AAAPE')
+            if hasattr(d, 'PROCESSING') and False:
                 proc_string = thr_str.replace('all data', f'all {variable} data')
                 d.PROCESSING.attrs['post_processing'] += (proc_string)
 

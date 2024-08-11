@@ -2,7 +2,7 @@ import xarray as xr
 import pytest
 from kval.data import ctd
 import glob2
-
+import numpy as np
 
 @pytest.fixture
 def dir_list_test_cnvs():
@@ -44,3 +44,23 @@ def test_ctds_from_cnv_dir_returns_dataset(dir_list_test_cnvs):
         datasets.append(dataset)
 
     assert all(isinstance(ds, xr.Dataset) for ds in datasets), "Failed to load all test .cnv file collections to xarray.Dataset"
+
+
+
+# Test cases for the offset function
+def test_offset_apply_fixed_offset(dir_list_test_cnvs):
+    """Test applying a fixed offset to the dataset."""
+    ds = ctd.ctds_from_cnv_dir(dir_list_test_cnvs[0])
+    ds = ctd.metadata_auto(ds)
+    ds0 = ds.copy()
+
+    offset = 5
+
+    ds = ctd.offset(ds0, 'TEMP', offset)
+    
+    expected = ds0['TEMP'] + offset
+    assert np.array_equal(ds['TEMP'].values, 
+                          expected.values, equal_nan=True)
+    assert ds['TEMP'].attrs['units'] == ds0['TEMP'].attrs['units']
+    assert (ds['TEMP'].attrs['valid_max'] 
+            == ds0['TEMP'].attrs['valid_max']+offset)

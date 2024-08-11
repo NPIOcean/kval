@@ -54,10 +54,12 @@ from kval.data.dataset import metadata_to_txt, to_netcdf
 
 def record_processing(description_template, py_comment = None):
     """
-    A decorator to record processing steps and their input arguments in the dataset's metadata.
+    A decorator to record processing steps and their input arguments in the 
+    dataset's metadata.
     
     Parameters:
-    - description_template (str): A template for the description that includes placeholders for input arguments.
+    - description_template (str): A template for the description that includes 
+                                  placeholders for input arguments.
     
     Returns:
     - decorator function
@@ -123,7 +125,8 @@ def ctds_from_cnv_dir(
 
     Parameters:
     - path (str): Path to the CNV files.
-    - station_from_filename (bool): Whether to extract station information from filenames.
+    - station_from_filename (bool): Whether to extract station information 
+                                    from filenames.
     - time_warnings (bool): Enable/disable time-related warnings.
     - verbose: If False, suppress some prints output.
     - start_time_NMEA (bool, optional)
@@ -138,8 +141,8 @@ def ctds_from_cnv_dir(
     cnv_files = tools._cnv_files_from_path(path)
     number_of_cnv_files = len(cnv_files)
     if number_of_cnv_files==0:
-        raise Exception(f'Did not find any .cnv files in the specified directory ("{path}").'
-                        ' Is there an error in the path?')
+        raise Exception('Did not find any .cnv files in the specified '
+                f'directory ("{path}"). Is there an error in the path?')
     else:
         print(f'Found {number_of_cnv_files} .cnv files in  "{path}".')
 
@@ -152,8 +155,10 @@ def ctds_from_cnv_dir(
     
     # Add PROCESSING variable
     if processing_variable:
-        ds = dataset.add_processing_history_var(ds, source_files = np.sort(cnv_files) )
-        ds.attrs['history'] = ds.history.replace('"SBE_processing"', '"PROCESSING.SBE_processing"')
+        ds = dataset.add_processing_history_var(ds, 
+                                    source_files = np.sort(cnv_files) )
+        ds.attrs['history'] = ds.history.replace('"SBE_processing"',
+                                            '"PROCESSING.SBE_processing"')
         
         # Add python scipt snipped to reproduce this operation
         ds.PROCESSING.attrs['python_script'] += (
@@ -188,7 +193,8 @@ def ctds_from_cnv_list(
 
     Parameters:
     - path (str): List of CNV file paths.
-    - station_from_filename (bool): Whether to extract station information from filenames.
+    - station_from_filename (bool): Whether to extract station 
+                                    information from filenames.
     - time_warnings (bool): Enable/disable time-related warnings.
     - verbose: If False, suppress some prints output.
     - start_time_NMEA (bool, optional)
@@ -207,14 +213,17 @@ def ctds_from_cnv_list(
     
     # Add PROCESSING variable
     if processing_variable:
-        ds = dataset.add_processing_history_var(ds, source_files = np.sort(cnv_list) )
-        ds.attrs['history'] = ds.history.replace('"SBE_processing"', '"PROCESSING.SBE_processing"')
+        ds = dataset.add_processing_history_var(ds, 
+                                                source_files = np.sort(cnv_list) )
+        ds.attrs['history'] = ds.history.replace(
+            '"SBE_processing"', '"PROCESSING.SBE_processing"')
         
         # Add python scipt snipped to reproduce this operation
         ds.PROCESSING.attrs['python_script'] += (
             'from kval import data\n'
-            +'cnv_list = [{files}] # A list of strings specifying paths to all files in *source_files*.\n'
-            +'\n# Load all .cnv files and join together into a single xarray Dataset:\n'
+            +'cnv_list = [{files}] # A list of strings specifying paths to all'
+            +' files in *source_files*.\n\n# Load all .cnv files and join '
+            +'together into a single xarray Dataset:\n'
             +'ds = data.ctd.ctds_from_cnv_list(cnv_list,\n'
             +f'    station_from_filename={station_from_filename},\n'
             +f'    start_time_NMEA={start_time_NMEA},\n'
@@ -236,7 +245,8 @@ def dataset_from_btl_dir(
 
     Parameters:
     - path (str): Path to the CNV files.
-    - station_from_filename (bool): Whether to extract station information from filenames.
+    - station_from_filename (bool): Whether to extract station information 
+                                    from filenames.
     - time_warnings (bool): Enable/disable time-related warnings.
     - verbose: If False, suppress some prints output.
     Returns:
@@ -280,7 +290,8 @@ def to_mat(ds, outfile, simplify = False):
       doesn't end with '.mat', it will be appended.
     - simplify (bool, optional): If True, simplify the dataset by extracting
       only coordinate and data variables (no metadata attributes). If False, 
-      the matfile will be a struct containing [attrs, data_vars, coords, dims]. 
+      the matfile will be a struct containing 
+      [attrs, data_vars, coords, dims]. 
       Defaults to False.
       
     Returns:
@@ -326,16 +337,19 @@ def to_csv(ds, outfile):
     with open(outfile, 'w') as f:
         for time_ in ds.TIME.values:
             ds_prof = ds.sel(TIME=time_)
-            time_str= time.datenum_to_timestamp(time_).strftime('%Y-%m-%d %H:%M:%S')
+            time_str= time.datenum_to_timestamp(time_).strftime(
+                '%Y-%m-%d %H:%M:%S')
             print('#'*88, file=f)
-            print(f'#####  {ds_prof.STATION.values:<8} ###  {time_str}  ###  LAT: {ds_prof.LATITUDE.values:<10}'
+            print(f'#####  {ds_prof.STATION.values:<8} ###  {time_str}  '
+                  f'###  LAT: {ds_prof.LATITUDE.values:<10}'
                   f' ### LON: {ds_prof.LONGITUDE.values:<10} #####', file=f)
             print('#'*88 + '\n', file=f)
         
             ds_pd = ds_prof[prof_vars].to_pandas()
             ds_pd = ds_pd.drop('TIME', axis = 1)
             
-            ds_pd = ds_pd.dropna(subset=ds_pd.columns.difference(['PRES']), how='all')
+            ds_pd = ds_pd.dropna(
+                subset=ds_pd.columns.difference(['PRES']), how='all')
             print(ds_pd.to_csv(), file=f)
 
 
@@ -345,7 +359,7 @@ def to_csv(ds, outfile):
 @record_processing(
     'Rejected values of {variable} outside the range ({min_val}, {max_val})',
     py_comment = ('Rejecting values of {variable} outside'
-                  ' the range ({min_val}, {max_val})'))
+                  ' the range ({min_val}, {max_val}):'))
 def threshold(ds: xr.Dataset, variable: str, 
                 min_val: Optional[float] = None, 
                 max_val: Optional[float] = None
@@ -387,10 +401,51 @@ def threshold(ds: xr.Dataset, variable: str,
                         max_val = max_val, min_val = min_val)
     return ds
 
+@record_processing(
+    'Applied offset ={offset} to the variable {variable}.',
+    py_comment = ('Applied offset {offset} to variable {variable}:'))
+def offset(ds: xr.Dataset, variable: str, offset: float) -> xr.Dataset:
+    """
+    Apply a fixed offset to a specified variable in an xarray Dataset.
+
+    This function modifies the values of the specified variable by adding a 
+    fixed offset to them. The `valid_min` and `valid_max` attributes are 
+    updated to reflect the new range of values after applying the offset.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The input xarray Dataset.
+    variable : str
+        The name of the variable within the Dataset to which the offset 
+        will be applied.
+    offset : float
+        The fixed offset value to add to the variable.
+
+    Returns
+    -------
+    xr.Dataset
+        A new xarray Dataset with the offset applied to the specified 
+        variable. The `valid_min` and `valid_max` attributes are updated 
+        accordingly.
+
+    Examples
+    --------
+    # Apply an offset of 5 to the 'TEMP' variable
+    ds_offset = apply_offset(ds, 'TEMP', offset=5)
+    """
+
+    ds = edit.offset(ds=ds, variable=variable, offset=offset)
+
+    return ds
+
+
 ## APPLYING CORRECTIONS ETC
 @record_processing(
-    'Applied a calibration to chlorophyll: {chl_name_out} = {A} * {chl_name_in} + {B}. ',
-    py_comment = 'Applying chlorophyll calibration based on fit to lab values')
+    ('Applied a calibration to chlorophyll: {chl_name_out} = {A} '
+    '* {chl_name_in} + {B}. '),
+    py_comment = ('Applying chlorophyll calibration based on fit to lab'
+    ' values:'))
 def calibrate_chl(
     ds: xr.Dataset,
     A: float,
@@ -405,30 +460,33 @@ def calibrate_chl(
     
     CHLA -> A * CHLA_fluorescence + B
 
-    Where CHLA_fluorescence is the name of the variable containing uncalibrated 
-    chlorophyll from the instrument.
+    Where CHLA_fluorescence is the name of the variable containing 
+    uncalibrated chlorophyll from the instrument.
 
     Append suitable metadata.
 
     Parameters
     ----------
     ds : xr.Dataset
-        Dataset containing A, B: Linear coefficients based on fitting to chl samples.
+        Dataset containing A, B: Linear coefficients based on fitting to 
+        chl samples.
     A : float
         Linear coefficient for calibration.
     B : float
         Linear coefficient for calibration.
     chl_name_in : str, optional
-        Name of the variable containing uncalibrated chlorophyll from the instrument.
-        Default is 'CHLA_fluorescence', will look for 'CHLA1_fluoresence' if thet doesn't 
-        exist.
+        Name of the variable containing uncalibrated chlorophyll from the 
+        instrument. Default is 'CHLA_fluorescence', will look for 
+        'CHLA1_fluoresence' if that doesn't exist.
     chl_name_out : str, optional
-        Name of the calibrated chlorophyll variable. If not provided, it is derived from
-        chl_name_in. Default is None.
+        Name of the calibrated chlorophyll variable. If not provided, it is 
+        derived from chl_name_in. Default is None.
     verbose : bool, optional
-        If True, print messages about the calibration process. Default is True.
+        If True, print messages about the calibration process. 
+        Default is True.
     remove_uncal : bool, optional
-        If True, remove the uncalibrated chlorophyll from the dataset. Default is False.
+        If True, remove the uncalibrated chlorophyll from the dataset. 
+        Default is False.
 
     Returns
     -------
@@ -441,21 +499,24 @@ def calibrate_chl(
         if 'CHLA1_fluorescence' in ds.keys():
             chl_name_in = 'CHLA1_fluorescence'
         else:
-            raise Exception(f'Did not find {chl_name_in} or "CHLA1_fluorescence" '
-                            'in the dataset. Please specify the variable name of '
-                            'uncalibrated chlorophyll using the *chl_name_in* flag.')
+            raise Exception(
+                f'Did not find {chl_name_in} or "CHLA1_fluorescence" '
+                'in the dataset. Please specify the variable name of '
+                'uncalibrated chlorophyll using the *chl_name_in* flag.')
 
 
     # Determine the output variable name for calibrated chlorophyll
     if not chl_name_out:
         if '_instr' in chl_name_in or '_fluorescence' in chl_name_in:
-            chl_name_out = chl_name_in.replace('_instr', '').replace('_fluorescence', '')
+            chl_name_out = (chl_name_in.replace('_instr', '')
+                            .replace('_fluorescence', ''))
         else:
             chl_name_out = f'{chl_name_in}_cal'
 
     # Create a new variable with the coefficients applied
     ds[chl_name_out] = A * ds[chl_name_in] + B
-    ds[chl_name_out].attrs = {key: item for key, item in ds[chl_name_in].attrs.items()}
+    ds[chl_name_out].attrs = {key: item for key, item in 
+                              ds[chl_name_in].attrs.items()}
 
     # Add suitable attributes
     new_attrs = {
@@ -464,8 +525,9 @@ def calibrate_chl(
         'calibration_formula': f'{chl_name_out} = {A} * {chl_name_in} + {B}',
         'coefficient_A': A,
         'coefficient_B': B,
-        'comment': 'No correction for near-surface fluorescence quenching '
-                   '(see e.g. https://doi.org/10.4319/lom.2012.10.483) has been applied.',
+        'comment': ('No correction for near-surface fluorescence quenching '
+                   '(see e.g. https://doi.org/10.4319/lom.2012.10.483) has '
+                   'been applied.'),
         'processing_level': 'Post-recovery calibrations have been applied',
         'QC_indicator': 'good data',
     }
@@ -475,7 +537,8 @@ def calibrate_chl(
 
     # Remove the uncalibrated chl
     if remove_uncal:
-        remove_str = f' Removed uncalibrated Chl-A ("{chl_name_in}") from the dataset.'
+        remove_str = (f' Removed uncalibrated Chl-A ("{chl_name_in}") from'
+                        ' the dataset.')
         ds = ds.drop(chl_name_in)
     else:
         remove_str = ''
@@ -495,9 +558,9 @@ def _drop_variables(ds, retain_vars = ['TEMP1', 'CNDC1', 'PSAL1',
         # Consider moving to a more general module?
         '''
         NOTE: HIDDEN FOR NOW 
-        Using the (interactive) drop_vars_pick() for now. This function is also 
-        useful, but we shoudl think about what to call it vs _drop_variables,
-        and whether the default should be not do remove anything..
+        Using the (interactive) drop_vars_pick() for now. This function is 
+        also useful, but we shoudl think about what to call it vs 
+        _drop_variables, and whether the default should be not do remove anything..
 
 
         Drop measurement variables from the dataset.
@@ -540,7 +603,7 @@ def _drop_variables(ds, retain_vars = ['TEMP1', 'CNDC1', 'PSAL1',
 ### MODIFYING METADATA
 
 @record_processing('Applied automatic standardization of metadata,',
-    py_comment = 'Applying standard metadata (global+variable attributes)')
+    py_comment = 'Applying standard metadata (global+variable attributes):')
 def metadata_auto(ds, NPI = True,):
     '''
     Various modifications to the metadata in order to make the dataset
