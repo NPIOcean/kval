@@ -716,29 +716,36 @@ def threshold_edit(d):
     """
     Interactive tool for threshold editing of a variable in a dataset.
 
-    Parameters:
-    - d (xarray.Dataset): The input dataset containing the variable to be threshold-edited.
+    Parameters: 
+    - d (xarray.Dataset): The input dataset containing the variable to be 
+                          threshold-edited.
 
-    Usage:
-    Call this function with the dataset as an argument to interactively set threshold values and visualize the impact on the data.
+    Usage: 
+    Call this function with the dataset as an argument to interactively
+    set threshold values and visualize the impact on the data.
 
-    Returns:
-    None
+    Returns: None
     """
     
     def get_slider_params(d, variable):
         """
-        Helper function to calculate slider parameters based on the variable's data range.
-        A little clunky as we have to deal with floating point errors to get nice output.
+        Helper function to calculate slider parameters based on the variable's
+        data range.
 
-        Also used to get order of magnitude, so we output the order of magnitude of the step. 
+        A little clunky as we have to deal with floating point errors to get 
+        nice output.
+
+        Also used to get order of magnitude, so we output the order of 
+        magnitude of the step. 
 
         Parameters:
         - d (xarray.Dataset): The input dataset.
-        - variable (str): The variable for which slider parameters are calculated.
+        - variable (str): The variable for which slider parameters are 
+                          calculated.
 
         Returns:
-        Tuple (float, float, float, int): Lower floor, upper ceil, step, order of magnitude step.
+        Tuple (float, float, float, int): Lower floor, upper ceil, step, 
+                                          order of magnitude step.
         """
         upper = float(d[variable].max())
         lower = float(d[variable].min())
@@ -748,8 +755,10 @@ def threshold_edit(d):
         oom_step = oom_range-2
         step = 10**oom_step
         
-        lower_floor = np.round(np.floor(lower*10**(-oom_step))*10**(oom_step), -oom_step)
-        upper_ceil = np.round(np.ceil(upper*10**(-oom_step))*10**(oom_step), -oom_step)
+        lower_floor = np.round(np.floor(lower*10**(-oom_step))
+                               *10**(oom_step), -oom_step)
+        upper_ceil = np.round(np.ceil(upper*10**(-oom_step))
+                              *10**(oom_step), -oom_step)
         
         return lower_floor, upper_ceil, step, oom_step
 
@@ -787,19 +796,25 @@ def threshold_edit(d):
         ax0 = plt.subplot2grid((1, 1), (0, 0))
         fig.canvas.header_visible = False  # Hide the figure header
 
-        var_range = (np.nanmin(d[variable].values), np.nanmax(d[variable].values))
+        var_range = (np.nanmin(d[variable].values), 
+                     np.nanmax(d[variable].values))
         var_span = var_range[1] - var_range[0]
 
-        hist_all = ax0.hist(d[variable].values.flatten(), bins=100, range=var_range, color='tab:orange',
+        hist_all = ax0.hist(d[variable].values.flatten(), bins=100, 
+                            range= var_range, color='tab:orange',
                             alpha=0.7, label='Distribution outside range')
 
-        d_reduced = d.where((d[variable] >= min_value) & (d[variable] <= max_value))
+        condition = ((d[variable] >= min_value) 
+                    & (d[variable] <= max_value))
+        d_reduced = d.copy()
+        d_reduced[variable] = d_reduced[variable].where(condition)
 
         # Count non-nan values in each dataset
         count_valid_d = int(d[variable].count())
         count_valid_d_reduced = int(d_reduced[variable].count())
 
-        # Calculate the number of points that would be dropped by the threshold cut
+        # Calculate the number of points that would be dropped by the 
+        # threshold cut
         points_cut = count_valid_d - count_valid_d_reduced
         points_pct = points_cut / count_valid_d * 100
 
@@ -812,8 +827,10 @@ def threshold_edit(d):
 
         ax0.set_xlabel(f'[{d[variable].units}]')
         ax0.set_ylabel('Frequency')
-        var_span = np.nanmax(d[variable].values) - np.nanmin(d[variable].values)
-        ax0.set_xlim(np.nanmin(d[variable].values) - var_span * 0.05, np.nanmax(d[variable].values) + var_span * 0.05)
+        var_span = (np.nanmax(d[variable].values) 
+                    - np.nanmin(d[variable].values))
+        ax0.set_xlim(np.nanmin(d[variable].values) - var_span * 0.05,
+                      np.nanmax(d[variable].values) + var_span * 0.05)
 
         # Vertical lines for range values
         ax0.axvline(x=min_value, color='k', linestyle='--', label='Min Range')
@@ -830,7 +847,8 @@ def threshold_edit(d):
 
     def apply_cut(_):
         """
-        Apply the threshold cut to the selected variable. Makes suitable changes to the metadata (variable attributes)
+        Apply the threshold cut to the selected variable. Makes suitable 
+        changes to the metadata (variable attributes)
 
         Parameters:
         - _: Unused parameter.
@@ -841,9 +859,11 @@ def threshold_edit(d):
         variable = variable_dropdown.value
 
         lower_floor, upper_ceil, step, oom_step = get_slider_params(d, variable)
-        
-        min_value = np.round(np.floor(min_slider.value*10**(-oom_step))*10**(oom_step), -oom_step)  
-        max_value = np.round(np.floor(max_slider.value*10**(-oom_step))*10**(oom_step), -oom_step)  
+
+        min_value = np.round(np.floor(min_slider.value*10**(-oom_step))
+                                     *10**(oom_step), -oom_step)  
+        max_value = np.round(np.floor(max_slider.value*10**(-oom_step))
+                                     *10**(oom_step), -oom_step)  
         
         var_max = float(d[variable].max())
         var_min = float(d[variable].min())
@@ -864,7 +884,8 @@ def threshold_edit(d):
             d[variable].attrs['valid_min'] = min_value
         elif min_value>var_min and max_value<var_max:
             threshold = True
-            thr_str = f'Rejected all data outside ({min_value}, {max_value}) {unit}.'
+            thr_str = ('Rejected all data outside ('
+                       f'{min_value}, {max_value}) {unit}.')
             d[variable].attrs['valid_max'] = max_value
             d[variable].attrs['valid_min'] = min_value
 
@@ -872,23 +893,45 @@ def threshold_edit(d):
             # Count non-nan values in the dataset
             count_valid_before = int(d[variable].count())
     
-            # Apply the cut
-            d[variable] = d[variable].where((d[variable] >= min_value) & (d[variable] <= max_value), np.nan)
-            
+            d[variable] = edit.threshold(ds=d, variable = variable, 
+                        max_val = max_value, min_val = min_value)[variable]
+
+
+            # If we have a PROCESSING field:
+            if hasattr(d, 'PROCESSING'):
+                print('AAAPE')
+                proc_string = thr_str.replace('all data', f'all {variable} data')
+                d.PROCESSING.attrs['post_processing'] += (proc_string)
+
+                d.PROCESSING.attrs['python_script'] += (
+                    f'\n\n# {proc_string.replace(f' {unit}', '')
+                             .replace('Rejected', 'Rejecting')}'
+                    f"\nds = data.ctd.threshold(ds, variable= '{variable}',"
+                    f'\n{' '*16}min_val = {min_value}, max_val = {max_value})')
+
+
+
             # Count non-nan values in the dataset
             count_valid_after = int(d[variable].count())
     
-            # Calculate the number of points that would be dropped by the threshold cut
+            # Calculate the number of points that would be dropped by the 
+            # threshold cut
             points_cut = count_valid_before - count_valid_after
             points_pct = points_cut / count_valid_before * 100
 
             # Add info to metadata variable
-            count_str = f'This removed {points_cut} data points ({points_pct:.1f}%).'
+            # Note: Skipping thjis. Possibly messy practice and should
+            # not really be necessary as we document this elsewhere now.
+            if False:
+                count_str = (
+                    f'This removed {points_cut} data points ({points_pct:.1f}%).')
 
-            if 'threshold_editing' in d[variable].attrs.keys(): 
-                d[variable].attrs['threshold_editing']+= f'\n{thr_str} {count_str}'
-            else:
-                d[variable].attrs['threshold_editing']= f'{thr_str} {count_str}'
+                if 'threshold_editing' in d[variable].attrs.keys(): 
+                    d[variable].attrs['threshold_editing']+= (
+                        f'\n{thr_str} {count_str}')
+                else:
+                    d[variable].attrs['threshold_editing']= (
+                        f'{thr_str} {count_str}')
 
             
             # Update plots
@@ -914,13 +957,15 @@ def threshold_edit(d):
 
 
     # Determine the range of values in the dataset
-    value_range = d[variable_dropdown.value].max() - d[variable_dropdown.value].min()
+    value_range = (d[variable_dropdown.value].max() 
+                   - d[variable_dropdown.value].min())
     
     # Calculate a suitable step size that includes whole numbers
     step_size = max(1, np.round(value_range / 100, 2))  # Adjust 100 as needed
 
     # Range sliders and input boxes
-    slider_min, slider_max, slider_step, oom_step = get_slider_params(d, variable_dropdown.value)
+    slider_min, slider_max, slider_step, oom_step = get_slider_params(
+        d, variable_dropdown.value)
 
 
     min_slider = widgets.FloatSlider(
@@ -942,7 +987,6 @@ def threshold_edit(d):
         style={'description_width': 'initial'},
         layout={'width': '680px'}
     )
-    
         
     # Numeric input boxes for min and max values
     min_value_text = widgets.FloatText(
@@ -968,11 +1012,13 @@ def threshold_edit(d):
     apply_button.on_click(apply_cut)
 
     # Text widget to display the cut information
-    cut_info_text = widgets.Text(value='', description='', disabled=True, layout={'width': '600px'}, style={'color': 'black'})
+    cut_info_text = widgets.Text(value='', description='', disabled=True, 
+                        layout={'width': '600px'}, style={'color': 'black'})
 
     # Function to update the cut information text
     def update_cut_info_text(variable, points_cut, points_pct):
-        text = f'This cut would reduce {variable} by {points_cut} data points ({points_pct:.1f}%).'
+        text = (f'This cut would reduce {variable} by {points_cut} data points'
+                f' ({points_pct:.1f}%).')
         cut_info_text.value = text
         
     def update_apply_button_label(change):
@@ -998,7 +1044,8 @@ def threshold_edit(d):
     # Observer for variable dropdown
     def update_sliders(change):
         variable = change.new
-        slider_min, slider_max, slider_step, oom = get_slider_params(d, variable)
+        slider_min, slider_max, slider_step, oom = get_slider_params(
+            d, variable)
 
         max_slider.min, max_slider.max = -1e9, 1e9
         min_slider.min, min_slider.max = -1e9, 1e9
@@ -1016,8 +1063,10 @@ def threshold_edit(d):
             min_slider.max = slider_max
             min_slider.min = slider_min
             
-        min_slider.description = f'Lower cutoff value (units: {d[variable_dropdown.value].units}):'
-        max_slider.description = f'Upper cutoff value (units: {d[variable_dropdown.value].units}):'
+        min_slider.description = (
+            f'Lower cutoff value (units: {d[variable_dropdown.value].units}):')
+        max_slider.description = (
+            f'Upper cutoff value (units: {d[variable_dropdown.value].units}):')
 
         min_slider.value = min_slider.min
         max_slider.value = max_slider.max
@@ -1026,7 +1075,6 @@ def threshold_edit(d):
 
         # Rebuild the sliders every time the variable changes
         display(widgets_collected)
-
 
 
     variable_dropdown.observe(update_sliders, names='value')
@@ -1051,13 +1099,13 @@ def threshold_edit(d):
     reset_button = widgets.Button(description="Reset Sliders")
     reset_button.on_click(reset_sliders)
 
-    # Use interactive to update plots based on variable, xvar, and max depth selection
+    # Use interactive to update plots based on variable, 
+    # xvar, and max depth selection
     out = widgets.interactive_output(update_plots,
-                                     {'min_value': min_slider, 'max_value': max_slider, 'variable': variable_dropdown})
+                {'min_value': min_slider, 'max_value': max_slider, 
+                 'variable': variable_dropdown})
 
-   # widgets_collected = widgets.VBox([widgets.HBox([variable_dropdown, apply_button, reset_button]),
-   #                                   widgets.HBox([min_slider]), max_slider, out, close_button])
-    
+
     # Include the new widgets in the final layout
     widgets_collected = widgets.VBox([
         widgets.HBox([variable_dropdown, apply_button, reset_button, close_button]),
@@ -1069,3 +1117,4 @@ def threshold_edit(d):
 
     # Display the initial state of the title text
     display(widgets_collected)
+
