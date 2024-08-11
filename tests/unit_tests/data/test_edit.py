@@ -58,7 +58,7 @@ def mock_dataset() -> xr.Dataset:
 # Test cases using the mock dataset fixture
 def test_no_thresholds(mock_dataset):
     """Test when no thresholds are applied."""
-    ds_new = edit.threshold_edit(mock_dataset, 'TEMP')
+    ds_new = edit.threshold(mock_dataset, 'TEMP')
     
     assert np.array_equal(ds_new['TEMP'], mock_dataset['TEMP'])
     assert 'valid_min' not in ds_new['TEMP'].attrs
@@ -66,7 +66,7 @@ def test_no_thresholds(mock_dataset):
 
 def test_max_threshold(mock_dataset):
     """Test applying only the maximum threshold."""
-    ds_new = edit.threshold_edit(mock_dataset, 'TEMP', max_val=18)
+    ds_new = edit.threshold(mock_dataset, 'TEMP', max_val=18)
     
     expected = mock_dataset['TEMP'].where(mock_dataset['TEMP'] <= 18)
     assert np.array_equal(ds_new['TEMP'].values, expected.values, equal_nan=True)
@@ -75,7 +75,7 @@ def test_max_threshold(mock_dataset):
 
 def test_min_threshold(mock_dataset):
     """Test applying only the minimum threshold."""
-    ds_new = edit.threshold_edit(mock_dataset, 'TEMP', min_val=10)
+    ds_new = edit.threshold(mock_dataset, 'TEMP', min_val=10)
     
     expected = mock_dataset['TEMP'].where(mock_dataset['TEMP'] >= 10)
     assert np.array_equal(ds_new['TEMP'].values, expected.values, equal_nan=True)
@@ -84,7 +84,7 @@ def test_min_threshold(mock_dataset):
 
 def test_min_and_max_threshold(mock_dataset):
     """Test applying both minimum and maximum thresholds."""
-    ds_new = edit.threshold_edit(mock_dataset, 'TEMP', max_val=18, min_val=10)
+    ds_new = edit.threshold(mock_dataset, 'TEMP', max_val=18, min_val=10)
     
     expected = mock_dataset['TEMP'].where((mock_dataset['TEMP'] >= 10) & (mock_dataset['TEMP'] <= 18))
     assert np.array_equal(ds_new['TEMP'].values, expected.values, equal_nan=True)
@@ -95,7 +95,7 @@ def test_empty_dataset(mock_dataset):
     """Test when the dataset is empty."""
     ds = xr.Dataset({'var': (['TIME', 'PRES'], np.array([[]]))})
     
-    ds_new = edit.threshold_edit(ds, 'var', max_val=18, min_val=10)
+    ds_new = edit.threshold(ds, 'var', max_val=18, min_val=10)
     
     expected = np.array([[]])
     assert np.array_equal(ds_new['var'].values, expected, equal_nan=True)
@@ -104,7 +104,7 @@ def test_empty_dataset(mock_dataset):
 
 def test_no_modification_needed(mock_dataset):
     """Test when no modification is needed due to thresholds."""
-    ds_new = edit.threshold_edit(mock_dataset, 'TEMP', max_val=40, min_val=-10)
+    ds_new = edit.threshold(mock_dataset, 'TEMP', max_val=40, min_val=-10)
     
     assert np.array_equal(ds_new['TEMP'], mock_dataset['TEMP'])
     assert ds_new['TEMP'].attrs['valid_min'] == -10

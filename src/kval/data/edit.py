@@ -51,7 +51,7 @@ def remove_points_profile(ds, varnm, TIME_index, remove_inds):
 # Threshold edit variable
 
 
-def threshold_edit(ds: xr.Dataset, variable: str, 
+def threshold(ds: xr.Dataset, variable: str, 
                    max_val: Optional[float] = None, 
                    min_val: Optional[float] = None
                    ) -> xr.Dataset:
