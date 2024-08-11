@@ -36,9 +36,9 @@ more directly.
 import xarray as xr
 from kval.data.ship_ctd_tools import _ctd_tools as tools
 from kval.data.ship_ctd_tools import _ctd_visualize as viz
-from kval.data.ship_ctd_tools import _ctd_edit as edit
+from kval.data.ship_ctd_tools import _ctd_edit as ctd_edit
 from kval.file import matfile
-from kval.data import dataset
+from kval.data import dataset, edit
 from kval.util import time
 from kval.metadata import conventionalize, _standard_attrs
 from kval.metadata.check_conventions import check_file_with_button
@@ -90,12 +90,16 @@ def record_processing(description_template, py_comment = None):
                         else:
                             args_list.append(f"{name}={value}")
 
-            function_call = f"ds = data.ctd.{func.__name__}(ds, {', '.join(args_list)})"
-            
+            function_call = (f"ds = data.ctd.{func.__name__}(ds, "
+                             f"{', '.join(args_list)})")
+
             if py_comment:
-                ds['PROCESSING'].attrs['python_script'] += f"\n\n# {py_comment}\n{function_call}"
+                ds['PROCESSING'].attrs['python_script'] += (
+                    f"\n\n# {py_comment.format(**bound_args.arguments)}"
+                    f"\n{function_call}")
             else:
-                ds['PROCESSING'].attrs['python_script'] += f"\n\n{function_call}"
+                ds['PROCESSING'].attrs['python_script'] += (
+                    f"\n\n{function_call}")
             return ds
         return wrapper
     return decorator
@@ -262,9 +266,6 @@ def from_netcdf(path_to_file):
 
     return d
 
-
-
-
 #############
 
 def to_mat(ds, outfile, simplify = False):
@@ -336,6 +337,204 @@ def to_csv(ds, outfile):
             
             ds_pd = ds_pd.dropna(subset=ds_pd.columns.difference(['PRES']), how='all')
             print(ds_pd.to_csv(), file=f)
+
+
+### MODIFYING DATA
+
+
+@record_processing(
+    'Rejected values of {variable} outside the range ({min_val}, {max_val})',
+    py_comment = ('Rejecting values of {variable} outside'
+                  ' the range ({min_val}, {max_val})'))
+def threshold(ds: xr.Dataset, variable: str, 
+                min_val: Optional[float] = None, 
+                max_val: Optional[float] = None
+                ) -> xr.Dataset:
+        
+    """
+    Apply a threshold to a specified variable in an xarray Dataset, setting 
+    values outside the specified range (min_val, max_val) to NaN.
+
+    Also modifies the valid_min and valid_max variable attributes.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The input xarray Dataset.
+    variable : str
+        The name of the variable within the Dataset to be thresholded.
+    max_val : Optional[float], default=None
+        The maximum allowed value for the variable. Values greater than 
+        this will be set to NaN.
+        If None, no upper threshold is applied.
+    min_val : Optional[float], default=None
+        The minimum allowed value for the variable. Values less than 
+        this will be set to NaN.
+        If None, no lower threshold is applied.
+
+    Returns
+    -------
+    xr.Dataset
+        A new xarray Dataset with the thresholded variable. The `valid_min` 
+        and `valid_max` attributes are updated accordingly.
+
+    Examples
+    --------
+    # Reject temperatures below -1 and above 3
+    ds_thresholded = threshold_edit(ds, 'TEMP', max_val=3, min_val=-1)
+    """
+    ds = edit.threshold(ds=ds, variable = variable, 
+                        max_val = max_val, min_val = min_val)
+    return ds
+
+## APPLYING CORRECTIONS ETC
+@record_processing(
+    'Applied a calibration to chlorophyll: {chl_name_out} = {A} * {chl_name_in} + {B}. ',
+    py_comment = 'Applying chlorophyll calibration based on fit to lab values')
+def calibrate_chl(
+    ds: xr.Dataset,
+    A: float,
+    B: float,
+    chl_name_in: Optional[str] = 'CHLA_fluorescence',
+    chl_name_out: Optional[str] = 'CHLA',
+    verbose: Optional[bool] = True,
+    remove_uncal: Optional[bool] = False
+) -> xr.Dataset:
+    """
+    Apply a calibration to chlorophyll based on a fit based on water samples.
+    
+    CHLA -> A * CHLA_fluorescence + B
+
+    Where CHLA_fluorescence is the name of the variable containing uncalibrated 
+    chlorophyll from the instrument.
+
+    Append suitable metadata.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Dataset containing A, B: Linear coefficients based on fitting to chl samples.
+    A : float
+        Linear coefficient for calibration.
+    B : float
+        Linear coefficient for calibration.
+    chl_name_in : str, optional
+        Name of the variable containing uncalibrated chlorophyll from the instrument.
+        Default is 'CHLA_fluorescence', will look for 'CHLA1_fluoresence' if thet doesn't 
+        exist.
+    chl_name_out : str, optional
+        Name of the calibrated chlorophyll variable. If not provided, it is derived from
+        chl_name_in. Default is None.
+    verbose : bool, optional
+        If True, print messages about the calibration process. Default is True.
+    remove_uncal : bool, optional
+        If True, remove the uncalibrated chlorophyll from the dataset. Default is False.
+
+    Returns
+    -------
+    xr.Dataset
+        Updated dataset with calibrated chlorophyll variable.
+    """
+
+    # Determine the input variable name
+    if chl_name_in not in ds.keys():
+        if 'CHLA1_fluorescence' in ds.keys():
+            chl_name_in = 'CHLA1_fluorescence'
+        else:
+            raise Exception(f'Did not find {chl_name_in} or "CHLA1_fluorescence" '
+                            'in the dataset. Please specify the variable name of '
+                            'uncalibrated chlorophyll using the *chl_name_in* flag.')
+
+
+    # Determine the output variable name for calibrated chlorophyll
+    if not chl_name_out:
+        if '_instr' in chl_name_in or '_fluorescence' in chl_name_in:
+            chl_name_out = chl_name_in.replace('_instr', '').replace('_fluorescence', '')
+        else:
+            chl_name_out = f'{chl_name_in}_cal'
+
+    # Create a new variable with the coefficients applied
+    ds[chl_name_out] = A * ds[chl_name_in] + B
+    ds[chl_name_out].attrs = {key: item for key, item in ds[chl_name_in].attrs.items()}
+
+    # Add suitable attributes
+    new_attrs = {
+        'long_name': ('Chlorophyll-A concentration calibrated against '
+                      'water sample measurements'),
+        'calibration_formula': f'{chl_name_out} = {A} * {chl_name_in} + {B}',
+        'coefficient_A': A,
+        'coefficient_B': B,
+        'comment': 'No correction for near-surface fluorescence quenching '
+                   '(see e.g. https://doi.org/10.4319/lom.2012.10.483) has been applied.',
+        'processing_level': 'Post-recovery calibrations have been applied',
+        'QC_indicator': 'good data',
+    }
+
+    for key, item in new_attrs.items():
+        ds[chl_name_out].attrs[key] = item
+
+    # Remove the uncalibrated chl
+    if remove_uncal:
+        remove_str = f' Removed uncalibrated Chl-A ("{chl_name_in}") from the dataset.'
+        ds = ds.drop(chl_name_in)
+    else:
+        remove_str = ''
+
+    # Print
+    if verbose:
+        print(f'Added calibrated Chl-A ("{chl_name_out}") calculated '
+              f'from variable "{chl_name_in}".{remove_str}')
+
+    return ds
+
+def _drop_variables(ds, retain_vars = ['TEMP1', 'CNDC1', 'PSAL1', 
+                                     'CHLA1', 'PRES'], 
+                   drop_vars = None, 
+                   retain_all = False
+                    ):
+        # Consider moving to a more general module?
+        '''
+        NOTE: HIDDEN FOR NOW 
+        Using the (interactive) drop_vars_pick() for now. This function is also 
+        useful, but we shoudl think about what to call it vs _drop_variables,
+        and whether the default should be not do remove anything..
+
+
+        Drop measurement variables from the dataset.
+
+        Will retain variables that don't have a PRES dimension, such as
+        LATITUDE, TIME, STATION.
+
+        Provide *either* strip_vars or retain_vars (not both). retain_vars
+        is ignored if drop_vars is specified.
+        
+        Parameters:
+
+        ds: xarray dataset 
+        retain_vars: (list or bool) Variables to retain (others will be retained) 
+        drop_vars: (list or bool) Variables to drop (others will be retained) 
+        retain_vars: (bool) Retain all (no change to the dataset)
+        '''
+        if retain_all:
+            return ds
+        
+        if drop_vars:
+            ds = ds.drop(drop_vars)
+            dropped = drop_vars
+        else:
+            all_vars = [varnm for varnm in ds.data_vars]
+            dropped = []
+            for varnm in all_vars:
+                if (varnm not in retain_vars and 
+                    ('PRES' in ds[varnm].dims 
+                     or 'NISKIN_NUMBER' in ds[varnm].dims)):
+                    ds = ds.drop(varnm)
+                    dropped += [varnm]
+    
+        if len(dropped)>1:
+            print(f'Dropped these variables from the Dataset: {dropped}.')
+
+        return ds
 
 
 ### MODIFYING METADATA
@@ -548,155 +747,6 @@ def check_metadata(ds):
 
 ############
 
-## APPLYING CORRECTIONS ETC
-@record_processing(
-    'Applied a calibration to chlorophyll: {chl_name_out} = {A} * {chl_name_in} + {B}. ',
-    py_comment = 'Applying chlorophyll calibration based on fit to lab values')
-def calibrate_chl(
-    ds: xr.Dataset,
-    A: float,
-    B: float,
-    chl_name_in: Optional[str] = 'CHLA_fluorescence',
-    chl_name_out: Optional[str] = 'CHLA',
-    verbose: Optional[bool] = True,
-    remove_uncal: Optional[bool] = False
-) -> xr.Dataset:
-    """
-    Apply a calibration to chlorophyll based on a fit based on water samples.
-    
-    CHLA -> A * CHLA_fluorescence + B
-
-    Where CHLA_fluorescence is the name of the variable containing uncalibrated 
-    chlorophyll from the instrument.
-
-    Append suitable metadata.
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        Dataset containing A, B: Linear coefficients based on fitting to chl samples.
-    A : float
-        Linear coefficient for calibration.
-    B : float
-        Linear coefficient for calibration.
-    chl_name_in : str, optional
-        Name of the variable containing uncalibrated chlorophyll from the instrument.
-        Default is 'CHLA_fluorescence', will look for 'CHLA1_fluoresence' if thet doesn't 
-        exist.
-    chl_name_out : str, optional
-        Name of the calibrated chlorophyll variable. If not provided, it is derived from
-        chl_name_in. Default is None.
-    verbose : bool, optional
-        If True, print messages about the calibration process. Default is True.
-    remove_uncal : bool, optional
-        If True, remove the uncalibrated chlorophyll from the dataset. Default is False.
-
-    Returns
-    -------
-    xr.Dataset
-        Updated dataset with calibrated chlorophyll variable.
-    """
-
-    # Determine the input variable name
-    if chl_name_in not in ds.keys():
-        if 'CHLA1_fluorescence' in ds.keys():
-            chl_name_in = 'CHLA1_fluorescence'
-        else:
-            raise Exception(f'Did not find {chl_name_in} or "CHLA1_fluorescence" '
-                            'in the dataset. Please specify the variable name of '
-                            'uncalibrated chlorophyll using the *chl_name_in* flag.')
-
-
-    # Determine the output variable name for calibrated chlorophyll
-    if not chl_name_out:
-        if '_instr' in chl_name_in or '_fluorescence' in chl_name_in:
-            chl_name_out = chl_name_in.replace('_instr', '').replace('_fluorescence', '')
-        else:
-            chl_name_out = f'{chl_name_in}_cal'
-
-    # Create a new variable with the coefficients applied
-    ds[chl_name_out] = A * ds[chl_name_in] + B
-    ds[chl_name_out].attrs = {key: item for key, item in ds[chl_name_in].attrs.items()}
-
-    # Add suitable attributes
-    new_attrs = {
-        'long_name': ('Chlorophyll-A concentration calibrated against '
-                      'water sample measurements'),
-        'calibration_formula': f'{chl_name_out} = {A} * {chl_name_in} + {B}',
-        'coefficient_A': A,
-        'coefficient_B': B,
-        'comment': 'No correction for near-surface fluorescence quenching '
-                   '(see e.g. https://doi.org/10.4319/lom.2012.10.483) has been applied.',
-        'processing_level': 'Post-recovery calibrations have been applied',
-        'QC_indicator': 'good data',
-    }
-
-    for key, item in new_attrs.items():
-        ds[chl_name_out].attrs[key] = item
-
-    # Remove the uncalibrated chl
-    if remove_uncal:
-        remove_str = f' Removed uncalibrated Chl-A ("{chl_name_in}") from the dataset.'
-        ds = ds.drop(chl_name_in)
-    else:
-        remove_str = ''
-
-    # Print
-    if verbose:
-        print(f'Added calibrated Chl-A ("{chl_name_out}") calculated '
-              f'from variable "{chl_name_in}".{remove_str}')
-
-    return ds
-
-def _drop_variables(ds, retain_vars = ['TEMP1', 'CNDC1', 'PSAL1', 
-                                     'CHLA1', 'PRES'], 
-                   drop_vars = None, 
-                   retain_all = False
-                    ):
-        # Consider moving to a more general module?
-        '''
-        NOTE: HIDDEN FOR NOW 
-        Using the (interactive) drop_vars_pick() for now. This function is also 
-        useful, but we shoudl think about what to call it vs _drop_variables,
-        and whether the default should be not do remove anything..
-
-
-        Drop measurement variables from the dataset.
-
-        Will retain variables that don't have a PRES dimension, such as
-        LATITUDE, TIME, STATION.
-
-        Provide *either* strip_vars or retain_vars (not both). retain_vars
-        is ignored if drop_vars is specified.
-        
-        Parameters:
-
-        ds: xarray dataset 
-        retain_vars: (list or bool) Variables to retain (others will be retained) 
-        drop_vars: (list or bool) Variables to drop (others will be retained) 
-        retain_vars: (bool) Retain all (no change to the dataset)
-        '''
-        if retain_all:
-            return ds
-        
-        if drop_vars:
-            ds = ds.drop(drop_vars)
-            dropped = drop_vars
-        else:
-            all_vars = [varnm for varnm in ds.data_vars]
-            dropped = []
-            for varnm in all_vars:
-                if (varnm not in retain_vars and 
-                    ('PRES' in ds[varnm].dims 
-                     or 'NISKIN_NUMBER' in ds[varnm].dims)):
-                    ds = ds.drop(varnm)
-                    dropped += [varnm]
-    
-        if len(dropped)>1:
-            print(f'Dropped these variables from the Dataset: {dropped}.')
-
-        return ds
-
 
 
 ## SMALL FUNCTIONS FOR MODIFYING METADATA ETC
@@ -767,7 +817,7 @@ def hand_remove_points(ds, variable, TIME_index):
     click the corresponding buttons for actions.
     """
     ds0 = ds.copy()
-    hand_remove = edit.hand_remove_points(ds, variable, TIME_index)
+    hand_remove = ctd_edit.hand_remove_points(ds, variable, TIME_index)
     ds = hand_remove.d
 
     return ds
@@ -777,7 +827,7 @@ def apply_threshold(ds):
     Interactively select a valid range for data variables,
     and apply thresholds to the data.
     '''
-    edit.threshold_edit(ds)
+    ctd_edit.threshold_edit(ds)
     return ds
 
 def apply_offset(ds):
@@ -800,7 +850,7 @@ def apply_offset(ds):
     Note: This function utilizes IPython widgets for interactive use within a Jupyter environment.
     """
 
-    edit.apply_offset(ds)
+    ctd_edit.apply_offset(ds)
     
     return ds
 
@@ -821,7 +871,7 @@ def drop_vars_pick(ds):
     Note: This class utilizes IPython widgets for interactive use within a Jupyter environment.
     '''
 
-    edit_obj = edit.drop_vars_pick(ds)
+    edit_obj = ctd_edit.drop_vars_pick(ds)
     return edit_obj.D
 
 def _drop_stations_pick(ds):
@@ -840,6 +890,6 @@ def _drop_stations_pick(ds):
     Note: This class utilizes IPython widgets for interactive use within a Jupyter environment.
     '''
 
-    edit_obj = edit.drop_stations_pick(ds)
+    edit_obj = ctd_edit.drop_stations_pick(ds)
     return edit_obj.D
 

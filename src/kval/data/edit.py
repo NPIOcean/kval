@@ -85,7 +85,7 @@ def threshold(ds: xr.Dataset, variable: str,
     Examples
     --------
     # Reject temperatures below -1 and above 3
-    ds_thresholded = threshold_edit(ds, 'TEMP', max_val=3, min_val=-1)
+    ds_thresholded = threshold_edit(ds, 'TEMP', min_val=-1, max_val=3,)
     """
 
     ds_new = ds.copy()
@@ -97,5 +97,11 @@ def threshold(ds: xr.Dataset, variable: str,
     if min_val is not None:
         ds_new[variable] = ds_new[variable].where(ds_new[variable] >= min_val)
         ds_new[variable].attrs['valid_min'] = min_val
+
+        if max_val is not None and max_val<=min_val:
+            raise Exception(f'Threshold editing: max_val (={max_val}) '
+                            f'must be greater than min_val (={min_val}).')
+
+
 
     return ds_new
