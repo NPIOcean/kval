@@ -571,12 +571,10 @@ class drop_stations_pick:
             self.close_widgets()
             with self.output_widget:
                 clear_output(wait=True)
-               # print(f'-> Removed stations: {", ".join(stations_removed)}')
 
                 self.close_widgets()
                 with self.output_widget:
                     clear_output(wait=True)
-                   # print(f'-> Removed stations: {", ".join(stations_removed)}')
 
     def on_exit_button_click(self, change):
         if change['new']:
@@ -668,8 +666,14 @@ class drop_vars_pick:
     
     def on_remove_button_click(self, change, D):
         if change['new']:
+            
+            # Clunky: Want to preserve the metadata from ctd.drop_variables, 
+            # but the straight forward approach doesnt actually reduce the variables.
+            D_dropped = ctd.drop_variables(self.D, drop_vars = self.selected_options)
+            self.D['PROCESSING'] = D_dropped.PROCESSING
             for key in self.selected_options:
                 del self.D[key]
+
 
             self.close_widgets()
             with self.output_widget:

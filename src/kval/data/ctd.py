@@ -42,10 +42,11 @@ from kval.data import dataset, edit
 from kval.util import time
 from kval.metadata import conventionalize, _standard_attrs
 from kval.metadata.check_conventions import check_file_with_button
-from typing import Optional
+from typing import List, Optional, Union
 import numpy as np
 import functools
 import inspect
+
 
 # Want to be able to use these functions directly..
 from kval.data.dataset import metadata_to_txt, to_netcdf
@@ -401,6 +402,8 @@ def threshold(ds: xr.Dataset, variable: str,
                         max_val = max_val, min_val = min_val)
     return ds
 
+
+
 @record_processing(
     'Applied offset ={offset} to the variable {variable}.',
     py_comment = ('Applied offset {offset} to variable {variable}:'))
@@ -550,56 +553,6 @@ def calibrate_chl(
 
     return ds
 
-def _drop_variables(ds, retain_vars = ['TEMP1', 'CNDC1', 'PSAL1', 
-                                     'CHLA1', 'PRES'], 
-                   drop_vars = None, 
-                   retain_all = False
-                    ):
-        # Consider moving to a more general module?
-        '''
-        NOTE: HIDDEN FOR NOW 
-        Using the (interactive) drop_vars_pick() for now. This function is 
-        also useful, but we shoudl think about what to call it vs 
-        _drop_variables, and whether the default should be not do remove anything..
-
-
-        Drop measurement variables from the dataset.
-
-        Will retain variables that don't have a PRES dimension, such as
-        LATITUDE, TIME, STATION.
-
-        Provide *either* strip_vars or retain_vars (not both). retain_vars
-        is ignored if drop_vars is specified.
-        
-        Parameters:
-
-        ds: xarray dataset 
-        retain_vars: (list or bool) Variables to retain (others will be retained) 
-        drop_vars: (list or bool) Variables to drop (others will be retained) 
-        retain_vars: (bool) Retain all (no change to the dataset)
-        '''
-        if retain_all:
-            return ds
-        
-        if drop_vars:
-            ds = ds.drop(drop_vars)
-            dropped = drop_vars
-        else:
-            all_vars = [varnm for varnm in ds.data_vars]
-            dropped = []
-            for varnm in all_vars:
-                if (varnm not in retain_vars and 
-                    ('PRES' in ds[varnm].dims 
-                     or 'NISKIN_NUMBER' in ds[varnm].dims)):
-                    ds = ds.drop(varnm)
-                    dropped += [varnm]
-    
-        if len(dropped)>1:
-            print(f'Dropped these variables from the Dataset: {dropped}.')
-
-        return ds
-
-
 ### MODIFYING METADATA
 
 @record_processing('Applied automatic standardization of metadata,',
@@ -619,6 +572,73 @@ def metadata_auto(ds, NPI = True,):
     ds = conventionalize.reorder_attrs(ds)
 
     return ds
+
+# Note: Doing PROCESSING.post_processing record keeping within the 
+# drop_variables() function because we want to access the *dropped* list.
+@record_processing('',
+    py_comment = 'Dropping some variables')
+def drop_variables(
+    ds: xr.Dataset,
+    retain_vars: Optional[Union[List[str], bool]] = None,
+    drop_vars: Optional[List[str]] = None,
+) -> xr.Dataset:
+    """
+    Drop measurement variables from the dataset based on specified criteria.
+
+    This function retains or drops variables from an xarray.Dataset based on
+    provided lists of variables to retain or drop. If `retain_all` is True, 
+    no variables will be dropped.
+
+    Parameters:
+    - ds (xr.Dataset): The dataset from which variables will be dropped.
+    - retain_vars (Optional[Union[List[str], bool]]): List of variables to retain.
+      If a boolean `True` is provided, all variables are retained (no changes made). 
+      This parameter is ignored if `drop_vars` is specified.
+    - drop_vars (Optional[List[str]]): List of variables to drop from the dataset.
+      If specified, this will override `retain_vars`.
+
+    Returns:
+    - xr.Dataset: The modified dataset with specified variables dropped or retained.
+    
+    Notes:
+    - Provide *either* `retain_vars` or `drop_vars`, but not both.
+    - Variables that do not have a 'PRES' or 'NISKIN_NUMBER' dimension will always be retained.
+    """
+
+    if retain_vars== None and drop_vars == None:
+        return ds
+    
+    if drop_vars is not None:
+        ds = ds.drop(drop_vars)
+        dropped = drop_vars
+    else:
+        if retain_vars is None:
+            raise ValueError("Either `drop_vars` or `retain_vars` must be specified, not both.")
+        
+        if isinstance(retain_vars, bool):
+            if retain_vars:
+                return ds
+            retain_vars = []
+
+        all_vars = list(ds.data_vars)
+        dropped = []
+        for varnm in all_vars:
+            if (varnm not in retain_vars and 
+                ('PRES' in ds[varnm].dims or 'NISKIN_NUMBER' in ds[varnm].dims)):
+                ds = ds.drop(varnm)
+                dropped.append(varnm)
+    
+    if dropped:
+        drop_str = f'Dropped these variables from the Dataset: {dropped}.'
+        print(drop_str)
+        if 'PROCESSING' in ds:
+            ds['PROCESSING'].attrs['post_processing'] += f'{drop_str}\n'
+
+            
+
+    return ds
+
+
 
 
 
@@ -893,6 +913,7 @@ def apply_threshold(ds):
     ctd_edit.threshold_edit(ds)
     return ds
 
+
 def apply_offset(ds):
     """
     Apply an offset to a selected variable in a given xarray CTD Dataset.
@@ -937,22 +958,26 @@ def drop_vars_pick(ds):
     edit_obj = ctd_edit.drop_vars_pick(ds)
     return edit_obj.D
 
-def _drop_stations_pick(ds):
-    '''
-    UNFINISHED! Tabled for fixing..
+### TABLED/UNFINISHED/COULD PERHAPS BECOME USEFUL..
 
-    Interactive class for dropping selected time points from an xarray Dataset based on the value of STATION(TIME).
+if False:
 
-    Parameters:
-    - ds (xarray.Dataset): The dataset from which time points will be dropped.
+    def _drop_stations_pick(ds):
+        '''
+        UNFINISHED! Tabled for fixing..
 
-    Displays an interactive widget with checkboxes for each time point, showing the associated STATION.
-    Users can select time points to remove. The removal is performed by clicking the "Drop time points"
-    button. The removed time points are also printed to the output.
+        Interactive class for dropping selected time points from an xarray Dataset based on the value of STATION(TIME).
 
-    Note: This class utilizes IPython widgets for interactive use within a Jupyter environment.
-    '''
+        Parameters:
+        - ds (xarray.Dataset): The dataset from which time points will be dropped.
 
-    edit_obj = ctd_edit.drop_stations_pick(ds)
-    return edit_obj.D
+        Displays an interactive widget with checkboxes for each time point, showing the associated STATION.
+        Users can select time points to remove. The removal is performed by clicking the "Drop time points"
+        button. The removed time points are also printed to the output.
+
+        Note: This class utilizes IPython widgets for interactive use within a Jupyter environment.
+        '''
+
+        edit_obj = ctd_edit.drop_stations_pick(ds)
+        return edit_obj.D
 
