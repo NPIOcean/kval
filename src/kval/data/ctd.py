@@ -104,6 +104,7 @@ def record_processing(description_template, py_comment = None):
 
 
 ## LOADING AND SAVING DATA
+
 def ctds_from_cnv_dir(
     path: str,
     station_from_filename: bool = False,
@@ -248,91 +249,6 @@ def dataset_from_btl_dir(
     
     return ds
 
-@record_processing('Applied automatic standardization of metadata,',
-    py_comment = 'Applying standard metadata (global+variable attributes)')
-def metadata_auto(ds, NPI = True,):
-    '''
-    Various modifications to the metadata in order to make the dataset
-    more nicely formatted for publication.
-    '''
-
-    ds = conventionalize.remove_numbers_in_var_names(ds)
-    ds = conventionalize.add_standard_var_attrs(ds)
-    ds = conventionalize.add_standard_glob_attrs_ctd(ds, override = False)
-    ds = conventionalize.add_standard_glob_attrs_org(ds)
-    ds = conventionalize.add_gmdc_keywords_ctd(ds)
-    ds = conventionalize.add_range_attrs(ds)
-    ds = conventionalize.reorder_attrs(ds)
-
-    return ds
-
-def quick_metadata_check(ds,):
-    # Consider moving to conventionalize.py?
-    # (Or maybe keep this one CTD specific)
-
-    print('--  QUICK METADATA CHECK --')
-    print('NOTE: Not comprehensive! A true check is done on export to netcdf.')
-
-    print('\n# GLOBAL #')
-
-    ### GLOBAL
-    attrs_dict_ref = _standard_attrs.global_attrs_ordered.copy()
-
-    attrs_dict_ref.remove('date_created')
-    attrs_dict_ref.remove('processing_level')
-
-    for attr in attrs_dict_ref:
-        if attr not in ds.attrs:
-            print(f'- Possibly missing {attr}')
-
-    print('\n# VARIABLE #')
-
-    ### VARIABLE
-    attrs_dict_ref_var = _standard_attrs.variable_attrs_necessary
-
-    for varnm in ds.variables:
-        if 'PRES' in ds[varnm].dims:
-            _attrs_dict_ref_var = attrs_dict_ref_var.copy()
-
-            if varnm == 'CHLA':
-                _attrs_dict_ref_var += [
-                    'calibration_formula',
-                    'coefficient_A',
-                    'coefficient_B',]
-            if varnm == 'PRES':
-                _attrs_dict_ref_var += [
-                    'axis',
-                    'positive',]
-                _attrs_dict_ref_var.remove('processing_level')
-                _attrs_dict_ref_var.remove('QC_indicator')
-
-            any_missing = False
-            for var_attr in _attrs_dict_ref_var:
-                if var_attr not in ds[varnm].attrs:
-                    print(f'- {varnm}: Possibly missing {var_attr}')
-                    any_missing = True
-            if not any_missing:
-                    print(f'- {varnm}: Possibly missing {var_attr}')
-                    any_missing = True
-            if not any_missing:
-                    print(f'- {varnm}: OK')
-
-
-############
-
-def check_metadata(ds):
-    '''
-    Use the IOOS compliance checker 
-    (https://github.com/ioos/compliance-checker-web)
-    to chek an nc file (CF and ACDD conventions).
-
-    Can take a file path or an xr.Dataset as input
-    
-    Output is closed with a "Close" button.
-    '''
-
-    check_file_with_button(ds)
-
 
 #############
 
@@ -345,6 +261,9 @@ def from_netcdf(path_to_file):
     d = xr.open_dataset(path_to_file, decode_cf = False)
 
     return d
+
+
+
 
 #############
 
@@ -417,6 +336,214 @@ def to_csv(ds, outfile):
             
             ds_pd = ds_pd.dropna(subset=ds_pd.columns.difference(['PRES']), how='all')
             print(ds_pd.to_csv(), file=f)
+
+
+### MODIFYING METADATA
+
+@record_processing('Applied automatic standardization of metadata,',
+    py_comment = 'Applying standard metadata (global+variable attributes)')
+def metadata_auto(ds, NPI = True,):
+    '''
+    Various modifications to the metadata in order to make the dataset
+    more nicely formatted for publication.
+    '''
+
+    ds = conventionalize.remove_numbers_in_var_names(ds)
+    ds = conventionalize.add_standard_var_attrs(ds)
+    ds = conventionalize.add_standard_glob_attrs_ctd(ds, override = False)
+    ds = conventionalize.add_standard_glob_attrs_org(ds)
+    ds = conventionalize.add_gmdc_keywords_ctd(ds)
+    ds = conventionalize.add_range_attrs(ds)
+    ds = conventionalize.reorder_attrs(ds)
+
+    return ds
+
+
+
+#### VISUALIZATION (WRAPPER FOR FUNCTIONS IN THE data.ship_ctd_tools._ctd_visualize.py module)
+
+def map(ds, station_labels = False, 
+        station_label_alpha = 0.5):
+    '''
+    Generate a quick map of the cruise CTD stations.
+
+    Parameters:
+    - ds (xarray.Dataset): The dataset containing LATITUDE and LONGITUDE.
+    - height (int, optional): Height of the map figure. Default is 1000.
+    - width (int, optional): Width of the map figure. Default is 1000.
+    - return_fig_ax (bool, optional): If True, return the Matplotlib figure and axis objects.
+      Default is False.
+    - coast_resolution (str, optional): Resolution of the coastline data ('50m', '110m', '10m').
+      Default is '50m'.
+    - figsize (tuple, optional): Size of the figure. If None, the original size is used.
+
+    Displays a quick map using the provided xarray Dataset with latitude and longitude information.
+    The map includes a plot of the cruise track and red dots at data points.
+
+    Additionally, the function provides buttons for interaction:
+    - "Close" minimizes and closes the plot.
+    - "Original Size" restores the plot to its original size.
+    - "Larger" increases the plot size.
+
+    Examples:
+    ```python
+    ctd.map(ds)
+    ```
+    or
+    ```python
+    fig, ax = map(my_dataset, return_fig_ax=True)
+    ```
+
+    Note: This function utilizes the `quickmap` module for generating a stereographic map.
+
+    TBds: 
+    - Should come up with an reasonable autoscaling.
+    - Should produce some grid lines.
+    '''
+    
+    viz.map(ds, station_labels = station_labels, station_label_alpha = station_label_alpha)
+
+
+def inspect_profiles(ds):
+    """
+    Interactively inspect individual CTD profiles in an xarray dataset.
+
+    Parameters:
+    - d (xr.Dataset): The xarray dataset containing variables 'PRES', 'STATION', and other profile variables.
+
+    This function creates an interactive plot allowing the user to explore profiles within the given xarray dataset.
+    It displays a slider to choose a profile by its index, a dropdown menu to select a variable for visualization, and
+    another dropdown to pick a specific station. The selected profile is highlighted in color, while others are shown
+    in the background.
+
+    Parameters:
+    - d (xr.Dataset): The xarray dataset containing variables 'PRES', 'STATION', and other profile variables.
+
+    Examples:
+    ```python
+    inspect_profiles(my_dataset)
+    ```
+
+    Note: This function utilizes Matplotlib for plotting and ipywidgets for interactive controls.
+    """
+    viz.inspect_profiles(ds)
+
+
+def inspect_dual_sensors(ds):
+    """
+    Interactively inspect profiles of sensor pairs (e.g., PSAL1 and PSAL2).
+
+    Parameters:
+    - ds: xarray.Dataset, the dataset containing the variables.
+
+    Usage:
+    - Call inspect_dual_sensors(ds) to interactively inspect profiles.
+    """
+    viz.inspect_dual_sensors(ds)
+
+
+def contour(ds):
+    """
+    Create interactive contour plots based on an xarray dataset.
+
+    Parameters:
+    - ds (xr.Dataset): The xarray dataset containing profile variables and coordinates.
+
+    This function generates interactive contour plots for two selected profile variables
+    from the given xarray dataset. It provides dropdown menus to choose the variables,
+    select the x-axis variable (e.g., 'TIME', 'LONGITUDE', 'LATITUDE', 'Profile #'), and
+    set the maximum depth for the y-axis.
+
+    Additionally, the function includes a button to close the plot.
+
+    Parameters:
+    - ds (xr.Dataset): The xarray dataset containing profile variables and coordinates.
+
+    Examples:
+    ```python
+    ctd_contours(my_dataset)
+    ```
+
+    Note: This function uses the Matplotlib library for creating contour plots and the
+    ipywidgets library for interactive elements.
+    """
+
+    viz.ctd_contours(ds)
+
+
+
+
+### INSPECTING METADATA
+
+
+def quick_metadata_check(ds,):
+    # Consider moving to conventionalize.py?
+    # (Or maybe keep this one CTD specific)
+
+    print('--  QUICK METADATA CHECK --')
+    print('NOTE: Not comprehensive! A true check is done on export to netcdf.')
+
+    print('\n# GLOBAL #')
+
+    ### GLOBAL
+    attrs_dict_ref = _standard_attrs.global_attrs_ordered.copy()
+
+    attrs_dict_ref.remove('date_created')
+    attrs_dict_ref.remove('processing_level')
+
+    for attr in attrs_dict_ref:
+        if attr not in ds.attrs:
+            print(f'- Possibly missing {attr}')
+
+    print('\n# VARIABLE #')
+
+    ### VARIABLE
+    attrs_dict_ref_var = _standard_attrs.variable_attrs_necessary
+
+    for varnm in ds.variables:
+        if 'PRES' in ds[varnm].dims:
+            _attrs_dict_ref_var = attrs_dict_ref_var.copy()
+
+            if varnm == 'CHLA':
+                _attrs_dict_ref_var += [
+                    'calibration_formula',
+                    'coefficient_A',
+                    'coefficient_B',]
+            if varnm == 'PRES':
+                _attrs_dict_ref_var += [
+                    'axis',
+                    'positive',]
+                _attrs_dict_ref_var.remove('processing_level')
+                _attrs_dict_ref_var.remove('QC_indicator')
+
+            any_missing = False
+            for var_attr in _attrs_dict_ref_var:
+                if var_attr not in ds[varnm].attrs:
+                    print(f'- {varnm}: Possibly missing {var_attr}')
+                    any_missing = True
+            if not any_missing:
+                    print(f'- {varnm}: Possibly missing {var_attr}')
+                    any_missing = True
+            if not any_missing:
+                    print(f'- {varnm}: OK')
+
+
+############
+
+def check_metadata(ds):
+    '''
+    Use the IOOS compliance checker 
+    (https://github.com/ioos/compliance-checker-web)
+    to chek an nc file (CF and ACDD conventions).
+
+    Can take a file path or an xr.Dataset as input
+    
+    Output is closed with a "Close" button.
+    '''
+
+    check_file_with_button(ds)
+
+
 
 
 ############
@@ -697,7 +824,6 @@ def drop_vars_pick(ds):
     edit_obj = edit.drop_vars_pick(ds)
     return edit_obj.D
 
-
 def _drop_stations_pick(ds):
     '''
     UNFINISHED! Tabled for fixing..
@@ -716,115 +842,4 @@ def _drop_stations_pick(ds):
 
     edit_obj = edit.drop_stations_pick(ds)
     return edit_obj.D
-
-
-#### VISUALIZATION (WRAPPER FOR FUNCTIONS IN THE data.ship_ctd_tools._ctd_visualize.py module)
-
-def map(ds, station_labels = False, 
-        station_label_alpha = 0.5):
-    '''
-    Generate a quick map of the cruise CTD stations.
-
-    Parameters:
-    - ds (xarray.Dataset): The dataset containing LATITUDE and LONGITUDE.
-    - height (int, optional): Height of the map figure. Default is 1000.
-    - width (int, optional): Width of the map figure. Default is 1000.
-    - return_fig_ax (bool, optional): If True, return the Matplotlib figure and axis objects.
-      Default is False.
-    - coast_resolution (str, optional): Resolution of the coastline data ('50m', '110m', '10m').
-      Default is '50m'.
-    - figsize (tuple, optional): Size of the figure. If None, the original size is used.
-
-    Displays a quick map using the provided xarray Dataset with latitude and longitude information.
-    The map includes a plot of the cruise track and red dots at data points.
-
-    Additionally, the function provides buttons for interaction:
-    - "Close" minimizes and closes the plot.
-    - "Original Size" restores the plot to its original size.
-    - "Larger" increases the plot size.
-
-    Examples:
-    ```python
-    ctd.map(ds)
-    ```
-    or
-    ```python
-    fig, ax = map(my_dataset, return_fig_ax=True)
-    ```
-
-    Note: This function utilizes the `quickmap` module for generating a stereographic map.
-
-    TBds: 
-    - Should come up with an reasonable autoscaling.
-    - Should produce some grid lines.
-    '''
-    
-    viz.map(ds, station_labels = station_labels, station_label_alpha = station_label_alpha)
-
-
-def inspect_profiles(ds):
-    """
-    Interactively inspect individual CTD profiles in an xarray dataset.
-
-    Parameters:
-    - d (xr.Dataset): The xarray dataset containing variables 'PRES', 'STATION', and other profile variables.
-
-    This function creates an interactive plot allowing the user to explore profiles within the given xarray dataset.
-    It displays a slider to choose a profile by its index, a dropdown menu to select a variable for visualization, and
-    another dropdown to pick a specific station. The selected profile is highlighted in color, while others are shown
-    in the background.
-
-    Parameters:
-    - d (xr.Dataset): The xarray dataset containing variables 'PRES', 'STATION', and other profile variables.
-
-    Examples:
-    ```python
-    inspect_profiles(my_dataset)
-    ```
-
-    Note: This function utilizes Matplotlib for plotting and ipywidgets for interactive controls.
-    """
-    viz.inspect_profiles(ds)
-
-
-def inspect_dual_sensors(ds):
-    """
-    Interactively inspect profiles of sensor pairs (e.g., PSAL1 and PSAL2).
-
-    Parameters:
-    - ds: xarray.Dataset, the dataset containing the variables.
-
-    Usage:
-    - Call inspect_dual_sensors(ds) to interactively inspect profiles.
-    """
-    viz.inspect_dual_sensors(ds)
-
-
-def contour(ds):
-    """
-    Create interactive contour plots based on an xarray dataset.
-
-    Parameters:
-    - ds (xr.Dataset): The xarray dataset containing profile variables and coordinates.
-
-    This function generates interactive contour plots for two selected profile variables
-    from the given xarray dataset. It provides dropdown menus to choose the variables,
-    select the x-axis variable (e.g., 'TIME', 'LONGITUDE', 'LATITUDE', 'Profile #'), and
-    set the maximum depth for the y-axis.
-
-    Additionally, the function includes a button to close the plot.
-
-    Parameters:
-    - ds (xr.Dataset): The xarray dataset containing profile variables and coordinates.
-
-    Examples:
-    ```python
-    ctd_contours(my_dataset)
-    ```
-
-    Note: This function uses the Matplotlib library for creating contour plots and the
-    ipywidgets library for interactive elements.
-    """
-
-    viz.ctd_contours(ds)
 
