@@ -845,6 +845,8 @@ def threshold_edit(d):
         # Update the cut information text
         update_cut_info_text(variable, points_cut, points_pct)
 
+
+
     def apply_cut(_):
         """
         Apply the threshold cut to the selected variable. Makes suitable 

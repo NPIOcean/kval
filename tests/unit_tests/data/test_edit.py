@@ -56,7 +56,7 @@ def mock_dataset() -> xr.Dataset:
     return ds
 
 # Test cases using the mock dataset fixture
-def test_no_thresholds(mock_dataset):
+def test_threshold_no_thresholds(mock_dataset):
     """Test when no thresholds are applied."""
     ds_new = edit.threshold(mock_dataset, 'TEMP')
     
@@ -64,7 +64,7 @@ def test_no_thresholds(mock_dataset):
     assert 'valid_min' not in ds_new['TEMP'].attrs
     assert 'valid_max' not in ds_new['TEMP'].attrs
 
-def test_max_threshold(mock_dataset):
+def test_threshold_max_threshold(mock_dataset):
     """Test applying only the maximum threshold."""
     ds_new = edit.threshold(mock_dataset, 'TEMP', max_val=18)
     
@@ -73,7 +73,7 @@ def test_max_threshold(mock_dataset):
     assert ds_new['TEMP'].attrs['valid_max'] == 18
     assert 'valid_min' not in ds_new['TEMP'].attrs
 
-def test_min_threshold(mock_dataset):
+def test_threshold_min_threshold(mock_dataset):
     """Test applying only the minimum threshold."""
     ds_new = edit.threshold(mock_dataset, 'TEMP', min_val=10)
     
@@ -82,7 +82,7 @@ def test_min_threshold(mock_dataset):
     assert ds_new['TEMP'].attrs['valid_min'] == 10
     assert 'valid_max' not in ds_new['TEMP'].attrs
 
-def test_min_and_max_threshold(mock_dataset):
+def test_threshold_min_and_max_threshold(mock_dataset):
     """Test applying both minimum and maximum thresholds."""
     ds_new = edit.threshold(mock_dataset, 'TEMP', max_val=18, min_val=10)
     
@@ -91,7 +91,7 @@ def test_min_and_max_threshold(mock_dataset):
     assert ds_new['TEMP'].attrs['valid_min'] == 10
     assert ds_new['TEMP'].attrs['valid_max'] == 18
 
-def test_empty_dataset(mock_dataset):
+def test_threshold_empty_dataset(mock_dataset):
     """Test when the dataset is empty."""
     ds = xr.Dataset({'var': (['TIME', 'PRES'], np.array([[]]))})
     
@@ -102,10 +102,59 @@ def test_empty_dataset(mock_dataset):
     assert ds_new['var'].attrs['valid_min'] == 10
     assert ds_new['var'].attrs['valid_max'] == 18
 
-def test_no_modification_needed(mock_dataset):
+def test_threshold_no_modification_needed(mock_dataset):
     """Test when no modification is needed due to thresholds."""
     ds_new = edit.threshold(mock_dataset, 'TEMP', max_val=40, min_val=-10)
     
     assert np.array_equal(ds_new['TEMP'], mock_dataset['TEMP'])
     assert ds_new['TEMP'].attrs['valid_min'] == -10
     assert ds_new['TEMP'].attrs['valid_max'] == 40
+
+
+
+
+# Test cases for the offset function
+def test_offset_apply_fixed_offset(mock_dataset):
+    """Test applying a fixed offset to the dataset."""
+    offset = 5
+
+    ds_new = edit.offset(mock_dataset, 'TEMP', offset)
+    
+    expected = mock_dataset['TEMP'] + offset
+    assert np.array_equal(ds_new['TEMP'].values, expected.values, equal_nan=True)
+    assert ds_new['TEMP'].attrs['units'] == 'degC'
+    assert ds_new['TEMP'].attrs['long_name'] == 'Test Temperature'
+#    assert ds_new['TEMP'].attrs['valid_min'] == mock_dataset['TEMP'].attrs.get('valid_min', 0) + offset
+#    assert ds_new['TEMP'].attrs['valid_max'] == mock_dataset['TEMP'].attrs.get('valid_max', 0) + offset
+
+def test_offset_valid_min(mock_dataset):
+    """Test that applying a fixed offset to the dataset 
+    also offsets valid_min, valid_max."""
+
+    offset = 5
+    mock_dataset.TEMP.attrs['valid_min'] = -10
+    mock_dataset.TEMP.attrs['valid_max'] = 40
+
+    ds_new = edit.offset(mock_dataset, 'TEMP', offset)
+    
+    assert (ds_new['TEMP'].attrs['valid_min'] 
+            == mock_dataset['TEMP'].attrs.get('valid_min', 0) + offset)
+    assert (ds_new['TEMP'].attrs['valid_max'] 
+            == mock_dataset['TEMP'].attrs.get('valid_max', 0) + offset)
+
+def test_offset_no_variable(mock_dataset):
+    """Test when applying offset to a non-existent variable 
+    (should raise an error)."""
+    offset = 5
+    with pytest.raises(ValueError, match=("Variable 'NON_EXISTENT_VAR'"
+                                          " not found in the Dataset")):
+        edit.offset(mock_dataset, 'NON_EXISTENT_VAR', offset)
+
+
+def test_offset_zero_offset(mock_dataset):
+    """Test when applying an offset that doesn't change the data."""
+    offset = 0
+    ds_new = edit.offset(mock_dataset, 'TEMP', offset)
+    
+    assert np.array_equal(ds_new['TEMP'].values, mock_dataset['TEMP'].values, equal_nan=True)
+    assert ds_new['TEMP'].attrs == mock_dataset['TEMP'].attrs
