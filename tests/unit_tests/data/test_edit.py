@@ -17,6 +17,7 @@ def mock_dataset() -> xr.Dataset:
     pres = [100, 600, 2000, 6000, 11000]  # Pressure levels
 
     # Create data for TEMP(TIME, PRES)
+    np.random.seed(42)  # Use a fixed seed
     temp_data = 15 + 8 * np.random.randn(Nt, len(pres))  # Example temperature data
 
     # Create data for STATION(TIME) and OCEAN(TIME)
@@ -106,7 +107,9 @@ def test_threshold_no_modification_needed(mock_dataset):
     """Test when no modification is needed due to thresholds."""
     ds_new = edit.threshold(mock_dataset, 'TEMP', max_val=40, min_val=-10)
     
-    assert np.array_equal(ds_new['TEMP'], mock_dataset['TEMP'])
+    assert np.array_equal(ds_new['TEMP'].values, 
+                          mock_dataset['TEMP'].values)
+
     assert ds_new['TEMP'].attrs['valid_min'] == -10
     assert ds_new['TEMP'].attrs['valid_max'] == 40
 
