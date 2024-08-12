@@ -262,7 +262,7 @@ class hand_remove_points:
 
             self.d.PROCESSING.attrs['python_script'] += (
                 f'\n\n# Manually removing points from the {self.varnm} variable (from the TIME/STATION index {self.TIME_index}):'
-                f'\nds = data.edit.remove_points_profile(ds, "{self.varnm}", {self.TIME_index}, [{', '.join(map(str, self.remove_inds))}])')
+                f'\nds = data.edit.remove_points_profile(ds, "{self.varnm}", {self.TIME_index}, [{", ".join(map(str, self.remove_inds))}])')
 
 
         # Count how many points we removed
