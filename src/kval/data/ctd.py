@@ -260,6 +260,12 @@ def dataset_from_btl_dir(
     - ds (xarray.Dataset): Joined CTD dataset.
     """
     btl_files = tools._btl_files_from_path(path)
+    number_of_btl_files = len(btl_files)
+    if number_of_btl_files==0:
+        raise Exception('Did not find any .btl files in the specified '
+                f'directory ("{path}"). Is there an error in the path?')
+    else:
+        print(f'Found {number_of_btl_files} .btl  files in  "{path}".')
     profile_datasets = tools._datasets_from_btllist(
         btl_files, verbose = verbose, start_time_NMEA = start_time_NMEA,
         time_adjust_NMEA = time_adjust_NMEA,
@@ -563,6 +569,10 @@ def calibrate_chl(
               f'from variable "{chl_name_in}".{remove_str}')
 
     return ds
+
+
+
+
 
 ### MODIFYING METADATA
 

@@ -69,7 +69,9 @@ def setup_sal_qc(salts_excel_sheet, log_excel_sheet, btl_dir,
     ds_btl = ctd.dataset_from_btl_dir(btl_dir)
 
     # Fill salinometer values into ds_log dataset
+
     ds_log['PSAL_SALINOMETER'] = ds_log['SAMPLE_NUMBER'].copy() * np.nan
+
     for sample_num, psal_salinometer in zip(df_salt.SAMPLE_NUM, df_salt.PSAL):
         index_sample = np.argwhere(ds_log['SAMPLE_NUMBER'].values == sample_num)
         try:
@@ -126,6 +128,10 @@ def setup_sal_qc(salts_excel_sheet, log_excel_sheet, btl_dir,
             ds_combined.attrs['salinometer_bath_temperature'] = (
                 f'Variable: {float(bath_temp_min)} to {float(bath_temp_max)} C'
                 ' (read from salts sheet)')
+            
+    ds_combined['SAMPLE_NUMBER'] = ds_combined['SAMPLE_NUMBER'].transpose()
+    ds_combined['PSAL_SALINOMETER'] = ds_combined['PSAL_SALINOMETER'].transpose()
+
     return ds_combined
 
 
@@ -424,11 +430,12 @@ def plot_by_sample(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER',
 
 
 
-
-
-def plot_by_station(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER', 
+def _plot_by_station(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER', 
                     sample_number_var = 'SAMPLE_NUMBER', min_pres=500):
     """
+
+    DOES NOT WORK AT THE MOMENT!!
+
     Plot salinity comparison for samples taken at depths greater than a specified minimum pressure,
     organized by station.
 
@@ -456,7 +463,7 @@ def plot_by_station(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER',
     b['PRES'] = ds.PRES.where(ds.PRES.values > float(min_pres))
 
     # Calculate the salinity difference
-    SAL_diff = (b[psal_var] - b.PSAL_SALINOMETER).values.flatten().astype(float)
+    SAL_diff = (b[psal_var] - b.PSAL_SALINOMETER).values.astype(float)
 
     # Count number of samples
     N_count = (b[psal_var] - b.PSAL_SALINOMETER).count().values
@@ -467,6 +474,7 @@ def plot_by_station(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER',
     # Sort samples by SAMPLE_NUMBER
     station_sortind = np.argsort(b.SAMPLE_NUMBER.values.astype('float').flatten())
     sample_num_sorted = b.SAMPLE_NUMBER.values.flatten()[station_sortind].astype(float)
+
     Sdiff_num_sorted = SAL_diff[station_sortind].astype(float)
     point_labels = [f"Sample #{sample_num:.0f} ({pres:.0f} dbar)" for sample_num, pres in zip(
         b['SAMPLE_NUMBER'].values.flatten()[station_sortind], b['PRES'].values.flatten()[station_sortind])]
@@ -499,9 +507,9 @@ def plot_by_station(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER',
     # Plotting on ax1
     #return sample_num_sorted, Sdiff_num_sorted
 
-    ax1.fill_between(sample_num_sorted, Sdiff_num_sorted, zorder=2, 
+    ax1.fill_between(b.STATION, SAL_diff, zorder=2, 
             color='k', lw=0.2, alpha=0.3, label='Bottle file')
-    ax1.plot(sample_num_sorted, Sdiff_num_sorted, '.', zorder=2, 
+    ax1.plot(b.STATION, SAL_diff, '.', zorder=2, 
             color='tab:red', lw=0.2, alpha=0.8, label='Salinometer')
     ax1.axhline(Sdiff_mean, color='tab:blue', lw=1.6, zorder=2, 
             label=f'Mean = {Sdiff_mean:.2e}', alpha=0.75, ls=':')
