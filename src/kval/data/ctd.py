@@ -68,9 +68,16 @@ def record_processing(description_template, py_comment = None):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(ds, *args, **kwargs):
+
             # Apply the function
             ds = func(ds, *args, **kwargs)
-            
+
+            # Check if the 'PROCESSING' field exists in the dataset
+            if 'PROCESSING' not in ds:
+                # If 'PROCESSING' is not present, return the dataset without any changes
+                return ds
+
+
             # Prepare the description with input arguments
             sig = inspect.signature(func)
             bound_args = sig.bind(ds, *args, **kwargs)
@@ -115,8 +122,7 @@ def record_processing(description_template, py_comment = None):
 def ctds_from_cnv_dir(
     path: str,
     station_from_filename: bool = False,
-    time_warnings: bool = True,
-    verbose: bool = True,
+    verbose: bool = False,
     start_time_NMEA = False,
     processing_variable = True,
 ) -> xr.Dataset:

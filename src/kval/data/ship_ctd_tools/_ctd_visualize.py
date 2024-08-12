@@ -449,7 +449,7 @@ def map(D,
         # Resize the figure to 0 and close it
         fig.set_size_inches(0, 0)
         button_widgets.close()
-        fig.close()
+        plt.close(fig)
 
     minimize_button.on_click(minimize_plot)
 
