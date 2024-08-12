@@ -307,8 +307,13 @@ def to_mat(ds, outfile, simplify = False):
     Example:
     >>> ctd.xr_to_mat(ds, 'output_matfile', simplify=True)
     """
+    # Drop the empty PROCESSING variable (doesnt work well with 
+    # MATLAB)
+    ds_wo_proc = drop_variables(ds, drop_vars = 'PROCESSING')
 
-    matfile.xr_to_mat(ds, outfile, simplify = simplify)
+    # Also transposing dimensions to PRES, TIME for ease of plotting etc in 
+    # matlab.
+    matfile.xr_to_mat(ds_wo_proc.transpose(), outfile, simplify = simplify)
 
 ############
 

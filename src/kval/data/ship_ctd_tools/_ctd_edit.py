@@ -82,7 +82,7 @@ class hand_remove_points:
         self.PRES_points_selected = np.array([])
         self.PRES_points_remove = np.array([])
         self.remove_bool = np.bool_(np.zeros(self.Npres))
-
+        self.TF_indixes_selected = np.bool_(np.zeros(self.Npres))
         
         self.temp_label = 'Points to remove'
         self.remove_label = 'Selected points to remove'
@@ -149,6 +149,8 @@ class hand_remove_points:
                                                 self.var_data[self.contains_TF_]])
         self.PRES_points_selected = np.concatenate([self.PRES_points_selected, 
                                                 self.PRES[self.contains_TF_]])
+        self.TF_indixes_selected = np.bool_(self.TF_indixes_selected + self.contains_TF_)
+
         try:
             self.temp_scatter.remove()
             plt.draw()
@@ -158,6 +160,7 @@ class hand_remove_points:
         self.temp_scatter = self.ax.scatter(self.var_points_selected, 
                         self.PRES_points_selected, color='b', label=self.temp_label)
         self.ax.legend()
+        self.TF_indixes_selected[self.contains_TF_] = True
         plt.draw()
 
     def remove_selected(self, button):
@@ -185,8 +188,7 @@ class hand_remove_points:
         self.remove_label = None
         self.var_points_selected = np.array([])
         self.PRES_points_selected = np.array([])
-       # self.var_data_return[self.contains_TF_] = np.nan
-        self.remove_bool[self.contains_TF_] = True
+        self.remove_bool[self.TF_indixes_selected] = True
         self.ax.legend()
     
 
@@ -204,7 +206,7 @@ class hand_remove_points:
             pass
         self.PRES_points_selected = np.array([])
         self.var_points_selected = np.array([])
-
+        self.TF_indixes_selected = np.bool_(len())
 
     def start_over_selection(self, button):
         """
@@ -243,10 +245,9 @@ class hand_remove_points:
         # Set remove-flagged indices to NaN
 
         ## HERE: CALL XR FUNCTION AND PRODUCE EXACT RECORD!
-        self.d[self.varnm].loc[time_loc] = np.where(self.remove_bool, 
-                                    np.nan, self.d[self.varnm].loc[time_loc])
-        
-
+        #self.d[self.varnm].loc[time_loc] = np.where(self.remove_bool, 
+         #                           np.nan, self.d[self.varnm].loc[time_loc])
+    
         self.remove_inds = np.where(self.remove_bool)[0]
         self.d = edit.remove_points_profile(self.d, self.varnm, self.TIME_index, self.remove_inds)
 
