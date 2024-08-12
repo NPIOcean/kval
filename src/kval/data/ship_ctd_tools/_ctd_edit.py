@@ -885,20 +885,6 @@ def threshold_edit(d):
             d[variable] = d_thr[variable]
             d['PROCESSING'] = d_thr['PROCESSING'] 
 
-                 
-            # If we have a PROCESSING field:
-            if hasattr(d, 'PROCESSING') and False:
-                proc_string = thr_str.replace('all data', f'all {variable} data')
-                d.PROCESSING.attrs['post_processing'] += (proc_string)
-
-                d.PROCESSING.attrs['python_script'] += (
-                    f'\n\n# {proc_string.replace(f' {unit}', '')
-                             .replace('Rejected', 'Rejecting')}'
-                    f"\nds = data.ctd.threshold(ds, variable= '{variable}',"
-                    f'\n{' '*16}min_val = {min_value}, max_val = {max_value})')
-
-
-
             # Count non-nan values in the dataset
             count_valid_after = int(d[variable].count())
     
@@ -906,20 +892,6 @@ def threshold_edit(d):
             # threshold cut
             points_cut = count_valid_before - count_valid_after
             points_pct = points_cut / count_valid_before * 100
-
-            # Add info to metadata variable
-            # Note: Skipping thjis. Possibly messy practice and should
-            # not really be necessary as we document this elsewhere now.
-            if False:
-                count_str = (
-                    f'This removed {points_cut} data points ({points_pct:.1f}%).')
-
-                if 'threshold_editing' in d[variable].attrs.keys(): 
-                    d[variable].attrs['threshold_editing']+= (
-                        f'\n{thr_str} {count_str}')
-                else:
-                    d[variable].attrs['threshold_editing']= (
-                        f'{thr_str} {count_str}')
 
             
             # Update plots
