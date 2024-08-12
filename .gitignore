@@ -2,6 +2,8 @@
 
 *.pyc
 development/**/*.nc
+development/developing
+
 kval_local_files
 
 #### Defaults:

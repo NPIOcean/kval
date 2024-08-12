@@ -135,7 +135,6 @@ SBE_name_map = { # Note: replace / with _  !
 
 }
 
-
 var_attrs = {
     'PROFILE': {
         'long_name': 'Profile number in dataset (see PROFILE_ID for station/cast)',
@@ -217,3 +216,31 @@ sensor_info_dict_SBE = {
     'PAR/Irradiance, Biospherical/Licor -->':'par_sensor_1',
     'SPAR voltage, SPAR, Biospherical/Licor -->':'spar_sensor_1',
 }
+
+
+
+#### RBR
+
+# Dictionary mapping RBR variable names to NPI/OceanSITES 
+# ones (some of these are undefined or unknown to me)
+RBR_name_map = {
+    'conductivity':'CNDC',
+    'temperature':'TEMP',
+    'pressure':'TOTPRES',
+    'sea_pressure':'PRES',
+    'depth':'DEPTH',
+    'salinity':'PSAL',
+    'speed_of_sound':'SVEL',
+    'specific_conductivity':'SPCNDC',
+    'timestamp':'TIME'
+}
+
+# Dictionary mapping RBR units to NPI/UDUNITS ones
+
+RBR_units_map = {
+    'mS/cm':'mS cm-1',
+    '°C':'degC',
+    'PSU':'1',
+    'm/s': 'm s-1',
+    'µS/cm':'uS cm-1'}
+
