@@ -1,8 +1,8 @@
 '''
-## OceanograPy.data.ship_ctd.tools
+## kval.data.ship_ctd.tools
 
 Various functions for making modifications to CTD dataframes in the 
-format produced by OceanograPy.io.cnv:
+format produced by kval.file.cnv:
 
 - Joining insividual profiles into one ship file.
 - Pressure binning.
@@ -12,6 +12,8 @@ format produced by OceanograPy.io.cnv:
 '''
 
 from kval.file import sbe
+from kval.util import xr_funcs
+
 import numpy as np
 import xarray as xr
 from tqdm.notebook import tqdm 
@@ -97,8 +99,9 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
         print('NOTE: It seems the input data already binned ->'
               ' using preexisting binning.')
 
-        ns_binned = [sbe._change_dims_scan_to_pres(n) for n in ns_input]
-
+        ns_binned = [
+            xr_funcs.swap_var_coord(n, 'scan_count', 'PRES', drop_original=True) 
+                    for n in ns_input]
 
 
     ### CHECK FOR DUPLICATE PRESSURE LABELS

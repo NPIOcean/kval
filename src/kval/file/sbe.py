@@ -43,12 +43,15 @@ import pandas as pd
 import xarray as xr
 import numpy as np
 from kval.file import _variable_defs as vardef
-from kval.util import time
+from kval.util import time, xr_funcs
+from kval.metadata.conventionalize import remove_numbers_in_var_names
 import matplotlib.pyplot as plt
 import re
 from typing import Optional
 from tqdm.notebook import tqdm 
 from itertools import zip_longest
+from matplotlib.dates import num2date
+
 
 ## KEY FUNCTIONS
 
@@ -140,22 +143,19 @@ def read_cnv(
         Option to read the station name from the file name, e.g. "STA001"
         from a file "STA001.cnv". Otherwise, we try to grab it from the header.
         Default is False.
+racted (useful for inspecting up/downcast extraction and SBE flags).
+        Default is False.
 
-    Returns
-    -------
-    xr.Dataset
-        A dataset containing CTD data and associated attributes.
-
-    TO DO
-    ----- 
-    - Checking and testing
-    - Apply to some other datasets for testing
         - Maybe also moored sensors/TSG? (or should those be separate?)
     - Tests
         - Make a test_ctd_data.cnv file with mock values and use pytest
     """
 
     header_info = read_header(source_file)
+    _is_moored = header_info['moored_sensor']
+    # Not looking for down/upcast if this is a moored sensor..
+    if _is_moored:
+        profile = 'none'
     ds = _read_column_data_xr(source_file, header_info)
     ds = _remove_duplicate_variables(ds)
     ds = _update_variables(ds, source_file)
@@ -176,7 +176,6 @@ def read_cnv(
     
     ds0 = ds.copy()
 
-    
     if apply_flags:
         ds = _apply_flag(ds)
         ds.attrs['SBE_flags_applied'] = 'yes'
@@ -191,7 +190,7 @@ def read_cnv(
         if ds.binned == 'no':
             ds = _remove_up_dncast(ds, keep = profile)
     else:
-        ds.attrs['profile_direction'] = 'All available good data'
+        ds.attrs['profile_extracted'] = 'All available good data'
 
     if start_scan:
         ds = _remove_start_scan(ds, start_scan)
@@ -201,8 +200,17 @@ def read_cnv(
     if inspect_plot:
         _inspect_extracted(ds, ds0, start_scan, end_scan)
 
+
+    # Set e.g. TEMP1 -> TEMP if we only have one
+    ds = remove_numbers_in_var_names(ds)
+
+    if _is_moored:
+        ds = _modify_moored(ds, header_info)
+
     now_str = pd.Timestamp.now().strftime('%Y-%m-%d')
     ds.attrs['history'] += f'\n{now_str}: Post-processing.'
+
+
 
 
     return ds
@@ -288,12 +296,11 @@ def read_header(filename: str) -> dict:
         # Empty dictionary: Will fill these parameters up as we go
         hkeys = ['col_nums', 'col_names', 'col_longnames', 'SN_info', 
                  'moon_pool', 'SBEproc_hist', 'hdr_end_line', 
-                 'latitude', 'longitude', 'NMEA_time', 'start_time', ]
+                 'latitude', 'longitude', 'NMEA_time', 'start_time']
         hdict = {hkey:[] for hkey in hkeys}
 
         # Flag that will be turned on when we read the SBE history section 
         start_read_history = False 
-
 
         # Go through the header line by line and extract specific information 
         # when we encounter specific terms dictated by the format  
@@ -301,6 +308,16 @@ def read_header(filename: str) -> dict:
         lines = f.readlines()
         #return lines
         for n_line, line in enumerate(lines):
+
+
+            # Read the instrument type (usually the first line)
+            if 'Data File:' in line:
+                hdict['instrument'] = ' '.join(line.split()[1:-2])
+
+                # If this is a SBE37 or SBE56, we will assume that 
+                # this is a moored sensor.
+                if 'SBE37' in line or 'SBE56' in line:
+                    hdict['moored_sensor'] = True
 
             # Read the column header info (which variable is in which data column)
             if '# name' in line and not filename.endswith('.btl'):
@@ -312,6 +329,15 @@ def read_header(filename: str) -> dict:
                 hdict['col_names'] += [col_name]
                 # Read column longname
                 hdict['col_longnames'] += [' '.join(line.split()[5:])]            
+
+            # Read sample interval
+            if '* sample interval =' in line:
+
+                hdict['sample_interval'] = (
+                    line[(line.rfind('interval = ')+10):]
+                    .replace('\n','').strip())
+
+
 
             # Read NMEA lat/lon/time
             if 'NMEA Latitude' in line:
@@ -457,6 +483,11 @@ def read_header(filename: str) -> dict:
                 hdict['source_file'] = filename[filename.rfind('/')+1:]
                 hdict['source_file_type'] = suffix
 
+        # If we did not decide that this is a moored instrument, we will asume 
+        # it is a profiling one.
+        if 'moored_sensor' not in hdict:                    
+            hdict['moored_sensor'] = False
+
         return hdict
 
 
@@ -501,6 +532,7 @@ def _read_column_data_xr(source_file, header_info):
     
     # Convert to xarray DataFrame
     ds = xr.Dataset(df).rename({'dim_0':'scan_count'})
+    
     # Will update "binning" later if we discover that it is binned 
     ds.attrs['binned'] = 'no' 
 
@@ -1175,14 +1207,15 @@ def _add_header_attrs(ds, header_info, station_from_filename = False,
     '''
     Add the following as attributes if they are available from the header:
 
-        ship, cruise, station, latitude, longitude
+        ship, cruise, station, latitude, longitude, instrument
 
     If the attribute is already assigned, we don't change it 
 
     If we don't have a station, we use the cnv file name base.
     (can be forced by setting station_from_filename = True)
     '''
-    for key in ['ship', 'cruise_name', 'station', 'latitude', 'longitude']:
+    for key in ['ship', 'cruise_name', 'station', 
+                'latitude', 'longitude', 'instrument']:
 
         if key in header_info and key not in ds.attrs:
 
@@ -1237,12 +1270,12 @@ def _remove_up_dncast(ds, keep = 'downcast'):
     if keep == 'upcast':
         # Remove everything *before* pressure max
         ds = ds.isel({'scan_count':slice(max_pres_index+1, None)})
-        ds.attrs['profile_direction'] = 'upcast'
+        ds.attrs['profile_extracted'] = 'upcast'
 
     elif keep in ['dncast', 'downcast']:
         # Remove everything *after* pressure max
         ds = ds.isel({'scan_count':slice(None, max_pres_index+1)})
-        ds.attrs['profile_direction'] = 'downcast'
+        ds.attrs['profile_extracted'] = 'downcast'
 
     else:
         raise Exception('"keep" must be either "upcast" or "dncast"') 
@@ -1367,18 +1400,6 @@ def _update_variables(ds, source_file):
 
                 ds[new_name].attrs['sensor_calibration_date'] = (
                     ', '.join(sensor_caldates)) 
-
-    return ds
-
-
-def _change_dims_scan_to_pres(ds):
-    '''
-    Change coordinate / dimension from scan_count to 
-    PRES. A good idea for pressure binned data (bad idea otherwise).
-    '''
-    ds = ds.set_coords('PRES')
-    ds = ds.swap_dims({'scan_count': 'PRES'})
-    ds = ds.drop_vars('scan_count')
 
     return ds
 
@@ -1530,8 +1551,8 @@ def _convert_time(ds, header_info, epoch = '1970-01-01',
     else:
         if not suppress_time_warning:
             print('\nNOTE: Failed to extract sample time info '
-                      '(no timeS or timeJ in .cnv file).'
-                      '\n(Not a big problem, the start_time '
+                      '(no timeS, timeJ or timeJv2 in .cnv file).'
+                      '\n(Not a big problem for profiles, the start_time '
                       'can be used to assign a profile time).')
     return ds
 
@@ -1596,3 +1617,46 @@ def _convert_time_from_juld(ds, header_info, epoch = '1970-01-01',
 
     return ds
 
+def _modify_moored(ds, hdict):
+    '''
+    Some custom modifications for moored sensors
+    '''
+
+    # Use TIME_SAMPLE as TIME
+    ds = ds.rename_vars({'TIME_SAMPLE': 'TIME'})
+
+    # Remove som non-useful metadata attributes
+    for remove_attr in ['binned', 'latitude', 'longitude',
+                        'station', 'profile_extracted',
+                        'start_time', 'start_time_source']:
+    
+        if remove_attr in ds.attrs:
+            del ds.attrs[remove_attr]
+
+    # Add instrument serial number (should be same as TEMP)
+    if 'TEMP' in ds:
+        if hasattr(ds.TEMP, 'sensor_serial_number'):
+            ds.attrs['instrument_serial_number'] = (
+                ds.TEMP.attrs['sensor_serial_number'])
+
+    # Set a sample interval
+    if 'sample_interval' in hdict:
+        if ' seconds' in hdict['sample_interval']:
+            sample_rate_s = int(hdict['sample_interval'].split()[0])
+            ds.attrs['time_coverage_resolution'] = time.seconds_to_ISO8601(
+                                                        sample_rate_s)
+
+    # Replace the first line of the history string ("Data collection")
+    # To reflect a *range* rather than a time point..
+    if 'history' in ds.attrs:
+        sample_dates = (num2date(ds.TIME[0]).strftime('%Y-%m-%d')
+            + ' - ' + num2date(ds.TIME[-1]).strftime('%Y-%m-%d') + ':')
+        original_date = ds.history.split()[0]
+        ds.attrs['history'] = ds.attrs['history'].replace(
+            original_date, sample_dates)
+
+    # Change coordinate from scan_count to TIME
+    ds = xr_funcs.swap_var_coord(
+        ds, 'scan_count', 'TIME', drop_original=True)
+
+    return ds

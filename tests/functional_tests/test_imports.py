@@ -1,10 +1,10 @@
 from kval.calc import numbers
 from kval.data import edit, dataset, ctd
 from kval.data.ship_ctd_tools import _ctd_edit, _ctd_tools, _ctd_visualize, qc_salt
-from kval.file import sbe, rbr, matfile, xr_funcs, _variable_defs
+from kval.file import sbe, rbr, matfile,  _variable_defs
 from kval.geo import geocalc
 from kval.maps import quickmap
 from kval.metadata import conventionalize, check_conventions, _standard_attrs, _standard_attrs_org
 from kval.ocean import empirical, uv
-from kval.util import  time, user_input
+from kval.util import  time, user_input, xr_funcs
 

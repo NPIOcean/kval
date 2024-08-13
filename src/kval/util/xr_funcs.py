@@ -26,14 +26,14 @@ def pick(ds, squeeze=True, **conditions):
     Parameters
     ----------
     ds : xarray.Dataset
-        The input dataset to be filtered.
+        The input dataset to be filtereds.
     **conditions : dict
         Key-value pairs where the key is the name of a one-dimensional variable in the 
         dataset, and the value is the condition. The condition can be a single value 
         (e.g., STATION='sta02') or a list of values (e.g., STATION=['sta02', 'sta03']).
     squeeze : bool, optional
         If True (default), the returned dataset will be squeezed to remove any singleton 
-        dimensions. If False, the original dimensions will be preserved.
+        dimensions. If False, the original dimensions will be preserveds.
 
     Returns
     -------
@@ -120,16 +120,16 @@ def pick(ds, squeeze=True, **conditions):
 
 ###### ATTRIBUTE MANIPULATION
 
-def rename_attr(D, old_name, new_name, verbose=True):
+def rename_attr(ds, old_name, new_name, verbose=True):
     """
     Rename an attribute in an xarray Dataset.
 
     Parameters:
     -----------
-    D : xarray.Dataset
+    ds : xarray.Dataset
         The xarray Dataset containing attributes.
     old_name : str
-        The current name of the attribute to be renamed.
+        The current name of the attribute to be renameds.
     new_name : str
         The new name to assign to the attribute.
     explicit : bool, optional
@@ -137,20 +137,20 @@ def rename_attr(D, old_name, new_name, verbose=True):
 
     Notes:
     ------
-    - For renaming global attributes of the Dataset, use `rename_attr(D, old_name, new_name)`.
+    - For renaming global attributes of the Dataset, use `rename_attr(ds, old_name, new_name)`.
     - For renaming attributes of a specific variable within the Dataset, use `rename_attr(D[var_name], old_name, new_name)`.
 
     Example:
     --------
-    Suppose D is an xarray Dataset with global attributes:
-    D.attrs = {'units': 'meters', 'description': 'Sample dataset'}
+    Suppose ds is an xarray Dataset with global attributes:
+    ds.attrs = {'units': 'meters', 'description': 'Sample dataset'}
 
     To rename 'units' to 'length':
-    rename_attr(D, 'units', 'length')
+    rename_attr(ds, 'units', 'length')
 
     """
-    if old_name in D.attrs:
-        D.attrs[new_name] = D.attrs.pop(old_name)
+    if old_name in ds.attrs:
+        ds.attrs[new_name] = ds.attrs.pop(old_name)
         if verbose:
             print(f"Renamed attribute '{old_name}' to '{new_name}'.")
     else:
@@ -159,7 +159,7 @@ def rename_attr(D, old_name, new_name, verbose=True):
                   " (Original attribute not found)")
 
 
-def add_attrs_from_dict(D, attr_dict, override=True):
+def add_attrs_from_dict(ds, attr_dict, override=True):
     """
     Assign attributes to an xarray.Dataset from a dictionary.
 
@@ -172,15 +172,77 @@ def add_attrs_from_dict(D, attr_dict, override=True):
       use `add_attrs_from_dict(dataset[var_name], attr_dict)`.
 
     Parameters:
-    - dataset (xarray.Dataset): The dataset to which attributes will be added.
+    - dataset (xarray.Dataset): The dataset to which attributes will be addeds.
     - attr_dict (dict): Dictionary mapping attribute keys to their values.
     - override (bool, optional): If False, existing attributes will not be 
                                  overridden. Defaults to True.
     """
 
     for key, value in attr_dict.items():
-        if key in D.attrs and not override:
+        if key in ds.attrs and not override:
             continue  # Skip if attribute exists and override is False
         else:
-            D.attrs[key] = value  # Assign attribute to the dataset
+            ds.attrs[key] = value  # Assign attribute to the dataset
 
+
+
+##### STRUCTURE MANIPULATION
+
+def swap_var_coord(ds: xr.Dataset, 
+                   coordinate: str, 
+                   variable: str, 
+                   drop_original: bool = False) -> xr.Dataset:
+    """
+    Swap a coordinate variable with a non-coordinate variable in an 
+    xarray Dataset.
+
+    Parameters:
+    -----------
+    ds : xr.Dataset
+        The input xarray Dataset.
+    coordinate : str
+        The name of the variable currently used as a coordinate, which will 
+        become a non-coordinate variable.
+    variable : str
+        The name of the variable to be promoted to a coordinate and used as 
+        a dimension.
+    drop_original : bool, optional
+        If True, the original coordinate variable will be dropped from the 
+        Dataset.
+        Default is False.
+
+    Returns:
+    --------
+    xr.Dataset
+        The modified Dataset with the specified coordinate and variable 
+        swapped.
+
+    Raises:
+    -------
+    ValueError:
+        If `coordinate` is not a coordinate in the Dataset.
+        If `variable` is not a non-coordinate variable in the Dataset.
+    """
+    # Check that the coordinate is actually a coordinate variable
+    if coordinate not in ds.coords:
+        raise ValueError(
+            f"'{coordinate}' is not a coordinate in the Dataset.")
+    
+    # Check that the variable is actually a non-coordinate variable
+    if variable in ds.coords:
+        raise ValueError(
+            f"'{variable}' is already a coordinate in the Dataset.")
+
+    # Set the variable as a coordinate
+    ds = ds.set_coords(variable)
+    
+    # Swap the dimension from the original coordinate to the new variable
+    ds = ds.swap_dims({coordinate: variable})
+    
+    # Reset the original coordinate to a non-coordinate variable or drop it
+    if drop_original:
+        ds = ds.drop_vars(coordinate)
+    else:
+        ds = ds.reset_coords(coordinate, drop=False)
+    
+    return ds

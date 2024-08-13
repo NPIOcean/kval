@@ -23,13 +23,14 @@ directory of this project.
 import pyrsktools
 import xarray as xr
 import pandas as pd
-from matplotlib.dates import date2num
+from matplotlib.dates import date2num, num2date
 from kval.file._variable_defs import RBR_name_map, RBR_units_map
 from kval.util import time
 from datetime import datetime
+import os
 
-
-def read(file: str) -> xr.Dataset:
+def read(file: str,
+         keep_total_pres: bool = False) -> xr.Dataset:
     """
     Parse an .rsk file with data from an RBR instrument into an xarray Dataset,
     preserving available metadata and converting units and variable names 
@@ -39,7 +40,9 @@ def read(file: str) -> xr.Dataset:
     ----------
     file : str
         Path to the .rsk file.
-
+    keep_total_pres : bool
+        Retain the full pressure if we calculate sea pressure (pressure-p_atm).
+        Default is False.  
     Returns:
     -------
     xr.Dataset
@@ -95,13 +98,19 @@ def read(file: str) -> xr.Dataset:
             # Calibration data of pressure sensor
             ds_rsk['sea_pressure'].attrs[
                 'calibration_date'] =  ds_rsk.pressure.calibration_date 
+            
         if 'salinity' in ds_rsk:
             # Calibration data of T/C sensors
             ds_rsk['salinity'].attrs['calibration_date']  = (
                 f'{ds_rsk.temperature.calibration_date} (TEMP), '
                 f'{ds_rsk.conductivity.calibration_date} (CNDC),'
             )
-            
+
+        # Drop the total pressure if we have sea pressure 
+        # (and have not set keep_total_pres=True)
+        if keep_total_pres == False and 'sea_pressure' in ds_rsk:
+            ds_rsk = ds_rsk.drop_vars('pressure')
+
         # Modify units according to preferred formatting
         # (mS/cm -> mS cm-1, °C -> degC, etc..)
         updated_units = [RBR_units_map.get(unit, unit) 
@@ -133,12 +142,19 @@ def read(file: str) -> xr.Dataset:
         ds_rsk['TIME'].attrs['units'] = 'days since 1970-01-01'
         ds_rsk['TIME'].attrs['axis'] = 'T'
 
+        # Add a history attribute with some basic info
+        first_date = num2date(ds_rsk.TIME.min()).strftime('%Y-%m-%d')
+        last_date = num2date(ds_rsk.TIME.min()).strftime('%Y-%m-%d')
+        now_date = pd.Timestamp.now().strftime('%Y-%m-%d')
 
-        # Optional metadata
-        if False:  # Change to `True` if you want to include this metadata
-            ds_rsk.attrs['calibrations'] = rskdata.calibrations  # Useful for calibration dates
-            ds_rsk.attrs['filename'] = rskdata.filename
-            ds_rsk.attrs['firmware_version'] = rskdata.instrument.firmwareVersion
+        ds_rsk.attrs['history'] = (
+            f'{first_date} - {last_date}: Data collection.\n')
+        ds_rsk.attrs['history'] += (
+            f'{now_date}: Data read from .rsk file to xarray Dataset'
+            ' using pyRSKtools+kval.\n')
+
+        ds_rsk.attrs['source_files'] = filename = os.path.basename(
+            rskdata.filename)
 
         return ds_rsk
     
@@ -186,15 +202,18 @@ def _build_cal_dates(rskdata):
 
 def _extract_patm(rskdata):
     """
-    Extract the atmospheric pressure used for the most recent sea pressure calculation.
+    Extract the atmospheric pressure used for the most recent sea pressure 
+    calculation.
 
     (Want this information in metadata)
 
     Args:
-        rskdata_log (dict): A dictionary where keys are timestamps (numpy.datetime64) and values are log messages.
+        rskdata_log (dict): A dictionary where keys are timestamps 
+        (numpy.datetime64) and values are log messages.
 
     Returns:
-        float: The atmospheric pressure used in the most recent sea pressure calculation, or None if not found.
+        float: The atmospheric pressure used in the most recent sea pressure 
+        calculation, or None if not found.
     """
     # Initialize variables
     latest_timestamp = None
@@ -206,7 +225,8 @@ def _extract_patm(rskdata):
             # Update latest timestamp and extract pressure
             latest_timestamp = timestamp
             # Extract pressure value from the message
-            pressure_str = message.split('atmospheric pressure of ')[1].split(' dbar')[0]
+            pressure_str = message.split(
+                'atmospheric pressure of ')[1].split(' dbar')[0]
             p_atm = float(pressure_str)
 
     return p_atm

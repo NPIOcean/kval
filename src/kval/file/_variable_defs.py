@@ -30,6 +30,8 @@ SBE_name_map = { # Note: replace / with _  !
               'sensors':['temp_sensor_1']},
     'T190C': {'name': 'TEMP2', 'units': 'degree_Celsius', 
               'sensors':['temp_sensor_2']},
+    'TV290C': {'name': 'TEMP1', 'units': 'degree_Celsius', 
+              'sensors':['temp_sensor_1']},
     'T068C': {'name': 'TEMP1', 'units': 'degree_Celsius', 
               'sensors':['temp_sensor_1'],
               'reference_scale':'IPTS-68'},
@@ -49,6 +51,10 @@ SBE_name_map = { # Note: replace / with _  !
     'C0MS_CM': {'name': 'CNDC1', 'units': 'mS cm-1',
               'sensors':['cndc_sensor_1']},
     'C1MS_CM': {'name': 'CNDC2', 'units': 'mS cm-1',
+              'sensors':['cndc_sensor_2']},
+    'COND0MS_CM': {'name': 'CNDC1', 'units': 'mS cm-1',
+              'sensors':['cndc_sensor_1']},
+    'COND1MS_CM': {'name': 'CNDC2', 'units': 'mS cm-1',
               'sensors':['cndc_sensor_2']},
     'SBEOX0MM_KG': {'name': 'DOXY1_instr', 'units': 'micromole kg-1',
               'sensors':['oxy_sensor_1'],
@@ -112,6 +118,12 @@ SBE_name_map = { # Note: replace / with _  !
                   'sensors':['temp_sensor_1', 'cndc_sensor_1']},
     'SIGMA-Ï¿½11': {'name': 'SIGTH2', 'units': 'kg m-3',
                   'sensors':['temp_sensor_2', 'cndc_sensor_2']},
+    'SIGMA-Ã©00': {'name': 'SIGTH1', 'units': 'kg m-3',
+                  'sensors':['temp_sensor_1', 'cndc_sensor_1']},
+    'SIGMA-Ã©11': {'name': 'SIGTH1', 'units': 'kg m-3',
+                  'sensors':['temp_sensor_2', 'cndc_sensor_2']},
+
+
     'SVCM': {'name': 'SVEL', 'units': 'm s-1'},
     'SAL00': {'name': 'PSAL1', 'units': '1', 
               'sensors':['temp_sensor_1', 'cndc_sensor_1']},
@@ -131,6 +143,8 @@ SBE_name_map = { # Note: replace / with _  !
     'SCAN': {'name': 'SCAN', 'units': 'counts'},
     'TIMES': {'name': 'TIME_ELAPSED', 'units': 's'},
     'TIMEJ': {'name': 'TIME_JULD', 'units': 'days'},
+    'TIMEJV2': {'name': 'TIME_JULD', 'units': 'days'},
+
     'FLAG': {'name': 'SBE_FLAG', 'units': ''},
 
 }
