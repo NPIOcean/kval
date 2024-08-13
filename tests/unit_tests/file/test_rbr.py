@@ -1,104 +1,90 @@
 import pytest
-import pandas as pd
 import xarray as xr
-from unittest.mock import MagicMock
-from your_module import read  # Adjust the import as needed
+import os
+import requests
+from pathlib import Path
+from kval.file.rbr import read
+from kval.file._variable_defs import RBR_name_map, RBR_units_map
 
-@pytest.fixture
-def mock_rsk_data(mocker):
-    # Create a mock for the RSK class
-    mock_rskdata = mocker.patch('pyrsktools.RSK').return_value
-    mock_rskdata.open.return_value = None
-    mock_rskdata.readdata.return_value = None
-    mock_rskdata.data = {
-        'timestamp': pd.to_datetime(['2023-01-01 00:00:00', '2023-01-02 00:00:00']),
-        'conductivity': [10, 20],
-        'temperature': [15, 16]
-    }
-    mock_rskdata.getchannelnamesandunits.return_value = (
-        ['conductivity', 'temperature'],
-        ['mS/cm', '°C']
-    )
-    mock_rskdata.instrument.model = 'RBR Model X'
-    mock_rskdata.instrument.serialID = '123456789'
-    mock_rskdata.scheduleInfo.samplingperiod.return_value = 60
-    return mock_rskdata
+# Define the URLs for the files you want to test
+FILE_URLS = {
+    "conc_chl_par_example.rsk": "https://example.com/path/to/conc_bio.rsk",
+    "conc_example.rsk": "https://example.com/path/to/conc_full.rsk",
+    "solo_example.rsk": "https://example.com/path/to/solo_full.rsk",
+}
 
-def test_read(mock_rsk_data):
-    # Call the read function
-    ds_rsk = read('dummy_file.rsk')
+# Define the directory where files should be stored
+FILE_DIR = Path("tests/test_data/rbr_files")
 
-    # Check if the Dataset has the correct variables and dimensions
-    assert 'TIME' in ds_rsk.dims
-    assert 'CNDC' in ds_rsk.variables
-    assert 'TEMP' in ds_rsk.variables
+@pytest.fixture(scope="module", autouse=True)
+def setup_files():
+    """Fixture to ensure test files are downloaded."""
+    FILE_DIR.mkdir(parents=True, exist_ok=True)
     
-    # Check the units and attributes of the variables
-    assert ds_rsk['CNDC'].attrs['units'] == 'mS cm-1'
-    assert ds_rsk['TEMP'].attrs['units'] == 'degC'
-    assert ds_rsk['TIME'].attrs['units'] == 'days since 1970-01-01'
-    assert ds_rsk['TIME'].attrs['axis'] == 'T'
+    for file_name, url in FILE_URLS.items():
+        file_path = FILE_DIR / file_name
+        if not file_path.exists():
+            # Download the file if it does not exist
+            response = requests.get(url)
+            response.raise_for_status()  # Raise an error for bad responses
+            with open(file_path, 'wb') as file:
+                file.write(response.content)
+    
+    # Yield control back to the test functions
+    yield
+    
+    # Teardown code, if needed (e.g., cleanup files after tests)
+    # For now, no teardown is required
 
-    # Verify the attributes of the Dataset
-    assert ds_rsk.attrs['instrument'] == 'RBR Model X'
-    assert ds_rsk.attrs['instrument_serial_number'] == '123456789'
-    assert ds_rsk.attrs['time_coverage_resolution'] == 'PT1M'  # Adjust if necessary
+@pytest.mark.parametrize("file_name", [
+    "solo_example.rsk",
+    "conc_example.rsk",
+    "conc_chl_par_example.rsk",
+])
 
-def test_empty_data(mocker):
-    # Create a mock for the RSK class with empty data
-    mock_rskdata = mocker.patch('pyrsktools.RSK').return_value
-    mock_rskdata.open.return_value = None
-    mock_rskdata.readdata.return_value = None
-    mock_rskdata.data = {
-        'timestamp': pd.to_datetime([]),
-        'conductivity': [],
-        'temperature': []
-    }
-    mock_rskdata.getchannelnamesandunits.return_value = (
-        [], []
-    )
-    mock_rskdata.instrument.model = 'RBR Model X'
-    mock_rskdata.instrument.serialID = '123456789'
-    mock_rskdata.scheduleInfo.samplingperiod.return_value = 60
+def test_read(file_name):
 
-    # Call the read function
-    ds_rsk = read('dummy_file.rsk')
+    # Construct the full path to the test file
+    file_path = FILE_DIR / file_name
 
-    # Check if the Dataset is empty as expected
-    assert ds_rsk.dims == {'TIME': 0}
-    assert 'CNDC' not in ds_rsk.variables
-    assert 'TEMP' not in ds_rsk.variables
+    # Read the dataset using the read function
+    ds_rsk = read(file_path)
 
-def test_variable_renaming(mock_rsk_data):
-    # Mock RBR_name_map to test renaming
-    mock_rbr_name_map = {
-        'conductivity': 'CNDC',
-        'temperature': 'TEMP'
-    }
-    import your_module
-    original_rbr_name_map = your_module.RBR_name_map
-    your_module.RBR_name_map = mock_rbr_name_map
+    # Check if the dataset is of type xarray.Dataset
+    assert isinstance(ds_rsk, xr.Dataset), "Output is not an xarray.Dataset"
 
-    try:
-        ds_rsk = read('dummy_file.rsk')
-        assert 'CNDC' in ds_rsk.variables
-        assert 'TEMP' in ds_rsk.variables
-    finally:
-        your_module.RBR_name_map = original_rbr_name_map
+    # Check that the TIME dimension exists and is of correct type
+    assert 'TIME' in ds_rsk.dims, "TIME dimension not found"
+    assert ds_rsk['TIME'].dtype == 'float64', "TIME variable is not of type float64"
+    
+    # Check for presence of expected variables in the dataset
+    assert 'TIME' in ds_rsk.variables, "TIME variable not found"
+    assert len(ds_rsk.data_vars) > 0, "No data variables found in dataset"
+    
+    # Check if units are correctly assigned
+    for var in ds_rsk.data_vars:
+        assert 'units' in ds_rsk[var].attrs, f"Units attribute not found for variable {var}"
+        expected_unit = RBR_units_map.get(ds_rsk[var].attrs['units'], ds_rsk[var].attrs['units'])
+        assert ds_rsk[var].attrs['units'] == expected_unit, f"Units attribute for {var} is incorrect"
 
-def test_variable_units_mapping(mock_rsk_data):
-    # Mock RBR_units_map to test unit conversion
-    mock_rbr_units_map = {
-        'mS/cm': 'mS cm-1',
-        '°C': 'degC'
-    }
-    import your_module
-    original_rbr_units_map = your_module.RBR_units_map
-    your_module.RBR_units_map = mock_rbr_units_map
+    # Check if the TIME variable has correct attributes
+    assert ds_rsk['TIME'].attrs['units'] == 'days since 1970-01-01', "TIME units attribute is incorrect"
+    assert ds_rsk['TIME'].attrs['axis'] == 'T', "TIME axis attribute is incorrect"
 
-    try:
-        ds_rsk = read('dummy_file.rsk')
-        assert ds_rsk['CNDC'].attrs['units'] == 'mS cm-1'
-        assert ds_rsk['TEMP'].attrs['units'] == 'degC'
-    finally:
-        your_module.RBR_units_map = original_rbr_units_map
+    # Check for presence of metadata
+    assert 'instrument' in ds_rsk.attrs, "Instrument metadata not found"
+    assert 'instrument_serial_number' in ds_rsk.attrs, "Instrument serial number metadata not found"
+    assert 'time_coverage_resolution' in ds_rsk.attrs, "Time coverage resolution metadata not found"
+
+    # Validate calibration dates
+    for var in ds_rsk.data_vars:
+        if 'calibration_date' in ds_rsk[var].attrs:
+            assert ds_rsk[var].attrs['calibration_date'] == ds_rsk[var].attrs.get('calibration_date'), f"Calibration date for {var} is incorrect"
+    
+    # Check for no extra variables
+    expected_var_names = set(RBR_name_map.values())
+    actual_var_names = set(ds_rsk.variables) - {'TIME'}
+    assert actual_var_names.issubset(expected_var_names), "Unexpected variables found in the dataset"
+
+    # Check if the TIME variable has the correct type
+    assert ds_rsk['TIME'].dtype == 'float64', "TIME variable type is incorrect"

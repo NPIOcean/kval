@@ -26,7 +26,7 @@ import pandas as pd
 from matplotlib.dates import date2num
 from kval.file._variable_defs import RBR_name_map, RBR_units_map
 from kval.util import time
-
+from datetime import datetime
 
 
 def read(file: str) -> xr.Dataset:
@@ -47,9 +47,16 @@ def read(file: str) -> xr.Dataset:
         and variable names.
     """
     with pyrsktools.RSK(file) as rskdata:
+
         # Open file and read data
         rskdata.open()
         rskdata.readdata()
+
+        if rskdata.channelexists('conductivity'):
+            rskdata.derivesalinity()
+        if rskdata.channelexists('pressure'):
+            rskdata.deriveseapressure()
+            p_atm = _extract_patm(rskdata)
 
         # Load data into a pandas DataFrame
         df_rsk = pd.DataFrame(rskdata.data)
@@ -68,9 +75,35 @@ def read(file: str) -> xr.Dataset:
         rsk_channel_names, rsk_channel_units = (
             rskdata.getchannelnamesandunits([]))
 
+        # Add metadata
+        ds_rsk.attrs['instrument'] = rskdata.instrument.model
+        ds_rsk.attrs['instrument_serial_number'] = rskdata.instrument.serialID
+        ds_rsk.attrs['time_coverage_resolution'] = time.seconds_to_ISO8601(
+            rskdata.scheduleInfo.samplingperiod())
+
+        # Add calibration dates:
+        cal_dates = _build_cal_dates(rskdata)
+        for varnm, cdate in cal_dates.items():
+            if varnm in ds_rsk:
+                ds_rsk[varnm].attrs['calibration_date'] = cdate
+
+        # Add some variable-custom metadata
+        if 'sea_pressure' in ds_rsk:
+            # Atmospheric pressure used in PRES calculation
+            ds_rsk['sea_pressure'].attrs[
+                'assumed_atmospheric_pressure_dbar'] = p_atm 
+            # Calibration data of pressure sensor
+            ds_rsk['sea_pressure'].attrs[
+                'calibration_date'] =  ds_rsk.pressure.calibration_date 
+        if 'salinity' in ds_rsk:
+            # Calibration data of T/C sensors
+            ds_rsk['salinity'].attrs['calibration_date']  = (
+                f'{ds_rsk.temperature.calibration_date} (TEMP), '
+                f'{ds_rsk.conductivity.calibration_date} (CNDC),'
+            )
+            
         # Modify units according to preferred formatting
         # (mS/cm -> mS cm-1, °C -> degC, etc..)
-
         updated_units = [RBR_units_map.get(unit, unit) 
                          for unit in rsk_channel_units]
 
@@ -100,11 +133,6 @@ def read(file: str) -> xr.Dataset:
         ds_rsk['TIME'].attrs['units'] = 'days since 1970-01-01'
         ds_rsk['TIME'].attrs['axis'] = 'T'
 
-        # Add metadata
-        ds_rsk.attrs['instrument'] = rskdata.instrument.model
-        ds_rsk.attrs['instrument_serial_number'] = rskdata.instrument.serialID
-        ds_rsk.attrs['time_coverage_resolution'] = time.seconds_to_ISO8601(
-            rskdata.scheduleInfo.samplingperiod())
 
         # Optional metadata
         if False:  # Change to `True` if you want to include this metadata
@@ -114,3 +142,71 @@ def read(file: str) -> xr.Dataset:
 
         return ds_rsk
     
+
+def _build_cal_dates(rskdata):
+    """
+    Build a dictionary of calibration dates from a rsk object
+
+    Args:
+        rskdata (object): The data object containing calibration and channel 
+        information.
+
+    Returns:
+        dict: A dictionary where keys are channel long names and values are 
+              calibration dates in 'YYYY-MM-DD' format.
+    """
+    # Create a mapping from channelID to longName for channels
+    # where isDerived=0
+    channel_id_to_longname = {
+        channel.channelID: channel.longName
+        for channel in rskdata.channels
+        if channel.isDerived == 0
+    }
+    
+    # Initialize the dictionary to hold calibration dates
+    cal_dates = {}
+    
+    # Populate the cal_dates dictionary with calibration dates
+    for calibration in rskdata.calibrations:
+        # Get the long name of the channel associated with the calibration
+        long_name = channel_id_to_longname.get(calibration.channelOrder)
+        
+        if long_name:
+            # Convert numpy.datetime64 to a Python datetime object
+            cal_date = calibration.tstamp.astype(datetime)
+            
+            # Format the datetime object to 'YYYY-MM-DD' string
+            cal_date_str = cal_date.strftime('%Y-%m-%d')
+            
+            # Add the long name and calibration date to the dictionary
+            cal_dates[long_name] = cal_date_str
+    
+    return cal_dates
+
+
+def _extract_patm(rskdata):
+    """
+    Extract the atmospheric pressure used for the most recent sea pressure calculation.
+
+    (Want this information in metadata)
+
+    Args:
+        rskdata_log (dict): A dictionary where keys are timestamps (numpy.datetime64) and values are log messages.
+
+    Returns:
+        float: The atmospheric pressure used in the most recent sea pressure calculation, or None if not found.
+    """
+    # Initialize variables
+    latest_timestamp = None
+    p_atm = None
+
+    # Iterate over log entries to find the most recent sea pressure calculation
+    for timestamp, message in rskdata.logs.items():
+        if 'Sea pressure calculated using an atmospheric pressure of' in message:
+            # Update latest timestamp and extract pressure
+            latest_timestamp = timestamp
+            # Extract pressure value from the message
+            pressure_str = message.split('atmospheric pressure of ')[1].split(' dbar')[0]
+            p_atm = float(pressure_str)
+
+    return p_atm

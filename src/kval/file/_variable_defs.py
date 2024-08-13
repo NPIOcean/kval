@@ -232,6 +232,8 @@ RBR_name_map = {
     'salinity':'PSAL',
     'speed_of_sound':'SVEL',
     'specific_conductivity':'SPCNDC',
+    'chlorophyll':'CHLA',
+    'par':'PAR',
     'timestamp':'TIME'
 }
 
@@ -242,5 +244,7 @@ RBR_units_map = {
     '°C':'degC',
     'PSU':'1',
     'm/s': 'm s-1',
-    'µS/cm':'uS cm-1'}
+    'µS/cm':'uS cm-1',
+    'µg/l':'ug L-1',
+    'µMol/m²/s':'umol m-2 s-1'}
 

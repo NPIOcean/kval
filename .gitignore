@@ -5,6 +5,7 @@ development/**/*.nc
 development/developing
 
 kval_local_files
+tests/test_data/rbr_files
 
 #### Defaults:
 
