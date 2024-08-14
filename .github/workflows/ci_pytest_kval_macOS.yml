@@ -1,4 +1,4 @@
-name: Run Tests for Kval (Win+MacOS)
+name: Run Tests for Kval (MacOS)
 
 on:   
   workflow_dispatch:
