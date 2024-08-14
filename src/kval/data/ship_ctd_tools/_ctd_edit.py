@@ -3,10 +3,11 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import RectangleSelector
 import ipywidgets as widgets
 from IPython.display import display, clear_output
-from kval.util import time
+from kval.util import time, internals
 from kval.data import edit, ctd
 from kval.data.ship_ctd_tools import _ctd_tools
 from kval.calc.numbers import order_of_magnitude
+
 
 ###########################
 
@@ -25,6 +26,10 @@ class hand_remove_points:
     ```
     Note: Use the interactive plot to select points for removal, then click the corresponding buttons for actions.
     """
+
+    # Check that we in a notebook and with the ipympl backend..
+    # (raise a warning otherwise)
+
     def __init__(self, d, varnm, TIME_index):
         """
         Initialize the HandRemovePoints instance.
@@ -35,14 +40,13 @@ class hand_remove_points:
         - station (str): The name of the station.
         """
 
+        internals.check_interactive()
+
         if varnm not in d.data_vars:
             raise Exception(f'Invalid variable ("{varnm}")')
         
-
-
         self.TIME_index = TIME_index
         
-
         self.varnm = varnm
         self.d = d
         
@@ -171,6 +175,11 @@ class hand_remove_points:
         Parameters:
         - button: The button click event.
         """
+        # Check that we in a notebook and with the ipympl backend..
+        # (raise a warning otherwise)
+
+        internals.check_interactive()
+        
         self.var_points_remove = np.concatenate(
             [self.var_points_remove, self.var_points_selected])
         self.PRES_points_remove = np.concatenate(
@@ -341,6 +350,10 @@ def apply_offset(D):
     The offset information is stored as metadata in the dataset's variable attributes.
     """
 
+    # Check that we in a notebook and with the ipympl backend..
+    # (raise a warning otherwise)
+    internals.check_interactive()
+
     vars = list(D.data_vars.keys())
 
     var_buttons = widgets.RadioButtons(
@@ -492,7 +505,16 @@ class drop_stations_pick:
 
     Note: This class utilizes IPython widgets for interactive use within a Jupyter environment.
     '''
+
+
+
     def __init__(self, D):
+
+
+        # Check that we in a notebook and with the ipympl backend..
+        # (raise a warning otherwise)
+        internals.check_interactive()
+
         self.D = D
         self.selected_time_points = []
         self.max_stations_per_row = 3
@@ -614,7 +636,16 @@ class drop_vars_pick:
 
     Note: This class utilizes IPython widgets for interactive use within a Jupyter environment.
     '''
+
+
+
+
     def __init__(self, D):
+
+        # Check that we in a notebook and with the ipympl backend..
+        # (raise a warning otherwise)
+        internals.check_interactive()
+
         self.D = D
         self.selected_options = []
 
@@ -713,6 +744,11 @@ def threshold_edit(d):
     Returns: None
     """
     
+
+    # Check that we in a notebook and with the ipympl backend..
+    # (raise a warning otherwise)
+    internals.check_interactive()
+
     def get_slider_params(d, variable):
         """
         Helper function to calculate slider parameters based on the variable's
@@ -844,6 +880,11 @@ def threshold_edit(d):
         Returns:
         None
         """
+
+        # Check that we in a notebook and with the ipympl backend..
+        # (raise a warning otherwise)
+        internals.check_interactive()
+
         variable = variable_dropdown.value
 
         lower_floor, upper_ceil, step, oom_step = get_slider_params(d, variable)
