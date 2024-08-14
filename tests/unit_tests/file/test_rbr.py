@@ -1,6 +1,7 @@
 import pytest
 import xarray as xr
 import os
+import time
 import requests
 from pathlib import Path
 from kval.file.rbr import read
@@ -18,27 +19,35 @@ FILE_DIR = Path("tests/test_data/rbr_files")
 
 @pytest.fixture(scope="module", autouse=True)
 def setup_files():
-    """Fixture to ensure test files are downloaded."""
+    """
+    Fixture to ensure test files are downloaded and available for testing.
+    After the tests run, the files are cleaned up by deleting them.
+    """
+    # Create the directory for storing test files if it doesn't already exist.
     FILE_DIR.mkdir(parents=True, exist_ok=True)
     
+    # Download each file in FILE_URLS if it doesn't already exist locally.
     for file_name, url in FILE_URLS.items():
         file_path = FILE_DIR / file_name
-        if not file_path.exists():
-            # Download the file if it does not exist
-            response = requests.get(url)
-            response.raise_for_status()  # Raise an error for bad responses
-            with open(file_path, 'wb') as file:
+        if not file_path.exists():  # Check if the file is already present
+            response = requests.get(url)  # Download the file
+            response.raise_for_status()  # Raise an error if download fails
+            with open(file_path, 'wb') as file:  # Write the file to disk
                 file.write(response.content)
     
-    # Yield control back to the test functions
+    # Yield control back to the test functions. This pauses the fixture here.
     yield
     
-    # Teardown code: Remove the files after tests are done
+    # Teardown: This code runs after the tests are complete.
     for file_name in FILE_URLS.keys():
         file_path = FILE_DIR / file_name
-        if file_path.exists():
-            file_path.unlink()  # Remove the file
-
+        if file_path.exists():  # Check if the file still exists
+            for _ in range(3):  # Try up to 3 times to delete the file
+                try:
+                    file_path.unlink()  # Attempt to delete the file
+                    break  # Exit the loop if the file is successfully deleted
+                except PermissionError:  # Handle the case locked file
+                    time.sleep(0.5)  # Wait for a short time before trying again
 
 @pytest.mark.parametrize("file_name", [
     "solo_example.rsk",
