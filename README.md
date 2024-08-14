@@ -77,17 +77,25 @@ ____
 <summary><strong>RELEASE NOTES</strong></summary>
 
 - *0.1.0 (in development)*: 
-    - Packaging and hopefully release to PyPi and conda-forge.
+    - Refactoring of large parts of the code for structure and efficiency.
+    - Complete reproducability and self-documentation in the CTD processing functionality.
+    - Functionality for parsing moored CTD sensors (RBR and SBE)
+    - Test suite (comprehensive but not entirely complete)
+    - Decluttering the repo bringing it down from its currently bloated state.
+    - Possibly: release to PyPi and conda-forge.
+
+- *Changes tabled but* not *included in 0.3.0*
+
     - Removal of NPI-specific content.
-    - Some refactoring.
-    - Work on ensuring complete reproducability of the CTD processing functionality.
- 
-- *0.2.0*: 
+    - Full sphinx documentation
+
+
+- *0.0.2*: 
     - Name change from `oceanograpy` to `kval`.
     - Introduction of test suite.
     - Other minor changes.
 
-- *0.1.0:* 
+- *0.0.1:* 
     - Initial release.
     - Functionality tailored for CTD processing.
 
