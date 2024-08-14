@@ -1,8 +1,7 @@
 #### Øyvind's:
 
 *.pyc
-development/**/*.nc
-development/developing
+development/
 
 kval_local_files
 tests/test_data/rbr_files
