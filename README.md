@@ -28,8 +28,8 @@ ____
 - `map`: Tools for making maps
 - `geo`: Geographical calculations (coordinate transformations, point-to-point distances etc)  
 - `ocean`: Oceanography-specific tools (e.g. vertical modes, turner angles, wkb scaling, geostrophical calculations)
-- `calc`: Various useful function
-- `util`: Various backend support functions 
+- `calc`: Various useful functions for numerical calculations. 
+- `util`: Various backend support functions and wrappers for xarray functionality.
 </details>
 
 ____
@@ -84,7 +84,7 @@ ____
     - Decluttering the repo bringing it down from its currently bloated state.
     - Possibly: release to PyPi and conda-forge.
 
-- *Changes tabled but* not *included in 0.3.0*
+- *Changes tabled but* not *planned included in 0.1.0*
 
     - Removal of NPI-specific content.
     - Full sphinx documentation
