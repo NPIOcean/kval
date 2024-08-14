@@ -71,4 +71,4 @@ env.bak/
 venv.bak/
 
 # mkdocs documentation
-/site
+/sitedist/
