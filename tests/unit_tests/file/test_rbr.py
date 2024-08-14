@@ -8,9 +8,9 @@ from kval.file._variable_defs import RBR_name_map, RBR_units_map
 
 # Define the URLs for the files you want to test
 FILE_URLS = {
-    "conc_chl_par_example.rsk": "https://example.com/path/to/conc_bio.rsk",
-    "conc_example.rsk": "https://example.com/path/to/conc_full.rsk",
-    "solo_example.rsk": "https://example.com/path/to/solo_full.rsk",
+    "conc_chl_par_example.rsk": "https://zenodo.org/records/13321317/files/conc_chl_par_example.rsk?download=1",
+    "conc_example.rsk": "https://zenodo.org/records/13321317/files/conc_example.rsk?download=1",
+    "solo_example.rsk": "https://zenodo.org/records/13321317/files/solo_example.rsk?download=1",
 }
 
 # Define the directory where files should be stored
@@ -33,8 +33,12 @@ def setup_files():
     # Yield control back to the test functions
     yield
     
-    # Teardown code, if needed (e.g., cleanup files after tests)
-    # For now, no teardown is required
+    # Teardown code: Remove the files after tests are done
+    for file_name in FILE_URLS.keys():
+        file_path = FILE_DIR / file_name
+        if file_path.exists():
+            file_path.unlink()  # Remove the file
+
 
 @pytest.mark.parametrize("file_name", [
     "solo_example.rsk",
