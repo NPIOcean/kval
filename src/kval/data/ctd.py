@@ -265,7 +265,7 @@ def dataset_from_btl_dir(
         raise Exception('Did not find any .btl files in the specified '
                 f'directory ("{path}"). Is there an error in the path?')
     else:
-        print(f'Found {number_of_btl_files} .btl  files in  "{path}".')
+        print(f'Found {number_of_btl_files} .btl files in  "{path}".')
     profile_datasets = tools._datasets_from_btllist(
         btl_files, verbose = verbose, start_time_NMEA = start_time_NMEA,
         time_adjust_NMEA = time_adjust_NMEA,

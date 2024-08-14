@@ -7,6 +7,7 @@ from kval.util import time
 from kval.data import edit, ctd
 from kval.data.ship_ctd_tools import _ctd_tools
 from kval.calc.numbers import order_of_magnitude
+
 ###########################
 
 class hand_remove_points:
