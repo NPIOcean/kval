@@ -21,10 +21,13 @@ FILE_DIR = Path("tests/test_data/rbr_files")
 def setup_files():
     """
     Fixture to ensure test files are downloaded and available for testing.
-    After the tests run, the files are cleaned up by deleting them.
+    Local files are used without deletion, while downloaded files are deleted after testing.
     """
     # Create the directory for storing test files if it doesn't already exist.
     FILE_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Track which files are downloaded
+    downloaded_files = set()
     
     # Download each file in FILE_URLS if it doesn't already exist locally.
     for file_name, url in FILE_URLS.items():
@@ -34,19 +37,22 @@ def setup_files():
             response.raise_for_status()  # Raise an error if download fails
             with open(file_path, 'wb') as file:  # Write the file to disk
                 file.write(response.content)
+            downloaded_files.add(file_name)  # Mark the file as downloaded
     
     # Yield control back to the test functions. This pauses the fixture here.
     yield
     
     # Teardown: This code runs after the tests are complete.
+    # Only delete files that were downloaded
     for file_name in FILE_URLS.keys():
         file_path = FILE_DIR / file_name
-        if file_path.exists():  # Check if the file still exists
+        if file_path.exists() and file_name in downloaded_files:
+            # Only delete files that were downloaded
             for _ in range(3):  # Try up to 3 times to delete the file
                 try:
                     file_path.unlink()  # Attempt to delete the file
                     break  # Exit the loop if the file is successfully deleted
-                except PermissionError:  # Handle the case locked file
+                except PermissionError:  # Handle the case of locked file
                     time.sleep(0.5)  # Wait for a short time before trying again
 
 @pytest.mark.parametrize("file_name", [
