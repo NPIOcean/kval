@@ -63,9 +63,13 @@ def check_file_with_button(file):
 
     Can take a file path or an xr.Dataset as input
     '''
-
     if not COMPLIANCE_CHECKER_AVAILABLE:
-        raise ImportError("Compliance Checker is not installed. Please install it to use this functionality.")
+        raise ImportError("IOOS Compliance Checker is not installed. "
+            "Please install it to use this functionality, e.g.:\n"
+            "$ conda install -c conda-forge compliance-checker\nor\n"
+            "$ pip install compliance-checker\n\n"
+            "(Note: There are some issues with getting the dependencies "
+            " of this library to work on Py3.12, MacOS and Windows..)")
     
     output_widget = widgets.Output()
 
