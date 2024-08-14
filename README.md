@@ -77,11 +77,11 @@ ____
 <summary><strong>RELEASE NOTES</strong></summary>
 
 - *0.1.0 (in development)*: 
-    - Refactoring of large parts of the code for structure and efficiency.
-    - Complete reproducability and self-documentation in the CTD processing functionality.
-    - Functionality for parsing moored CTD sensors (RBR and SBE)
-    - Test suite (comprehensive but not entirely complete)
-    - Decluttering the repo bringing it down from its currently bloated state.
+    - Refactoring of large parts of the code for structure, clarity and efficiency.
+    - ~~Complete reproducability and self-documentation in the CTD processing functionality.~~
+    - ~~Functionality for parsing moored CTD sensors (RBR and SBE)~~
+    - ~~Test suite (comprehensive but not entirely complete)~~
+    - ~~Decluttering the repo bringing it down from its currently bloated state.~~
     - Possibly: release to PyPi and conda-forge.
 
 - *Changes tabled but* not *planned included in 0.1.0*
