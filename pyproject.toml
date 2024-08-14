@@ -29,6 +29,7 @@ dependencies = [
   "cmocean>=3.0.3",
   "tqdm>=4.66.1",
   "ipympl>=0.9.3",
+  "mplcursors==0.5.3",
   "compliance-checker>=5.1.0",
   "xlrd>=2.0.1",
   "pyrsktools==1.1.1",
