@@ -1,9 +1,7 @@
 """
-### OCEANOGRAPY.IO.SBE.py ###
+### KVAL.IO.SBE.py ###
 
 Parsing data from seabird format (.cnv, .hdr, .btl) to xarray Datasets.
-
-
 
 Some of these functions are rather long and clunky. This is mainly because the
 input files are clunky and the format changes quite a lot.
@@ -44,12 +42,14 @@ import numpy as np
 from kval.file import _variable_defs as vardef
 from kval.util import time, xr_funcs
 from kval.metadata.conventionalize import remove_numbers_in_var_names
+from kval.data import dataset
+
 import matplotlib.pyplot as plt
 import re
+import os
 from typing import Optional
 from itertools import zip_longest
 from matplotlib.dates import num2date
-
 
 # KEY FUNCTIONS
 
@@ -530,16 +530,15 @@ def read_header(filename: str) -> dict:
         return hdict
 
 
-def to_nc(
+def to_netcdf(
     ds: xr.Dataset,
-    where: str = ".",
-    filename: bool = False,
-    suffix: str = None,
+    path: str = "./",
+    file_name: bool = False,
+    convention_check: bool = False,
+    add_to_history: bool = False,
+    verbose: bool = False
 ) -> None:
     """
-
-    TBW!!
-
     Export a dataset to a NetCDF file.
 
     Parameters:
@@ -555,8 +554,18 @@ def to_nc(
         Option to add a suffix (e.g., "_prelim") to the file name.
     """
 
+    if not file_name:
+        file_name = (ds.filename.replace('.cnv', '.nc')
+                                .replace('.btl', '.nc'))
+    if not file_name.endswith('.nc'):
+        file_name += '.nc'
 
-## INTERNAL FUNCTIONS: PARSING
+    dataset.to_netcdf(ds, path=path, file_name=file_name,
+                      convention_check=convention_check,
+                      add_to_history=add_to_history, verbose=verbose)
+
+
+# INTERNAL FUNCTIONS: PARSING
 
 
 def _read_column_data_xr(source_file, header_info):
@@ -1161,7 +1170,7 @@ def _read_sensor_info(source_file, verbose=False):
     return sensor_dict
 
 
-## INTERNAL FUNCTIONS: MODIFY THE DATASET
+# INTERNAL FUNCTIONS: MODIFY THE DATASET
 
 
 def _remove_duplicate_variables(ds):
@@ -1607,6 +1616,8 @@ def _update_variables(ds, source_file):
                 ds[new_name].attrs["sensor_calibration_date"] = ", ".join(
                     sensor_caldates
                 )
+
+    ds.attrs['filename'] = os.path.basename(source_file)
 
     return ds
 
