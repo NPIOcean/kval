@@ -2,6 +2,8 @@
 EMPIRICAL.PY
 
 Collection of empirical formulas used in oceanography.
+
+(nothing for now)
 '''
 
 if False:
@@ -19,7 +21,7 @@ if False:
 
     def _c_d_large_pond(wsp_10m):
         '''
-        Calculate 
+        Calculate
         '''
 
         if wsp_10m < 11:

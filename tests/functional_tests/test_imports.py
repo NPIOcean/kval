@@ -2,7 +2,7 @@ import pytest
 
 @pytest.mark.filterwarnings("ignore:The seawater library is deprecated! Please use gsw instead.")
 def test_imports():
-    from kval.calc import numbers
+    from kval.calc import number
     from kval.data import edit, dataset, ctd
     from kval.data.ship_ctd_tools import _ctd_edit, _ctd_tools, _ctd_visualize, qc_salt
     from kval.file import sbe, rbr, matfile,  _variable_defs

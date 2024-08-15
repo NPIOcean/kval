@@ -10,6 +10,7 @@ Various functions useful for numerical operations:
 import numpy as np
 from typing import Literal
 
+
 def order_of_magnitude(number: float) -> int:
     """
     Calculate the order of magnitude of a given number.
@@ -33,11 +34,12 @@ def order_of_magnitude(number: float) -> int:
 
     return order
 
-def custom_round_ud(number: float, 
-                    decimals: int, 
+
+def custom_round_ud(number: float,
+                    decimals: int,
                     ud: Literal['up', 'down', 'dn']) -> float:
     """
-    Round a number to a specified number of decimal places, with control 
+    Round a number to a specified number of decimal places, with control
     over the direction of rounding (up or down).
 
     Parameters:

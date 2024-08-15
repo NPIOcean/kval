@@ -1,9 +1,9 @@
 '''
-## OceanograPy.data.ship_ctd.qc_salt
+## kval.data.ship_ctd.qc_salt
 
 Various functions for comparing CTD and salinometer salintiy
 
-NOTE: The input formats are not standardized, so this is more or 
+NOTE: The input formats are not standardized, so this is more or
 less hardcoded to work with the FS2014 data (may work with other FS data?)
 
 Not extensively tested either - will put more work into this module
@@ -20,23 +20,23 @@ import ipywidgets as widgets
 from IPython.display import display
 
 
-def setup_sal_qc(salts_excel_sheet, log_excel_sheet, btl_dir, 
+def setup_sal_qc(salts_excel_sheet, log_excel_sheet, btl_dir,
                  bath_temp = None,
-                 sample_column ='Sample:', 
+                 sample_column ='Sample:',
                  salt_column = 'Median -mean offset',):
     """
-    Setup a joint file to be used in salinity quality control (QC) by 
+    Setup a joint file to be used in salinity quality control (QC) by
     combining salinometer readings with CTD data.
 
     Parameters:
-    - salts_excel_sheet (str): 
+    - salts_excel_sheet (str):
         Path to the Excel sheet containing salinometer readings.
-    - log_excel_sheet (str): 
-        Path to the Excel sheet containing sample numbers and station/Niskin 
+    - log_excel_sheet (str):
+        Path to the Excel sheet containing sample numbers and station/Niskin
          information.
-    - btl_dir (str): 
+    - btl_dir (str):
         Path to the directory containing CTD .btl files.
-    - bath_temp (float): 
+    - bath_temp (float):
         Bath temperature used for salinity conversion (when PSAL<2). If None,
         we will attempt to read it from the salts sheet.
     - sample_column:
@@ -51,12 +51,12 @@ def setup_sal_qc(salts_excel_sheet, log_excel_sheet, btl_dir,
     a single dataset. It also performs necessary conversions and assigns metadata to the resulting dataset.
 
     Example usage:
-    ds_combined = setup_sal_qc('path/to/salts_sheet.xlsx', 
-                               'path/to/log_sheet.xlsx', 
-                               'path/to/btl_directory', 
+    ds_combined = setup_sal_qc('path/to/salts_sheet.xlsx',
+                               'path/to/log_sheet.xlsx',
+                               'path/to/btl_directory',
                                 20.0)
     """
-    
+
     # Read sample numbers and salinometer readings from log and salts sheets
     print('Reading log sheet..', )
     ds_log = read_log_sheet(log_excel_sheet)
@@ -98,8 +98,8 @@ def setup_sal_qc(salts_excel_sheet, log_excel_sheet, btl_dir,
     # Add metadata comments
     comment = f'''
     File used for QCing of CTD salinity measurements by comparing
-    with salinometer readings based on bottle samples. 
-    
+    with salinometer readings based on bottle samples.
+
     Produced using:
      oceanography.data.ship_ctd.qc_salt.setup_sal_qc()
 
@@ -128,7 +128,7 @@ def setup_sal_qc(salts_excel_sheet, log_excel_sheet, btl_dir,
             ds_combined.attrs['salinometer_bath_temperature'] = (
                 f'Variable: {float(bath_temp_min)} to {float(bath_temp_max)} C'
                 ' (read from salts sheet)')
-            
+
     ds_combined['SAMPLE_NUMBER'] = ds_combined['SAMPLE_NUMBER'].transpose()
     ds_combined['PSAL_SALINOMETER'] = ds_combined['PSAL_SALINOMETER'].transpose()
 
@@ -149,7 +149,7 @@ def read_log_sheet(log_excel_sheet):
     stations_str = ['%03i'%station_int for station_int in stations_int]
 
     # Find the row where salinity starts
-    # (column varies from file to file, so we look through columns 
+    # (column varies from file to file, so we look through columns
     # until we find the rigth one)
     salinity_start_row, try_column = None, 0
 
@@ -162,7 +162,7 @@ def read_log_sheet(log_excel_sheet):
             if try_column>10: # Avoid infinite loop if we don't find anything..
                 raise Exception('Failed to find "Salinity" within the first'
                     ' 30 rows of the salts excel sheet..')
-        
+
     # Loop through salinity rows: Grab row nr and bottle number
     salinity_niskins = []
     salinity_rows = []
@@ -177,31 +177,31 @@ def read_log_sheet(log_excel_sheet):
             if not np.isnan(df_log.STN[ii+1]):
                 ii += 1
             else:
-                still_salt = False # Stop loop after the final niskin 
+                still_salt = False # Stop loop after the final niskin
         else:
-            still_salt = False # Stop loop after the final niskin 
+            still_salt = False # Stop loop after the final niskin
 
         if ii>1000: # Avoid infinite loop if we don't find anything..
             raise Exception('Failed to find end of salinity entries within the first'
                 ' 1000 rows of the salts excel sheet..')
     # Put together in a data .xr
-    ds_log = xr.Dataset(coords = {'STATION':stations_str, 
+    ds_log = xr.Dataset(coords = {'STATION':stations_str,
                              'NISKIN_NUMBER':salinity_niskins},
-                data_vars = {'SAMPLE_NUMBER':(('NISKIN_NUMBER', 'STATION', ), 
+                data_vars = {'SAMPLE_NUMBER':(('NISKIN_NUMBER', 'STATION', ),
                             df_log.iloc[salinity_rows, column_start_index:])})
 
     return ds_log
 
 def read_salts_sheet(salts_excel_sheet, bath_temp=False,
-                     sample_column ='Sample:', 
+                     sample_column ='Sample:',
                      salt_column = 'Median -mean offset',
                      bath_temp_column = 'Bath Temp',):
-    
+
     #### Read salts file
     df = pd.read_excel(salts_excel_sheet)
-    df_salt = pd.DataFrame({'SAMPLE_NUM' : df[sample_column], 
+    df_salt = pd.DataFrame({'SAMPLE_NUM' : df[sample_column],
                             'PSAL' : df[salt_column]})
-    
+
     # Use bath temp if specified
     if bath_temp:
         df_salt['BATH_TEMP'] = np.ones(df_salt['PSAL'].shape) * bath_temp
@@ -214,17 +214,17 @@ def read_salts_sheet(salts_excel_sheet, bath_temp=False,
                 f'("{bath_temp_column}") in {salts_excel_sheet}. '
                 'Consider specifying a fixed bath temperature using the'
                 ' "bath_temp" input parameter.')
-        
+
     ## Convert C ratio to SP
     for ii, psal in enumerate(df_salt.PSAL):
         if psal<2:
             df_salt.loc[ii, 'PSAL'] = eos80.salt(psal, df_salt.loc[ii, 'BATH_TEMP'], 0)
-            
+
     return df_salt
 
 
 
-def plot_histograms(ds,  min_pres=500,  salinometer_var = 'PSAL_SALINOMETER', 
+def plot_histograms(ds,  min_pres=500,  salinometer_var = 'PSAL_SALINOMETER',
                     psal_var=None, N=20, figsize=(7, 3.5)):
     """
     Generate histograms for the difference between a salinity variable and PSAL_SALINOMETER
@@ -258,7 +258,7 @@ def plot_histograms(ds,  min_pres=500,  salinometer_var = 'PSAL_SALINOMETER',
         else:
             raise Exception('Could not find PSAL or PSAL1 in dataset. '
                 'Please specify which variable *psal_var* contains PSAL')
-        
+
     # Calculate the difference between the specified salinity variable and PSAL_SALINOMETER
     SAL_diff = ds[psal_var] - ds[salinometer_var]
 
@@ -281,9 +281,9 @@ def plot_histograms(ds,  min_pres=500,  salinometer_var = 'PSAL_SALINOMETER',
 
     # Add vertical lines for mean and median
     ax.axvline(0, color='k', ls='--', lw=2)
-    ax.axvline(SAL_diff_deep_mean, color='tab:red', dashes=(5, 3), lw=1, 
+    ax.axvline(SAL_diff_deep_mean, color='tab:red', dashes=(5, 3), lw=1,
                label=f'Mean = {SAL_diff_deep_mean:.2e}')
-    ax.axvline(SAL_diff_deep_median, color='tab:red', ls=':', lw=1.5, 
+    ax.axvline(SAL_diff_deep_median, color='tab:red', ls=':', lw=1.5,
                label=f'Median = {SAL_diff_deep_median:.2e}')
 
     # Set axis labels and title
@@ -310,7 +310,7 @@ def plot_histograms(ds,  min_pres=500,  salinometer_var = 'PSAL_SALINOMETER',
 
 
 
-def plot_by_sample(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER', 
+def plot_by_sample(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER',
                     sample_number_var = 'SAMPLE_NUMBER', min_pres=500):
     """
     Plot salinity comparison for samples taken at depths greater than a specified minimum pressure,
@@ -364,37 +364,37 @@ def plot_by_sample(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER',
     fig.canvas.header_visible = False  # Hide the figure header
 
     # Plotting on ax0
-    ax0.plot(b.SAMPLE_NUMBER.values.flatten(), 
-                b[psal_var].values.flatten(), 
-                '.', color='tab:blue',lw=0.2, alpha=0.6, 
+    ax0.plot(b.SAMPLE_NUMBER.values.flatten(),
+                b[psal_var].values.flatten(),
+                '.', color='tab:blue',lw=0.2, alpha=0.6,
                 label=f'Bottle file {psal_var}', zorder=2,)
-    ax0.plot(b.SAMPLE_NUMBER.values.flatten(), 
-             b.PSAL_SALINOMETER.values.flatten(), 
-             '.', zorder=2, color='tab:orange', lw=0.2, 
+    ax0.plot(b.SAMPLE_NUMBER.values.flatten(),
+             b.PSAL_SALINOMETER.values.flatten(),
+             '.', zorder=2, color='tab:orange', lw=0.2,
              alpha=0.6, label='Salinometer')
-    
+
     ax0.set_ylabel('Practical salinity')
     ax0.set_xlabel(f'SAMPLE NUMBER')
 
     # Add cursor hover annotations
-    mplcursors.cursor(hover=True).connect("add", 
+    mplcursors.cursor(hover=True).connect("add",
                 lambda sel: sel.annotation.set_text(point_labels[sel.target.index]))
 
     # Plotting on ax1
     #return sample_num_sorted, Sdiff_num_sorted
 
-    ax1.fill_between(sample_num_sorted, Sdiff_num_sorted, zorder=2, 
+    ax1.fill_between(sample_num_sorted, Sdiff_num_sorted, zorder=2,
             color='k', lw=0.2, alpha=0.3, label='Bottle file')
-    ax1.plot(sample_num_sorted, Sdiff_num_sorted, '.', zorder=2, 
+    ax1.plot(sample_num_sorted, Sdiff_num_sorted, '.', zorder=2,
             color='tab:red', lw=0.2, alpha=0.8, label='Salinometer')
-    ax1.axhline(Sdiff_mean, color='tab:blue', lw=1.6, zorder=2, 
+    ax1.axhline(Sdiff_mean, color='tab:blue', lw=1.6, zorder=2,
             label=f'Mean = {Sdiff_mean:.2e}', alpha=0.75, ls=':')
     ax1.set_xlabel(f'SAMPLE NUMBER')
 
     ax1.set_ylabel(f'{psal_var} $-$ salinometer S')
 
     # Plotting on ax2
-    ax2.hist(SAL_diff, 20, orientation="horizontal", alpha=0.7, 
+    ax2.hist(SAL_diff, 20, orientation="horizontal", alpha=0.7,
              color='tab:red')
     ax2.set_ylim(ax1.get_ylim())
     ax2.grid()
@@ -413,7 +413,7 @@ def plot_by_sample(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER',
                  f' dbar (n = {N_count})')
 
     plt.tight_layout()
-    
+
     # Define a function to close the figure and widgets
     def close_everything(_):
         fig = plt.gcf()
@@ -423,14 +423,14 @@ def plot_by_sample(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER',
 
     button_exit = widgets.Button(description=f"Close")
     button_exit.on_click(close_everything)
-    button_exit.layout.width = '200px' 
-    
+    button_exit.layout.width = '200px'
+
     display(button_exit)
 
 
 
 
-def _plot_by_station(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER', 
+def _plot_by_station(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER',
                     sample_number_var = 'SAMPLE_NUMBER', min_pres=500):
     """
 
@@ -488,37 +488,37 @@ def _plot_by_station(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER',
     fig.canvas.header_visible = False  # Hide the figure header
 
     # Plotting on ax0
-    ax0.plot(b.SAMPLE_NUMBER.values.flatten(), 
-                b[psal_var].values.flatten(), 
-                '.', color='tab:blue',lw=0.2, alpha=0.6, 
+    ax0.plot(b.SAMPLE_NUMBER.values.flatten(),
+                b[psal_var].values.flatten(),
+                '.', color='tab:blue',lw=0.2, alpha=0.6,
                 label=f'Bottle file {psal_var}', zorder=2,)
-    ax0.plot(b.SAMPLE_NUMBER.values.flatten(), 
-             b.PSAL_SALINOMETER.values.flatten(), 
-             '.', zorder=2, color='tab:orange', lw=0.2, 
+    ax0.plot(b.SAMPLE_NUMBER.values.flatten(),
+             b.PSAL_SALINOMETER.values.flatten(),
+             '.', zorder=2, color='tab:orange', lw=0.2,
              alpha=0.6, label='Salinometer')
-    
+
     ax0.set_ylabel('Practical salinity')
     ax0.set_xlabel(f'SAMPLE NUMBER')
 
     # Add cursor hover annotations
-    mplcursors.cursor(hover=True).connect("add", 
+    mplcursors.cursor(hover=True).connect("add",
                 lambda sel: sel.annotation.set_text(point_labels[sel.target.index]))
 
     # Plotting on ax1
     #return sample_num_sorted, Sdiff_num_sorted
 
-    ax1.fill_between(b.STATION, SAL_diff, zorder=2, 
+    ax1.fill_between(b.STATION, SAL_diff, zorder=2,
             color='k', lw=0.2, alpha=0.3, label='Bottle file')
-    ax1.plot(b.STATION, SAL_diff, '.', zorder=2, 
+    ax1.plot(b.STATION, SAL_diff, '.', zorder=2,
             color='tab:red', lw=0.2, alpha=0.8, label='Salinometer')
-    ax1.axhline(Sdiff_mean, color='tab:blue', lw=1.6, zorder=2, 
+    ax1.axhline(Sdiff_mean, color='tab:blue', lw=1.6, zorder=2,
             label=f'Mean = {Sdiff_mean:.2e}', alpha=0.75, ls=':')
     ax1.set_xlabel(f'SAMPLE NUMBER')
 
     ax1.set_ylabel(f'{psal_var} $-$ salinometer S')
 
     # Plotting on ax2
-    ax2.hist(SAL_diff, 20, orientation="horizontal", alpha=0.7, 
+    ax2.hist(SAL_diff, 20, orientation="horizontal", alpha=0.7,
              color='tab:red')
     ax2.set_ylim(ax1.get_ylim())
     ax2.grid()
@@ -537,7 +537,7 @@ def _plot_by_station(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER',
                  f' dbar (n = {N_count})')
 
     plt.tight_layout()
-    
+
     # Define a function to close the figure and widgets
     def close_everything(_):
         fig = plt.gcf()
@@ -547,7 +547,7 @@ def _plot_by_station(ds, psal_var='PSAL1', salinometer_var = 'PSAL_SALINOMETER',
 
     button_exit = widgets.Button(description=f"Close")
     button_exit.on_click(close_everything)
-    button_exit.layout.width = '200px' 
-    
+    button_exit.layout.width = '200px'
+
     display(button_exit)
 

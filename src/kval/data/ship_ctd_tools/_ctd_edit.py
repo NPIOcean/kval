@@ -6,14 +6,14 @@ from IPython.display import display, clear_output
 from kval.util import time, internals
 from kval.data import edit, ctd
 from kval.data.ship_ctd_tools import _ctd_tools
-from kval.calc.numbers import order_of_magnitude
+from kval.calc.number import order_of_magnitude
 
 
 ###########################
 
 class hand_remove_points:
     """
-    A class for interactive removal of data points from CTD profiles 
+    A class for interactive removal of data points from CTD profiles
 
     Parameters:
     - d (xarray.Dataset): The dataset containing the CTD data.
@@ -44,22 +44,22 @@ class hand_remove_points:
 
         if varnm not in d.data_vars:
             raise Exception(f'Invalid variable ("{varnm}")')
-        
+
         self.TIME_index = TIME_index
-        
+
         self.varnm = varnm
         self.d = d
-        
 
-        
+
+
         self.var_data = d.isel(TIME=TIME_index)[varnm]
         if 'STATION' in d.keys():
             self.station = d.isel(TIME=TIME_index).STATION.item()
         else:
             self.station = 'N/A'
         self.PRES = d.PRES
-        self.Npres = len(d.PRES) 
-        
+        self.Npres = len(d.PRES)
+
         self.fig, self.ax = plt.subplots()
 
 
@@ -88,24 +88,24 @@ class hand_remove_points:
         self.PRES_points_remove = np.array([])
         self.remove_bool = np.bool_(np.zeros(self.Npres))
         self.TF_indixes_selected = np.bool_(np.zeros(self.Npres))
-        
+
         self.temp_label = 'Points to remove'
         self.remove_label = 'Selected points to remove'
 
         # Add widget buttons
         self.button_apply_var = widgets.Button(description=f"Exit and apply to {varnm}")
         self.button_apply_var.on_click(self.exit_and_apply_var)
-        self.button_apply_var.layout.width = '200px' 
+        self.button_apply_var.layout.width = '200px'
 
         self.button_exit_nochange = widgets.Button(description=f"Discard and exit")
         self.button_exit_nochange.on_click(self.exit_and_discard)
-        self.button_exit_nochange.layout.width = '200px' 
+        self.button_exit_nochange.layout.width = '200px'
 
         self.text_widget1 = widgets.HTML(value=(
             'Drag a rectangle to select points. '))
         self.text_widget2 = widgets.HTML(value=(    '<span style="color: gray;">Click icons on left side of the plot'
             ' to zoom/move/save (click icon again to regain cursor).</span>'))
-        
+
         self.button_remove = widgets.Button(description="Remove selected")
         self.button_remove.on_click(self.remove_selected)
         self.button_remove.style.button_color = '#FFB6C1'  # You can use any valid CSS color
@@ -119,17 +119,17 @@ class hand_remove_points:
         self.button_restart.style.button_color = 'yellow'  # You can use any valid CSS color
 
 
-        self.buttons_container_1 = widgets.HBox([self.button_apply_var, 
+        self.buttons_container_1 = widgets.HBox([self.button_apply_var,
                                                 self.button_exit_nochange])
         self.buttons_container_2 = widgets.HBox([
             self.button_remove, self.button_forget, self.button_restart])
-        self.buttons_container_3 = widgets.HBox([ 
+        self.buttons_container_3 = widgets.HBox([
             widgets.VBox([self.text_widget1, self.text_widget2])])
-        
+
         # Add an Output widget to capture the print statement
         self.output_widget = widgets.Output()
 
-        self.widgets_all = widgets.VBox([self.buttons_container_1,  
+        self.widgets_all = widgets.VBox([self.buttons_container_1,
                                          widgets.Output(), self.buttons_container_2,
                                          self.buttons_container_3,])
 
@@ -137,7 +137,7 @@ class hand_remove_points:
         display(self.widgets_all)
         display(self.output_widget)
 
-    
+
     def onselect(self, eclick, erelease):
         """
         Handle the selection of points in the plot.
@@ -150,9 +150,9 @@ class hand_remove_points:
         rectangle = plt.Rectangle((ext[0], ext[2]), ext[1] - ext[0], ext[3] - ext[2])
         self.contains_TF_ = rectangle.contains_points(np.vstack([self.var_data, self.PRES]).T)
 
-        self.var_points_selected = np.concatenate([self.var_points_selected, 
+        self.var_points_selected = np.concatenate([self.var_points_selected,
                                                 self.var_data[self.contains_TF_]])
-        self.PRES_points_selected = np.concatenate([self.PRES_points_selected, 
+        self.PRES_points_selected = np.concatenate([self.PRES_points_selected,
                                                 self.PRES[self.contains_TF_]])
         self.TF_indixes_selected = np.bool_(self.TF_indixes_selected + self.contains_TF_)
 
@@ -161,8 +161,8 @@ class hand_remove_points:
             plt.draw()
         except:
             pass
-            
-        self.temp_scatter = self.ax.scatter(self.var_points_selected, 
+
+        self.temp_scatter = self.ax.scatter(self.var_points_selected,
                         self.PRES_points_selected, color='b', label=self.temp_label)
         self.ax.legend()
         self.TF_indixes_selected[self.contains_TF_] = True
@@ -179,7 +179,7 @@ class hand_remove_points:
         # (raise a warning otherwise)
 
         internals.check_interactive()
-        
+
         self.var_points_remove = np.concatenate(
             [self.var_points_remove, self.var_points_selected])
         self.PRES_points_remove = np.concatenate(
@@ -190,9 +190,9 @@ class hand_remove_points:
             plt.draw()
         except:
             pass
-        
-        self.remove_scatter = self.ax.scatter(self.var_points_remove, 
-                        self.PRES_points_remove, color='r', 
+
+        self.remove_scatter = self.ax.scatter(self.var_points_remove,
+                        self.PRES_points_remove, color='r',
                         label=self.remove_label, zorder=2)
         plt.draw()
         self.remove_label = None
@@ -200,7 +200,7 @@ class hand_remove_points:
         self.PRES_points_selected = np.array([])
         self.remove_bool[self.TF_indixes_selected] = True
         self.ax.legend()
-    
+
 
     def forget_selection(self, button):
         """
@@ -241,7 +241,7 @@ class hand_remove_points:
         except:
             pass
 
-    
+
     def exit_and_apply_var(self, button):
         """
         Handle the exit and apply action.
@@ -255,9 +255,9 @@ class hand_remove_points:
         # Set remove-flagged indices to NaN
 
         ## HERE: CALL XR FUNCTION AND PRODUCE EXACT RECORD!
-        #self.d[self.varnm].loc[time_loc] = np.where(self.remove_bool, 
+        #self.d[self.varnm].loc[time_loc] = np.where(self.remove_bool,
          #                           np.nan, self.d[self.varnm].loc[time_loc])
-    
+
         self.remove_inds = np.where(self.remove_bool)[0]
         self.d = edit.remove_points_profile(self.d, self.varnm, self.TIME_index, self.remove_inds)
 
@@ -281,16 +281,16 @@ class hand_remove_points:
 
 
         # Add info as a variable attribute
-        if 'manual_editing' in self.d[self.varnm].attrs.keys(): 
+        if 'manual_editing' in self.d[self.varnm].attrs.keys():
             previous_edits = int(self.d[self.varnm].attrs['manual_editing'].split()[0])
             total_edits = previous_edits + self.points_removed
             self.d[self.varnm].attrs['manual_editing'] = (
                f'{total_edits} data points have been removed '
-                'from this variable based on visual inspection.') 
+                'from this variable based on visual inspection.')
         else:
             self.d[self.varnm].attrs['manual_editing'] = (
-               f'{self.points_removed} data points have been ' 
-                'removed from this variable based on visual inspection.') 
+               f'{self.points_removed} data points have been '
+                'removed from this variable based on visual inspection.')
             if self.points_removed==1:
                 self.d[self.varnm].attrs['manual_editing']  = (
                     self.d[self.varnm].attrs['manual_editing'].replace(
@@ -311,7 +311,7 @@ class hand_remove_points:
         - button: The button click event.
         """
         self.close_everything()
-        
+
         with self.output_widget:
             clear_output(wait=True)
            # print(f'APPLIED TO DATASET - Removed {self.points_removed} POINTS')
@@ -333,7 +333,7 @@ class hand_remove_points:
         """
         # Return an empty string or any custom string
         return ''
-            
+
 ################################################################################
 
 
@@ -361,7 +361,7 @@ def apply_offset(D):
         description='Apply offset to:',
         disabled=False
     )
-    
+
     station_buttons = widgets.ToggleButtons(
         options=['All stations', 'Single station →'],
         description='Apply offset to:',
@@ -373,7 +373,7 @@ def apply_offset(D):
 
     value_textbox = widgets.Text(
         placeholder='Enter a numerical value',
-        disabled=False   
+        disabled=False
     )
     value_label = widgets.Label(value='Value of offset:')
     value_widget = widgets.VBox([value_label, value_textbox])
@@ -385,10 +385,10 @@ def apply_offset(D):
         disabled=False,
         style={'description_width': 'initial'}
     )
-    
+
     # Align items to the flex-end to move the dropdown to the bottom of the HBox
     hbox_layout = widgets.Layout(align_items='flex-end')
-    
+
     # Create an HBox with station_buttons and station_dropdown
     hbox_station = widgets.HBox([station_buttons, station_dropdown], layout=hbox_layout)
 
@@ -405,7 +405,7 @@ def apply_offset(D):
         disabled=False,
         button_style='danger'
     )
-    
+
     output_widget = widgets.Output()
 
     # Function to update the description of value_textbox
@@ -431,7 +431,7 @@ def apply_offset(D):
                     station_string = 'all stations'
                     D_offset = ctd.offset(D.copy(), varnm_sel, offset_value)
                     D[varnm_sel] = D_offset[varnm_sel]
-                    D['PROCESSING'] = D_offset['PROCESSING'] 
+                    D['PROCESSING'] = D_offset['PROCESSING']
 
 
                 offset_metadata = f"Applied offset of {offset_value} [{units}] ({station_string})"
@@ -439,11 +439,11 @@ def apply_offset(D):
                     D[varnm_sel].attrs['applied_offset'] += f'\n{offset_metadata}'
                 else:
                     D[varnm_sel].attrs['applied_offset'] = offset_metadata
- 
+
                 var_buttons.close()
                 hbox_station.close()
                 hbox_enter_value.close()
-                
+
                 with output_widget:
                     clear_output(wait=True)
                     print(f'-> {varnm_sel}: {offset_metadata}')
@@ -452,7 +452,7 @@ def apply_offset(D):
                 var_buttons.close()
                 hbox_station.close()
                 hbox_enter_value.close()
-                
+
                 with output_widget:
                     clear_output(wait=True)
                     print('No offset value was entered -> Exited without changing anything.')
@@ -576,19 +576,19 @@ class drop_stations_pick:
     def on_remove_button_click(self, change, D):
         if change['new']:
             stations_removed = []
-            
+
             for time_point in self.selected_time_points:
                 for variable in D.variables:
                     if 'TIME' in D[variable].dims:
                         stations_removed.append(f"{variable}_"
                                 f"{str(self.D.STATION.sel(TIME=self.D['TIME'] == time_point).values[0])}")
-            
+
             # Perform the removal after collecting all items to remove
             for time_point in self.selected_time_points:
                 for variable in D.variables:
                     if 'TIME' in D[variable].dims:
                         index_to_remove = np.where(D['TIME'].values == time_point)[0]
-                        
+
                         # Remove the corresponding values from the variable
                         del D[variable][index_to_remove]
 
@@ -686,7 +686,7 @@ class drop_vars_pick:
          # Function to handle checkbox changes
         def handle_checkbox_change(change):
             self.selected_options = [label for checkbox, label in zip(self.checkbox_widgets, self.checkbox_labels) if checkbox.value]
-        
+
         # Attach the handle_checkbox_change function to the observe method of each checkbox
         for checkbox in self.checkbox_widgets:
             checkbox.observe(handle_checkbox_change, names='value')
@@ -696,11 +696,11 @@ class drop_vars_pick:
         display(self.checkbox_columns)
         display(self.hbox_buttons)
         display(self.output_widget)
-    
+
     def on_remove_button_click(self, change, D):
         if change['new']:
-            
-            # Clunky: Want to preserve the metadata from ctd.drop_variables, 
+
+            # Clunky: Want to preserve the metadata from ctd.drop_variables,
             # but the straight forward approach doesnt actually reduce the variables.
             D_dropped = ctd.drop_variables(self.D, drop_vars = self.selected_options)
             self.D['PROCESSING'] = D_dropped.PROCESSING
@@ -733,17 +733,17 @@ def threshold_edit(d):
     """
     Interactive tool for threshold editing of a variable in a dataset.
 
-    Parameters: 
-    - d (xarray.Dataset): The input dataset containing the variable to be 
+    Parameters:
+    - d (xarray.Dataset): The input dataset containing the variable to be
                           threshold-edited.
 
-    Usage: 
+    Usage:
     Call this function with the dataset as an argument to interactively
     set threshold values and visualize the impact on the data.
 
     Returns: None
     """
-    
+
 
     # Check that we in a notebook and with the ipympl backend..
     # (raise a warning otherwise)
@@ -754,19 +754,19 @@ def threshold_edit(d):
         Helper function to calculate slider parameters based on the variable's
         data range.
 
-        A little clunky as we have to deal with floating point errors to get 
+        A little clunky as we have to deal with floating point errors to get
         nice output.
 
-        Also used to get order of magnitude, so we output the order of 
-        magnitude of the step. 
+        Also used to get order of magnitude, so we output the order of
+        magnitude of the step.
 
         Parameters:
         - d (xarray.Dataset): The input dataset.
-        - variable (str): The variable for which slider parameters are 
+        - variable (str): The variable for which slider parameters are
                           calculated.
 
         Returns:
-        Tuple (float, float, float, int): Lower floor, upper ceil, step, 
+        Tuple (float, float, float, int): Lower floor, upper ceil, step,
                                           order of magnitude step.
         """
         upper = float(d[variable].max())
@@ -776,12 +776,12 @@ def threshold_edit(d):
         oom_range = order_of_magnitude(range)
         oom_step = oom_range-2
         step = 10**oom_step
-        
+
         lower_floor = np.round(np.floor(lower*10**(-oom_step))
                                *10**(oom_step), -oom_step)
         upper_ceil = np.round(np.ceil(upper*10**(-oom_step))
                               *10**(oom_step), -oom_step)
-        
+
         return lower_floor, upper_ceil, step, oom_step
 
 
@@ -818,15 +818,15 @@ def threshold_edit(d):
         ax0 = plt.subplot2grid((1, 1), (0, 0))
         fig.canvas.header_visible = False  # Hide the figure header
 
-        var_range = (np.nanmin(d[variable].values), 
+        var_range = (np.nanmin(d[variable].values),
                      np.nanmax(d[variable].values))
         var_span = var_range[1] - var_range[0]
 
-        hist_all = ax0.hist(d[variable].values.flatten(), bins=100, 
+        hist_all = ax0.hist(d[variable].values.flatten(), bins=100,
                             range= var_range, color='tab:orange',
                             alpha=0.7, label='Distribution outside range')
 
-        condition = ((d[variable] >= min_value) 
+        condition = ((d[variable] >= min_value)
                     & (d[variable] <= max_value))
         d_reduced = d.copy()
         d_reduced[variable] = d_reduced[variable].where(condition)
@@ -835,7 +835,7 @@ def threshold_edit(d):
         count_valid_d = int(d[variable].count())
         count_valid_d_reduced = int(d_reduced[variable].count())
 
-        # Calculate the number of points that would be dropped by the 
+        # Calculate the number of points that would be dropped by the
         # threshold cut
         points_cut = count_valid_d - count_valid_d_reduced
         points_pct = points_cut / count_valid_d * 100
@@ -849,7 +849,7 @@ def threshold_edit(d):
 
         ax0.set_xlabel(f'[{d[variable].units}]')
         ax0.set_ylabel('Frequency')
-        var_span = (np.nanmax(d[variable].values) 
+        var_span = (np.nanmax(d[variable].values)
                     - np.nanmin(d[variable].values))
         ax0.set_xlim(np.nanmin(d[variable].values) - var_span * 0.05,
                       np.nanmax(d[variable].values) + var_span * 0.05)
@@ -871,7 +871,7 @@ def threshold_edit(d):
 
     def apply_cut(_):
         """
-        Apply the threshold cut to the selected variable. Makes suitable 
+        Apply the threshold cut to the selected variable. Makes suitable
         changes to the metadata (variable attributes)
 
         Parameters:
@@ -890,17 +890,17 @@ def threshold_edit(d):
         lower_floor, upper_ceil, step, oom_step = get_slider_params(d, variable)
 
         min_value = np.round(np.floor(min_slider.value*10**(-oom_step))
-                                     *10**(oom_step), -oom_step)  
+                                     *10**(oom_step), -oom_step)
         max_value = np.round(np.floor(max_slider.value*10**(-oom_step))
-                                     *10**(oom_step), -oom_step)  
-        
+                                     *10**(oom_step), -oom_step)
+
         var_max = float(d[variable].max())
         var_min = float(d[variable].min())
         unit = d[variable].units
-        
+
         if unit == '1':
             unit=''
-    
+
         if min_value<=var_min and max_value>=var_max:
             threshold = None
         elif min_value<=var_min and max_value<var_max:
@@ -921,27 +921,27 @@ def threshold_edit(d):
         if threshold:
             # Count non-nan values in the dataset
             count_valid_before = int(d[variable].count())
-    
-            d_thr = ctd.threshold(ds=d, variable = variable, 
+
+            d_thr = ctd.threshold(ds=d, variable = variable,
                         max_val = max_value, min_val = min_value)
             d[variable] = d_thr[variable]
-            d['PROCESSING'] = d_thr['PROCESSING'] 
+            d['PROCESSING'] = d_thr['PROCESSING']
 
             # Count non-nan values in the dataset
             count_valid_after = int(d[variable].count())
-    
-            # Calculate the number of points that would be dropped by the 
+
+            # Calculate the number of points that would be dropped by the
             # threshold cut
             points_cut = count_valid_before - count_valid_after
             points_pct = points_cut / count_valid_before * 100
 
-            
+
             # Update plots
             update_plots(min_value, max_value, variable)
 
-    
+
     # Create a button to minimize the plot
-    close_button = widgets.Button(description="Exit", 
+    close_button = widgets.Button(description="Exit",
                                   style={'button_color': '#FF9999'})
 
     def close_plot(_):
@@ -959,9 +959,9 @@ def threshold_edit(d):
 
 
     # Determine the range of values in the dataset
-    value_range = (d[variable_dropdown.value].max() 
+    value_range = (d[variable_dropdown.value].max()
                    - d[variable_dropdown.value].min())
-    
+
     # Calculate a suitable step size that includes whole numbers
     step_size = max(1, np.round(value_range / 100, 2))  # Adjust 100 as needed
 
@@ -989,7 +989,7 @@ def threshold_edit(d):
         style={'description_width': 'initial'},
         layout={'width': '680px'}
     )
-        
+
     # Numeric input boxes for min and max values
     min_value_text = widgets.FloatText(
         value=d[variable_dropdown.value].min(),
@@ -997,7 +997,7 @@ def threshold_edit(d):
         style={'description_width': 'initial'},
         layout={'width': '200px'}
     )
-    
+
     max_value_text = widgets.FloatText(
         value=d[variable_dropdown.value].max(),
         description='Max Value:',
@@ -1014,7 +1014,7 @@ def threshold_edit(d):
     apply_button.on_click(apply_cut)
 
     # Text widget to display the cut information
-    cut_info_text = widgets.Text(value='', description='', disabled=True, 
+    cut_info_text = widgets.Text(value='', description='', disabled=True,
                         layout={'width': '600px'}, style={'color': 'black'})
 
     # Function to update the cut information text
@@ -1022,27 +1022,27 @@ def threshold_edit(d):
         text = (f'This cut would reduce {variable} by {points_cut} data points'
                 f' ({points_pct:.1f}%).')
         cut_info_text.value = text
-        
+
     def update_apply_button_label(change):
         apply_button.description = f"Apply cut to {change.new}"
-    
+
     # Observer for min value text box
     def update_min_slider(change):
         min_slider.value = min_value_text.value
-    
+
     # Observer for max value text box
     def update_max_slider(change):
         max_slider.value = max_value_text.value
-    
+
     # Observer for min slider
     def update_min_value(change):
         min_value_text.value = min_slider.value
-    
+
     # Observer for max slider
     def update_max_value(change):
         max_value_text.value = max_slider.value
 
-    
+
     # Observer for variable dropdown
     def update_sliders(change):
         variable = change.new
@@ -1064,7 +1064,7 @@ def threshold_edit(d):
         except:
             min_slider.max = slider_max
             min_slider.min = slider_min
-            
+
         min_slider.description = (
             f'Lower cutoff value (units: {d[variable_dropdown.value].units}):')
         max_slider.description = (
@@ -1072,8 +1072,8 @@ def threshold_edit(d):
 
         min_slider.value = min_slider.min
         max_slider.value = max_slider.max
-        min_slider.step = slider_step 
-        max_slider.step = slider_step 
+        min_slider.step = slider_step
+        max_slider.step = slider_step
 
         # Rebuild the sliders every time the variable changes
         display(widgets_collected)
@@ -1081,7 +1081,7 @@ def threshold_edit(d):
 
     variable_dropdown.observe(update_sliders, names='value')
     variable_dropdown.observe(update_apply_button_label, names='value')
-    
+
     # Observer for sliders
     def update_plot_sliders(change):
         if change is not None:  # Check if change is None to prevent closing the figure on reset
@@ -1101,10 +1101,10 @@ def threshold_edit(d):
     reset_button = widgets.Button(description="Reset Sliders")
     reset_button.on_click(reset_sliders)
 
-    # Use interactive to update plots based on variable, 
+    # Use interactive to update plots based on variable,
     # xvar, and max depth selection
     out = widgets.interactive_output(update_plots,
-                {'min_value': min_slider, 'max_value': max_slider, 
+                {'min_value': min_slider, 'max_value': max_slider,
                  'variable': variable_dropdown})
 
 
@@ -1115,7 +1115,7 @@ def threshold_edit(d):
         widgets.HBox([max_slider, max_value_text]),
         cut_info_text, widgets.HBox([out, ])
     ])
-    
+
 
     # Display the initial state of the title text
     display(widgets_collected)

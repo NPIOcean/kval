@@ -1,180 +1,147 @@
-'''
-Functions for visualizing ctd data.
+"""
+Functions for visualizing CTD data.
 
-These are meant to be run in a Jupyter Lab notebook using the 
-%matplotlib widget backend.
-
-These functions are rather complex and clunky because they are tuned for the visual 
-input and menu functionality we want for the specific application. I am not too worried
-about that.
-'''
+These functions are designed to be run in a Jupyter Lab notebook using
+the %matplotlib widget backend. They provide interactive controls for
+exploring CTD data profiles and comparing sensor pairs.
+"""
 
 import matplotlib.pyplot as plt
 import ipywidgets as widgets
 from IPython.display import display
 import cartopy.crs as ccrs
 from kval.util import time
-from kval.data.ship_ctd_tools import _ctd_tools 
+from kval.data.ship_ctd_tools import _ctd_tools
 from kval.maps import quickmap
 from matplotlib.ticker import MaxNLocator
+from matplotlib.colors import Colormap
 import cmocean
 import numpy as np
+from kval.util import internals
 
-def inspect_profiles(d):
-
+def inspect_profiles(ds: 'xr.Dataset') -> None:
     """
     Interactively inspect profiles in an xarray dataset.
 
     Parameters:
-    - d (xr.Dataset): The xarray dataset containing variables 'PRES', 'STATION', and other profile variables.
-
-    This function creates an interactive plot allowing the user to explore profiles within the given xarray dataset.
-    It displays a slider to choose a profile by its index, a dropdown menu to select a variable for visualization, and
-    another dropdown to pick a specific station. The selected profile is highlighted in color, while others are shown
-    in the background.
-
-    Parameters:
-    - d (xr.Dataset): The xarray dataset containing variables 'PRES', 'STATION', and other profile variables.
+    - ds: xr.Dataset
+        The xarray dataset containing variables 'PRES', 'STATION', and
+        other profile variables.
 
     Examples:
     ```python
     inspect_profiles(my_dataset)
     ```
 
-    Note: This function utilizes Matplotlib for plotting and ipywidgets for interactive controls.
+    Note: This function utilizes Matplotlib for plotting and ipywidgets for
+    interactive controls.
     """
+    internals.check_interactive()
 
+    # Determine the vertical axis variable
+    y_varnm = 'PRES' if 'PRES' in ds.dims else 'NISKIN_NUMBER'
 
-    # Assign the profile variable to PRES (profile files) or 
-    # NISKIN_NUMBER (btl or water sample files)
-    if 'PRES' in d.dims:
-        y_varnm = 'PRES'
-    elif 'NISKIN_NUMBER' in d.dims:
-        y_varnm = 'NISKIN_NUMBER'
+    y_label = f'{y_varnm} [{ds[y_varnm].units}]' if 'units' in ds[y_varnm].attrs \
+              else f'{y_varnm}'
 
-    if 'units' in d[y_varnm].attrs:
-        y_label = f'{y_varnm} [{d[y_varnm].units}]'
-    else:
-        y_label = f'{y_varnm}'
+    def plot_profile(TIME_index: int, variable: str, y_varnm: str, y_label: str) -> None:
+        """
+        Plot a single profile with the option to view others in the background.
 
-
-    # Function to create a profile plot
-    def plot_profile(TIME_index, variable, y_varnm, y_label):
-
-        # Close previous figure if there is one..
+        Parameters:
+        - TIME_index: int
+            Index of the selected profile.
+        - variable: str
+            Name of the variable to plot.
+        - y_varnm: str
+            Vertical axis variable name.
+        - y_label: str
+            Label for the vertical axis.
+        """
         try:
             previous_fig = plt.gcf()
             plt.close(previous_fig)
-        except:
+        except Exception:
             pass
 
         fig, ax = plt.subplots()
 
         # Plot all profiles in black in the background
-        for nn in np.arange(d.sizes['TIME']):
+        for nn in np.arange(ds.sizes['TIME']):
             if nn != TIME_index:  # Skip the selected profile
-                profile =  d[variable].isel(TIME=nn, drop=True).squeeze()
-                ax.plot(profile, d[y_varnm], color='tab:blue', lw=0.5, alpha=0.4)
+                profile = ds[variable].isel(TIME=nn, drop=True).squeeze()
+                ax.plot(profile, ds[y_varnm], color='tab:blue', lw=0.5, alpha=0.4)
 
-        # Choose a marker size depending on the number of points in a profile
-        # (Want larger circles if we have many points, e.g. for bottle data)
-        Nz = len(d[y_varnm])
-        if Nz>100: 
-            ms = 2
-        else:
-            ms = 2 + (100-Nz)*0.05 
+        # Choose marker size based on the number of points
+        Nz = len(ds[y_varnm])
+        ms = 2 if Nz > 100 else 2 + (100 - Nz) * 0.05
 
-        # Plot the selected profile in color
-        profile = d[variable].isel(TIME=TIME_index)
+        # Plot the selected profile
+        profile = ds[variable].isel(TIME=TIME_index)
+        ax.plot(profile, ds[y_varnm], alpha=0.8, lw=0.7, color='k')
+        ax.plot(profile, ds[y_varnm], '.', ms=ms, alpha=1, color='tab:orange')
 
-        ax.plot(profile, d[y_varnm], alpha=0.8, lw=0.7, color='k')
-        ax.plot(profile, d[y_varnm], '.', ms=ms, alpha=1, color='tab:orange')
+        time_string = time.convert_timenum_to_datetime(profile.TIME, ds.TIME.units)
+        station = ds["STATION"].values[TIME_index] if 'STATION' in ds else 'N/A'
 
-        time_string = time.convert_timenum_to_datetime(
-            profile.TIME, d.TIME.units)
-        if 'STATION' in d:
-            station = d["STATION"].values[TIME_index]
-        else:
-            station = 'N/A'
-
-        ax.set_title(
-            f'Station: {d["STATION"].values[TIME_index]}, {time_string}')
-        if 'units' in d[variable].attrs:
-            var_unit_ = d[variable].units
-        else:
-            var_unit_ = 'no unit specified'
-
-        ax.set_xlabel(f'{variable} [{var_unit_}]')
+        ax.set_title(f'Station: {station}, {time_string}')
+        var_unit = ds[variable].units if 'units' in ds[variable].attrs else 'no unit specified'
+        ax.set_xlabel(f'{variable} [{var_unit}]')
         ax.set_ylabel(y_label)
         ax.invert_yaxis()
         ax.grid()
         fig.canvas.header_visible = False  # Hide the figure header
         plt.tight_layout()
-
         plt.show()
 
-    # Get the descriptions for the slider
-    time_values = [nn for nn in np.arange(d.sizes['TIME'])]
-    if 'STATION' in d:
-        time_descriptions = [
-            f'{nn} ({station})' for nn, station in 
-            enumerate(d['STATION'].values)]
-    else:
-        time_descriptions = time_values
+    # Create interactive widgets
+    time_values = list(range(ds.sizes['TIME']))
+    time_descriptions = [f'{nn} ({ds["STATION"].values[nn]})' for nn in time_values] \
+                        if 'STATION' in ds else time_values
 
-    # Create the slider for selecting a station
     time_index_slider = widgets.IntSlider(
-        min=0, max=len(d['TIME']) - 1, step=1, value=0, description='Profile #:',
-        continuous_update=False,
+        min=0, max=len(ds['TIME']) - 1, step=1, value=0,
+        description='Profile #:', continuous_update=False,
         style={'description_width': 'initial'},
-        layout=widgets.Layout(width='500px')  # Set the width of the slider
+        layout=widgets.Layout(width='500px')
     )
 
-    profile_vars = _ctd_tools._get_profile_variables(
-                        d, profile_var = y_varnm)
+    profile_vars = _ctd_tools._get_profile_variables(ds, profile_var=y_varnm)
 
-    # Create the dropdown for selecting a variable
     variable_dropdown = widgets.Dropdown(
         options=profile_vars,
         value=profile_vars[0],
         description='Variable:'
     )
 
-    # Create the dropdown for selecting a station
-    time_option_tuples = [(desc, val) for desc, val 
-                 in zip(time_descriptions, time_values)]
+    time_option_tuples = [(desc, val) for desc, val in zip(time_descriptions, time_values)]
     time_ind_dropdown = widgets.Dropdown(
         options=time_option_tuples,
         value=time_values[0],
         description='TIME index:'
     )
 
-    # Update slider value when dropdown changes
-    def update_slider_from_dropdown(change):
+    def update_slider_from_dropdown(change: widgets.Dropdown) -> None:
         time_index_slider.value = time_values.index(change.new)
 
-    # Update dropdown value when slider changes
-    def update_dropdown_from_slider(change):
+    def update_dropdown_from_slider(change: widgets.IntSlider) -> None:
         time_ind_dropdown.value = time_values[change.new]
 
-    # Link slider and dropdown
     time_ind_dropdown.observe(update_slider_from_dropdown, names='value')
     time_index_slider.observe(update_dropdown_from_slider, names='value')
 
-    # Use interactive_output to create interactive controls
     output = widgets.interactive_output(
-        plot_profile, {'TIME_index': time_index_slider, 
-                       'variable': variable_dropdown,
-                       'y_varnm': widgets.fixed(y_varnm), 
-                       'y_label':widgets.fixed(y_label)},
+        plot_profile, {
+            'TIME_index': time_index_slider,
+            'variable': variable_dropdown,
+            'y_varnm': widgets.fixed(y_varnm),
+            'y_label': widgets.fixed(y_label)
+        }
     )
 
-
-    # Create a button to close the plot
     close_button = widgets.Button(description="Close")
 
-    def close_plot(_):
-        # Resize the figure to 0 and close it
+    def close_plot(_) -> None:
         fig = plt.gcf()
         fig.set_size_inches(0, 0)
         widgets_collected.close()
@@ -182,66 +149,65 @@ def inspect_profiles(d):
 
     close_button.on_click(close_plot)
 
-    # Display the widgets in a vertically stacked layout
     widgets_collected = widgets.VBox([
         widgets.HBox([time_index_slider, close_button]),
         widgets.HBox([variable_dropdown, time_ind_dropdown]),
-        output])
+        output
+    ])
     display(widgets_collected)
 
 
 
-def inspect_dual_sensors(D):
+def inspect_dual_sensors(ds: 'xr.Dataset') -> None:
     """
-    Function to interactively inspect profiles of sensor pairs (e.g., PSAL1 and PSAL2).
+    Interactively inspect profiles of sensor pairs (e.g., PSAL1 and PSAL2).
 
     Parameters:
-    - D: xarray.Dataset, the dataset containing the variables.
-
-    Usage:
-    - Call inspect_dual_sensors(D) to interactively inspect profiles.
+    - ds: xr.Dataset
+        The dataset containing the variables.
     """
+    internals.check_interactive()
 
-    def plot_dual_sensor(station_index, variable_pair):
+    def plot_dual_sensor(station_index: int, variable_pair: tuple) -> None:
         """
         Plot profiles of the selected variable pair for a given station.
 
         Parameters:
-        - station_index: int, index of the selected station.
-        - variable_pair: tuple, pair of variables to be plotted.
+        - station_index: int
+            Index of the selected station.
+        - variable_pair: tuple
+            Pair of variables to be plotted.
         """
         variable1, variable2 = variable_pair
 
         fig, ax = plt.subplots(1, 2, sharey=True, figsize=(10, 5))
 
-        profile_1 = D[variable1].isel(TIME=station_index)
-        profile_2 = D[variable2].isel(TIME=station_index)
+        profile_1 = ds[variable1].isel(TIME=station_index)
+        profile_2 = ds[variable2].isel(TIME=station_index)
 
-        ax[0].plot(profile_1, D['PRES'], alpha=0.8, lw=1, color='tab:orange', label=variable1)
-        ax[0].plot(profile_2, D['PRES'], alpha=0.8, lw=1, color='tab:blue', label=variable2)
-        ax[0].fill_betweenx(D['PRES'], profile_1, profile_2, alpha=0.2, color='k')
+        ax[0].plot(profile_1, ds['PRES'], alpha=0.8, lw=1, color='tab:orange',
+                   label=variable1)
+        ax[0].plot(profile_2, ds['PRES'], alpha=0.8, lw=1, color='tab:blue',
+                   label=variable2)
+        ax[0].fill_betweenx(ds['PRES'], profile_1, profile_2, alpha=0.2, color='k')
 
-        ax[1].plot(profile_2 - profile_1, D['PRES'], alpha=0.8, lw=1, color='tab:red',
+        diff_profile = profile_2 - profile_1
+        ax[1].plot(diff_profile, ds['PRES'], alpha=0.8, lw=1, color='tab:red',
                    label=f'{variable2} - {variable1}')
-        ax[1].fill_betweenx(D['PRES'], profile_2 - profile_1, alpha=0.2, color='tab:red',)
+        ax[1].fill_betweenx(ds['PRES'], diff_profile, alpha=0.2, color='tab:red')
 
-        difference_mean = np.round((profile_2 - profile_1).mean(), 6)
-        ax[1].axvline(difference_mean, color='k', ls=':', alpha=0.5, label=f'Mean: {difference_mean.values}')
+        difference_mean = np.round(diff_profile.mean(), 6)
+        ax[1].axvline(difference_mean, color='k', ls=':', alpha=0.5,
+                      label=f'Mean: {difference_mean.values}')
 
-        station_time_string = time.convert_timenum_to_datetime(profile_1.TIME, D.TIME.units)
-        fig.suptitle(f'Station: {D["STATION"].values[station_index]}, {station_time_string}')
+        station_time_string = time.convert_timenum_to_datetime(profile_1.TIME, ds.TIME.units)
+        fig.suptitle(f'Station: {ds["STATION"].values[station_index]}, {station_time_string}')
 
-
-        if 'units' in D[variable1].attrs:
-            var_unit_1_ = D[variable1].units
-        else:
-            var_unit_1_ = 'no unit specified'
-
-        ax[0].set_xlabel(f'{var_unit_1_}')
-        ax[1].set_xlabel(f'{var_unit_1_}')
+        var_unit = ds[variable1].units if 'units' in ds[variable1].attrs else 'no unit specified'
+        ax[0].set_xlabel(f'{var_unit}')
+        ax[1].set_xlabel(f'{var_unit}')
         ax[0].set_title('Dual sensor profiles')
         ax[1].set_title('Dual sensor difference')
-        
         ax[0].set_ylabel('PRES')
         ax[0].invert_yaxis()
         ax[0].grid()
@@ -253,95 +219,81 @@ def inspect_dual_sensors(D):
         ax[1].legend(fontsize=8)
         plt.show()
 
-    def _find_variable_pairs(D):
+    def _find_variable_pairs(ds: 'xr.Dataset') -> list:
         """
         Find pairs of variables with the same name but different numbers.
 
         Parameters:
-        - D: xarray.Dataset, the dataset containing the variables.
+        - ds: xr.Dataset
+            The dataset containing the variables.
 
         Returns:
-        - variable_pairs: list of tuples, pairs of variables.
+        - list of tuples
+            Pairs of variables.
         """
         variable_pairs = []
-        data_vars = list(D.data_vars.keys())
+        data_vars = list(ds.data_vars.keys())
 
         for i in range(len(data_vars)):
             current_var = data_vars[i]
-
             for j in range(i + 1, len(data_vars)):
                 next_var = data_vars[j]
-
-                # Extract the variable name and number from the variables
-                current_name, current_num = ''.join(filter(str.isalpha, current_var)), ''.join(
-                    filter(str.isdigit, current_var))
-                next_name, next_num = ''.join(filter(str.isalpha, next_var)), ''.join(filter(str.isdigit, next_var))
-
-                # Check if the variable names match and have different numbers
+                current_name, current_num = ''.join(filter(str.isalpha, current_var)), \
+                                            ''.join(filter(str.isdigit, current_var))
+                next_name, next_num = ''.join(filter(str.isalpha, next_var)), \
+                                       ''.join(filter(str.isdigit, next_var))
                 if current_name == next_name and current_num != next_num:
                     variable_pairs.append((current_var, next_var))
         return variable_pairs
 
-    # Get the descriptions for the slider
-    station_descriptions = [str(station) for station in D['STATION'].values]
-
-    # Create the slider for selecting a station
+    # Create interactive widgets
+    station_descriptions = [str(station) for station in ds['STATION'].values]
     station_index_slider = widgets.IntSlider(
-        min=0, max=len(D['STATION']) - 1, step=1, value=0, description='Profile #:',
-        continuous_update=False,
+        min=0, max=len(ds['STATION']) - 1, step=1, value=0,
+        description='Profile #:', continuous_update=False,
         style={'description_width': 'initial'},
-        layout=widgets.Layout(width='500px')  # Set the width of the slider
+        layout=widgets.Layout(width='500px')
     )
 
-    variable_pairs = _find_variable_pairs(D)
-
-    if variable_pairs==[]:
-        print('Cannot inspect dual sensors bacause we no dual sensors were found in the dataset..')
+    variable_pairs = _find_variable_pairs(ds)
+    if not variable_pairs:
+        print('No dual sensors found in the dataset.')
         return
-    
-    variable_pairs_labels = [f'{var_pair[0]} and {var_pair[1]}' for var_pair in variable_pairs]
-    variable_pairs_dict = {vlab: vpair for vlab, vpair in zip(variable_pairs_labels, variable_pairs)}
 
-    # Create the dropdown for selecting a variable
+    variable_pairs_labels = [f'{var_pair[0]} and {var_pair[1]}' for var_pair in variable_pairs]
+    variable_pairs_dict = {label: pair for label, pair in zip(variable_pairs_labels, variable_pairs)}
+
     variable_dropdown = widgets.Dropdown(
         options=variable_pairs_dict,
         value=variable_pairs[0],
         description='Variable'
     )
 
-    # Create the dropdown for selecting a station
     station_dropdown = widgets.Dropdown(
         options=station_descriptions,
         value=station_descriptions[0],
         description='Station:'
     )
 
-    # Update slider value when dropdown changes
-    def update_slider_from_dropdown(change):
-        station_index = station_descriptions.index(change.new)
-        station_index_slider.value = station_index
+    def update_slider_from_dropdown(change: widgets.Dropdown) -> None:
+        station_index_slider.value = station_descriptions.index(change.new)
 
-    # Update dropdown value when slider changes
-    def update_dropdown_from_slider(change):
-        station_description = str(D['STATION'].values[change.new])
-        station_dropdown.value = station_description
+    def update_dropdown_from_slider(change: widgets.IntSlider) -> None:
+        station_dropdown.value = station_descriptions[change.new]
 
-
-    # Link slider and dropdown
     station_dropdown.observe(update_slider_from_dropdown, names='value')
     station_index_slider.observe(update_dropdown_from_slider, names='value')
 
-    # Use interactive_output to create interactive controls
     output = widgets.interactive_output(
-        plot_dual_sensor, {'station_index': station_index_slider,
-                           'variable_pair': variable_dropdown, }
+        plot_dual_sensor, {
+            'station_index': station_index_slider,
+            'variable_pair': variable_dropdown
+        }
     )
 
-    # Create a button to close the plot
     close_button = widgets.Button(description="Close")
 
-    def close_plot(_):
-        # Resize the figure to 0 and close it
+    def close_plot(_) -> None:
         fig = plt.gcf()
         fig.set_size_inches(0, 0)
         widgets_collected.close()
@@ -349,153 +301,109 @@ def inspect_dual_sensors(D):
 
     close_button.on_click(close_plot)
 
-    # Display the widgets in a vertically stacked layout
     widgets_collected = widgets.VBox([
         widgets.HBox([station_index_slider, close_button]),
         widgets.HBox([variable_dropdown, station_dropdown]),
-        output])
+        output
+    ])
     display(widgets_collected)
 
+def map(
+    ds: 'xr.Dataset',
+    height: int = 1000,
+    width: int = 1000,
+    return_fig_ax: bool = False,
+    coast_resolution: str = '50m',
+    figsize: tuple[int, int] = None,
+    station_labels: bool | str = False,
+    station_label_alpha: float = 0.5
+) -> tuple[plt.Figure, plt.Axes] | None:
+    internals.check_interactive()
 
+    lat_span = float(ds.LATITUDE.max() - ds.LATITUDE.min())
+    lon_span = float(ds.LONGITUDE.max() - ds.LONGITUDE.min())
+    lat_ctr = float(0.5 * (ds.LATITUDE.max() + ds.LATITUDE.min()))
+    lon_ctr = float(0.5 * (ds.LONGITUDE.max() + ds.LONGITUDE.min()))
 
-
-def map(D, 
-        height=1000, 
-        width=1000, 
-        return_fig_ax=False, 
-        coast_resolution='50m', 
-        figsize=None,
-        station_labels = False, 
-        station_label_alpha = 0.5):
-    '''
-    Generate a quick map of a cruise using xarray Dataset coordinates.
-
-    Parameters:
-    - D (xarray.Dataset): The dataset containing latitude and longitude coordinates.
-    - height (int, optional): Height of the map figure. Default is 1000.
-    - width (int, optional): Width of the map figure. Default is 1000.
-    - return_fig_ax (bool, optional): If True, return the Matplotlib figure and axis objects.
-      Default is False.
-    - coast_resolution (str, optional): Resolution of the coastline data ('50m', '110m', '10m').
-      Default is '50m'.
-    - figsize (tuple, optional): Size of the figure. If None, the default size is used.
-
-    Displays a quick map using the provided xarray Dataset with latitude and longitude information.
-    The map includes a plot of the cruise track and red dots at data points.
-
-    Additionally, the function provides buttons for interaction:
-    - "Close" minimizes and closes the plot.
-    - "Original Size" restores the plot to its original size.
-    - "Larger" increases the plot size.
-
-    Examples:
-    ```python
-    map(my_dataset)
-    ```
-    or
-    ```python
-    fig, ax = map(my_dataset, return_fig_ax=True)
-    ```
-
-    Note: This function utilizes the `quickmap` module for generating a stereographic map.
-    '''
-    # These two are currently not used, but would maybe be useful for
-    # auto-scaling of the map..
-    lat_span = float(D.LATITUDE.max() - D.LATITUDE.min())
-    lon_span = float(D.LONGITUDE.max() - D.LONGITUDE.min())
-
-    lat_ctr = float(0.5 * (D.LATITUDE.max() + D.LATITUDE.min()))
-    lon_ctr = float(0.5 * (D.LONGITUDE.max() + D.LONGITUDE.min()))
-
-    fig, ax = quickmap.quick_map_stere(lon_ctr, lat_ctr, height=height,
-                                       width=width,
-                                       coast_resolution=coast_resolution,)
+    fig, ax = quickmap.quick_map_stere(
+        lon_ctr, lat_ctr, height=height, width=width, coast_resolution=coast_resolution
+    )
 
     fig.canvas.header_visible = False  # Hide the figure header
-    
-    ax.plot(D.LONGITUDE, D.LATITUDE, '-k', transform=ccrs.PlateCarree(), alpha=0.5)
-    ax.plot(D.LONGITUDE, D.LATITUDE, 'or', transform=ccrs.PlateCarree())
 
-#    labels = [f'{sta}' for sta in D.STATION.values]
+    ax.plot(ds.LONGITUDE, ds.LATITUDE, '-k', transform=ccrs.PlateCarree(), alpha=0.5)
+    ax.plot(ds.LONGITUDE, ds.LATITUDE, 'or', transform=ccrs.PlateCarree())
 
-    # Add labels next to each point
+    # Add labels next to each point if required
     if station_labels:
-        if station_labels=='left' or station_labels == True:
-            xytext, ha, va = (-5,0), 'right', 'center'
-        elif station_labels=='right':
-            xytext, ha, va = (5,0), 'left', 'center'
-        elif station_labels=='above':
-            xytext, ha, va = (0,5), 'center', 'bottom'
-        elif station_labels=='below':
-            xytext, ha, va = (0,-5), 'center', 'top'
+        xytext, ha, va = (0, 0), 'center', 'center'
+        if station_labels == 'left' or station_labels is True:
+            xytext, ha, va = (-5, 0), 'right', 'center'
+        elif station_labels == 'right':
+            xytext, ha, va = (5, 0), 'left', 'center'
+        elif station_labels == 'above':
+            xytext, ha, va = (0, 5), 'center', 'bottom'
+        elif station_labels == 'below':
+            xytext, ha, va = (0, -5), 'center', 'top'
 
-        for label, x, y in zip(D.STATION.values, D.LONGITUDE, D.LATITUDE):
-            plt.annotate(label, (x, y), textcoords="offset points", 
-                     xytext=xytext, ha=ha, va = va, transform=ccrs.PlateCarree(),
-                     alpha = station_label_alpha, fontsize = 8)
-
+        for label, x, y in zip(ds.STATION.values, ds.LONGITUDE, ds.LATITUDE):
+            plt.annotate(
+                label, (x, y), textcoords="offset points", xytext=xytext, ha=ha, va=va,
+                transform=ccrs.PlateCarree(), alpha=station_label_alpha, fontsize=8
+            )
 
     plt.tight_layout()
-    
+
     if figsize:
         fig.set_size_inches(figsize)
     else:
         figsize = fig.get_size_inches()
 
-    # Create a button to minimize the plot
+    # Create interactive buttons
     minimize_button = widgets.Button(description="Close")
 
-    def minimize_plot(_):
-        # Resize the figure to 0 and close it
+    def minimize_plot(_) -> None:
         fig.set_size_inches(0, 0)
         button_widgets.close()
         plt.close(fig)
 
     minimize_button.on_click(minimize_plot)
 
-    # Create a button to restore full size
     org_size_button = widgets.Button(description="Original Size")
 
-    def org_size_plot(_):
-        # Resize the figure to its original size
+    def org_size_plot(_) -> None:
         fig.set_size_inches(figsize)
         fig.canvas.draw()
 
-    # Create a button to restore full size
+    org_size_button.on_click(org_size_plot)
+
     full_size_button = widgets.Button(description="Larger")
 
-    def full_size_plot(_):
-        # Resize the figure to its original size
-        fig.set_size_inches(fig.get_size_inches()*2)
+    def full_size_plot(_) -> None:
+        fig.set_size_inches(fig.get_size_inches() * 2)
         fig.canvas.draw()
 
-    minimize_button.on_click(minimize_plot)
-    org_size_button.on_click(org_size_plot)
     full_size_button.on_click(full_size_plot)
 
-    # Create a static text widget
-    static_text = widgets.HTML(value='<p>Use the menu on the left of the figure to zoom/move around/save</p>')
+    static_text = widgets.HTML(
+        value='<p>Use the menu on the left of the figure to zoom/move around/save</p>'
+    )
 
-    # Display both buttons and text with decreased vertical spacing
+    button_widgets = widgets.HBox(
+        [minimize_button, org_size_button, full_size_button, static_text],
+        layout=widgets.Layout(margin='0 0 5px 0', align_items='center')
+    )
 
-    button_widgets =  widgets.HBox([
-        minimize_button, org_size_button, full_size_button, static_text], 
-        layout=widgets.Layout(margin='0 0 5px 0', align_items='center'))
-    
     display(button_widgets)
-       
+
     if return_fig_ax:
         return fig, ax
 
 
 
 
-def ctd_contours(D):
+def ctd_contours(ds):
     """
-    Create interactive contour plots based on an xarray dataset.
-
-    Parameters:
-    - D (xr.Dataset): The xarray dataset containing profile variables and coordinates.
 
     This function generates interactive contour plots for two selected profile variables
     from the given xarray dataset. It provides dropdown menus to choose the variables,
@@ -505,7 +413,7 @@ def ctd_contours(D):
     Additionally, the function includes a button to close the plot.
 
     Parameters:
-    - D (xr.Dataset): The xarray dataset containing profile variables and coordinates.
+    - ds (xr.Dataset): The xarray dataset containing profile variables and coordinates.
 
     Examples:
     ```python
@@ -516,15 +424,15 @@ def ctd_contours(D):
     ipywidgets library for interactive elements.
     """
 
-    # Assign the profile variable to PRES (profile files) or 
+    # Assign the profile variable to PRES (profile files) or
     # NISKIN_NUMBER (btl or water sample files)
-    if 'PRES' in D.dims:
+    if 'PRES' in ds.dims:
         y_varnm = 'PRES'
-    elif 'NISKIN_NUMBER' in D.dims:
+    elif 'NISKIN_NUMBER' in ds.dims:
         y_varnm = 'NISKIN_NUMBER'
 
-    if 'units' in D[y_varnm].attrs:
-        y_label = f'{y_varnm} [{D[y_varnm].units}]'
+    if 'units' in ds[y_varnm].attrs:
+        y_label = f'{y_varnm} [{ds[y_varnm].units}]'
     else:
         y_label = f'{y_varnm}'
 
@@ -543,51 +451,51 @@ def ctd_contours(D):
         for axn, varnm in zip(ax, [variable1, variable2]):
             colormap = _cmap_picker(varnm)
             plt.xticks(rotation=0)
-            
+
             if xvar == 'TIME':
                 x_data = result_timestamp = time.datenum_to_timestamp(
-                    D.TIME, D.TIME.units)
+                    ds.TIME, ds.TIME.units)
                 plt.xticks(rotation=90)
                 x_label = 'Time'
             elif xvar == 'LONGITUDE':
-                x_data = D[xvar]
+                x_data = ds[xvar]
                 x_label = 'Longitude'
             elif xvar == 'LATITUDE':
-                x_data = D[xvar]
+                x_data = ds[xvar]
                 x_label = 'Latitude'
             elif xvar == 'Profile #':
-                x_data = np.arange(D.sizes['TIME'])
+                x_data = np.arange(ds.sizes['TIME'])
                 x_label = 'Profile #'
             else:
                 raise ValueError(f"Invalid value for xvar: {xvar}")
 
             if xvar in ['TIME', 'Profile #']:
-                D_sorted = D
+                ds_sorted = ds
             else:
-                D_sorted = D.sortby(xvar)
-                x_data = D_sorted[xvar] 
+                ds_sorted = ds.sortby(xvar)
+                x_data = ds_sorted[xvar]
 
-            C = axn.contourf(x_data, D_sorted[y_varnm], D_sorted[varnm].T, 
+            C = axn.contourf(x_data, ds_sorted[y_varnm], ds_sorted[varnm].T,
                              cmap=colormap, levels = 30)
 
-            if 'units' in D_sorted[varnm].attrs:
-                var_unit_ = D_sorted[varnm].units
+            if 'units' in ds_sorted[varnm].attrs:
+                var_unit_ = ds_sorted[varnm].units
             else:
                 var_unit_ = 'no unit specified'
 
             cb = plt.colorbar(C, ax=axn, label=var_unit_)
-            
+
             # Set colorbar ticks using MaxNLocator
             cb.locator = MaxNLocator(nbins=6)  # Adjust the number of ticks as needed
             cb.update_ticks()
 
-            axn.plot(x_data, np.zeros(D_sorted.sizes['TIME']), '|k', 
+            axn.plot(x_data, np.zeros(ds_sorted.sizes['TIME']), '|k',
                      clip_on = False, zorder = 0)
 
             axn.set_title(varnm)
 
-            conts = axn.contour(x_data, D_sorted[y_varnm], D_sorted[varnm].T, 
-                        colors = 'k', linewidths = 0.8, alpha = 0.2, 
+            conts = axn.contour(x_data, ds_sorted[y_varnm], ds_sorted[varnm].T,
+                        colors = 'k', linewidths = 0.8, alpha = 0.2,
                         levels = cb.get_ticks()[::2])
 
             axn.set_facecolor('lightgray')
@@ -601,16 +509,16 @@ def ctd_contours(D):
 
     # Get the list of available variables
     available_variables = _ctd_tools._get_profile_variables(
-        D, profile_var = y_varnm)
+        ds, profile_var = y_varnm)
 
     # Create dropdowns for variable selection
-    variable_dropdown1 = widgets.Dropdown(options=available_variables, 
+    variable_dropdown1 = widgets.Dropdown(options=available_variables,
                                           value=available_variables[0], description='Variable 1:')
-    variable_dropdown2 = widgets.Dropdown(options=available_variables, 
+    variable_dropdown2 = widgets.Dropdown(options=available_variables,
                                           value=available_variables[1], description='Variable 2:')
 
     # Create dropdown for x-variable selection
-    xvar_dropdown = widgets.Dropdown(options=['TIME', 'LONGITUDE', 'LATITUDE', 'Profile #'], 
+    xvar_dropdown = widgets.Dropdown(options=['TIME', 'LONGITUDE', 'LATITUDE', 'Profile #'],
                                      value='Profile #', description='x axis:')
 
     # Create a button to minimize the plot
@@ -626,23 +534,22 @@ def ctd_contours(D):
     close_button.on_click(close_plot)
 
     # Create slider for max depth selection
-    max_depth_slider = widgets.IntSlider(min=1, max=D[y_varnm][-1].values, step=1, 
-                                         value=D[y_varnm][-1].values, description='Max depth [m]:')
+    max_depth_slider = widgets.IntSlider(min=1, max=ds[y_varnm][-1].values, step=1,
+                                         value=ds[y_varnm][-1].values, description='Max depth [m]:')
 
     # Use interactive to update plots based on variable, xvar, and max depth selection
-    out = widgets.interactive_output(update_plots, 
-                                     {'variable1': variable_dropdown1, 
-                                      'variable2': variable_dropdown2, 
-                                      'xvar': xvar_dropdown, 
+    out = widgets.interactive_output(update_plots,
+                                     {'variable1': variable_dropdown1,
+                                      'variable2': variable_dropdown2,
+                                      'xvar': xvar_dropdown,
                                       'max_depth': max_depth_slider})
-    
-    widgets_collected = widgets.VBox([widgets.HBox([variable_dropdown1, variable_dropdown2]), 
+
+    widgets_collected = widgets.VBox([widgets.HBox([variable_dropdown1, variable_dropdown2]),
                           widgets.HBox([xvar_dropdown, close_button,]),  max_depth_slider, out])
     display(widgets_collected)
 
 
-
-def _cmap_picker(varnm):
+def _cmap_picker(varnm: str) -> Colormap:
     '''
     Choose the appropriate colormap for different variables.
     '''
@@ -660,9 +567,9 @@ def _cmap_picker(varnm):
     elif 'DOXY' in varnm:
         cmap_name = 'tempo'
     elif 'ATTN' in varnm:
-        cmap_name = 'matter'  
+        cmap_name = 'matter'
     elif 'SVEL' in varnm:
-        cmap_name = 'speed'  
+        cmap_name = 'speed'
     cmap = getattr(cmocean.cm, cmap_name)
 
     return cmap

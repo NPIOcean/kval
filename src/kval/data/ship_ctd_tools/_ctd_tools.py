@@ -1,7 +1,7 @@
 '''
 ## kval.data.ship_ctd.tools
 
-Various functions for making modifications to CTD dataframes in the 
+Various functions for making modifications to CTD dataframes in the
 format produced by kval.file.cnv:
 
 - Joining insividual profiles into one ship file.
@@ -16,7 +16,7 @@ from kval.util import xr_funcs
 
 import numpy as np
 import xarray as xr
-from tqdm.notebook import tqdm 
+from tqdm.notebook import tqdm
 import glob2
 import re
 import pandas as pd
@@ -27,20 +27,20 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
                 epoch = '1970-01-01'):
     '''
     Takes a number of cnv profiles, pressure bins them if necessary,
-    and joins the profiles into one single file.  
+    and joins the profiles into one single file.
 
     Inputs:
 
     nc_files: string, list
         A dictionary containing either:
-        1. A path to the location of individual profiles, 
-           e. g. 'path/to/files/'. 
-        2. A list containing xr.Datasets with the individual profiles. 
+        1. A path to the location of individual profiles,
+           e. g. 'path/to/files/'.
+        2. A list containing xr.Datasets with the individual profiles.
 
     epoch: Only necessary to specify here if there is no TIME_SAMPLE
-           field in the data files. (In that case, we assign time based on 
-           the profile start time, and need to know the epoch) 
-    
+           field in the data files. (In that case, we assign time based on
+           the profile start time, and need to know the epoch)
+
     NOTE. Should rename *nc_files*! ("datsets"?)
     '''
     ### PREPARE INPUTS
@@ -58,7 +58,7 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
         for file in tqdm(file_list, desc=prog_bar_msg_1):
             ns_input += [xr.open_dataset(file, decode_cf=False)]
         n_profs = len(ns_input)
-        
+
         valid_nc_files = True
         if verbose:
             print(f'Loaded {n_profs} profiles from netcdf files: {file_list}')
@@ -76,10 +76,10 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     else:
         valid_nc_files = False
 
-    
+
     # Raise an exception if we don't have either (1) or (2)
     if valid_nc_files == False:
-        raise Exception('''            
+        raise Exception('''
             Input *nc_files* invalid. Must be either:
             1. A path to the location of individual profiles,
                e.g. "path/to/files/" --or--
@@ -91,16 +91,16 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     # If unbinned: bin data
     if any(n_input.binned == 'no' for n_input in ns_input):
         prog_bar_msg_2 = f'Binning all profiles to {bins_dbar} dbar'
-        
+
         ns_binned = []
         for n_input in tqdm(ns_input, desc = prog_bar_msg_2):
-            ns_binned += [bin_to_pressure(n_input, bins_dbar)] 
-    else: 
+            ns_binned += [bin_to_pressure(n_input, bins_dbar)]
+    else:
         print('NOTE: It seems the input data already binned ->'
               ' using preexisting binning.')
 
         ns_binned = [
-            xr_funcs.swap_var_coord(n, 'scan_count', 'PRES', drop_original=True) 
+            xr_funcs.swap_var_coord(n, 'scan_count', 'PRES', drop_original=True)
                     for n in ns_input]
 
 
@@ -140,7 +140,7 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
 
     ### JOINING PROFILES TO ONE DATASET
     #  Concatenation loop.
-    # - Add a CRUISE variable 
+    # - Add a CRUISE variable
 
     first = True
 
@@ -158,7 +158,7 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
 
         if first:
             N = n
-            # Want to keep track of whether we use different 
+            # Want to keep track of whether we use different
             # start_time sources
             start_time_source = n.start_time_source
             different_start_time_sources = False
@@ -194,7 +194,7 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
         sns_unique = np.array(list(OrderedDict.fromkeys(sns_filtered)))
         caldates_filtered = np.array([value for value in caldates if value is not None])
         caldates_unique = np.array(list(OrderedDict.fromkeys(caldates_filtered)))
-            
+
         if len(sns_unique)==2:
             if 'comment' in N[varnm].attrs:
                 comment_0 = N[varnm].comment
@@ -206,22 +206,22 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
             N[varnm].attrs['stations_A'] = ', '.join(where_sensor_A)
             N[varnm].attrs['stations_B'] = ', '.join(where_sensor_B)
             N[varnm].attrs['sensor_calibration_date'] = (
-                f'A: {caldates_unique[0]}, B: {caldates_unique[1]}') 
+                f'A: {caldates_unique[0]}, B: {caldates_unique[1]}')
             N[varnm].attrs['sensor_serial_number'] = (
-                f'A: {sns_unique[0]}, B: {sns_unique[1]}') 
+                f'A: {sns_unique[0]}, B: {sns_unique[1]}')
 
     ### FINAL TOUCHES AND EXPORTS
-    
+
     # Transpose so that variables are structured like (TIME, PRES) rather than
     # (PRES, TIME). Convenient when plotting etc.
     # **Note**: Dropping doing this because CF conventions seem to require T first
-    # N = N.transpose() 
+    # N = N.transpose()
 
     # Sort chronologically
     N = N.sortby('TIME')
 
     # Add some standard metadata to the measurement variables
-    N = _add_standard_variable_attributes(N)    
+    N = _add_standard_variable_attributes(N)
 
 
 
@@ -247,7 +247,7 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     N['CRUISE'] =  xr.DataArray(cruise, dims=())
     N['CRUISE'].attrs = {'long_name':'Cruise ID',}
 
-    # Generalize (insert "e.g.") in attributes with specific file names 
+    # Generalize (insert "e.g.") in attributes with specific file names
     N.attrs['source_files'] = f"E.g. {N.attrs['source_files']}"
     SBEproc_file_ind = N.SBE_processing.rfind('Raw data read from ')+19
     N.attrs['SBE_processing'] = (N.SBE_processing[:SBEproc_file_ind]
@@ -258,10 +258,10 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
 
     # Delete some non-useful attributes (that are only relevant to individual
     # profiles)
-    del_attrs = ['SBE_processing_date', 'start_time_source', 'station', 
+    del_attrs = ['SBE_processing_date', 'start_time_source', 'station',
                  'start_time', 'SBE_flags_applied', 'latitude', 'longitude']
     for attr in del_attrs:
-        del N.attrs[attr]     
+        del N.attrs[attr]
 
     # Set the featureType attribute
     N.attrs['featureType'] = 'profile'
@@ -275,23 +275,23 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
 def join_cruise_btl(datasets, verbose = True,
                 epoch = '1970-01-01'):
     '''
-    Takes a number of btl profiles and joins the profiles into one single file.  
+    Takes a number of btl profiles and joins the profiles into one single file.
 
     Inputs:
 
     datasets: string, list
         A dictionary containing either:
-        1. A path to the location of individual profiles, 
-           e. g. 'path/to/files/'. 
-        2. A list containing xr.Datasets with the individual profiles. 
+        1. A path to the location of individual profiles,
+           e. g. 'path/to/files/'.
+        2. A list containing xr.Datasets with the individual profiles.
 
     epoch: Only necessary to specify here if there is no TIME_SAMPLE
-           field in the data files. (In that case, we assign time based on 
-           the profile start time, and need to know the epoch) 
+           field in the data files. (In that case, we assign time based on
+           the profile start time, and need to know the epoch)
 
     NOTE: This is basically a slightly modified version of join_cruise()
-          which does the same for .cnvs. Should optimize and/or see if we 
-          can refactor so we don't have to repeat the same code. 
+          which does the same for .cnvs. Should optimize and/or see if we
+          can refactor so we don't have to repeat the same code.
 
 
     '''
@@ -310,7 +310,7 @@ def join_cruise_btl(datasets, verbose = True,
         for file in tqdm(file_list, desc=prog_bar_msg_1):
             ns_input += [xr.open_dataset(file, decode_cf=False)]
         n_profs = len(ns_input)
-        
+
         valid_nc_files = True
         if verbose:
             print(f'Loaded {n_profs} profiles from netcdf files: {file_list}')
@@ -330,18 +330,18 @@ def join_cruise_btl(datasets, verbose = True,
 
     # Raise an exception if we don't have either (1) or (2)
     if valid_nc_files == False:
-        raise Exception('''            
+        raise Exception('''
             Input *datasets* invalid. Must be either:
             1. A path to the location of individual profiles,
                e.g. "path/to/files/" --or--
             2. A list containing xr.Datasets with the individual profiles,
                e.g. [d1, d2] with d1, d2 being xr.Datasets.
                         ''')
-    
+
 
     ### JOINING PROFILES TO ONE DATASET
     #  Concatenation loop.
-    # - Add a CRUISE variable 
+    # - Add a CRUISE variable
 
     first = True
 
@@ -357,7 +357,7 @@ def join_cruise_btl(datasets, verbose = True,
 
         if first:
             N = n
-            # Want to keep track of whether we use different 
+            # Want to keep track of whether we use different
             # start_time sources
             start_time_source = n.start_time_source
             different_start_time_sources = False
@@ -388,7 +388,7 @@ def join_cruise_btl(datasets, verbose = True,
         sns_unique = unique_entries = list(set(sns_filtered))
         caldates_filtered = np.array([value for value in caldates if value is not None])
         caldates_unique = unique_entries = list(set(caldates_filtered))
-        
+
         if len(sns_unique)==2:
             if 'comment' in N[varnm].attrs:
                 comment_0 = N[varnm].comment
@@ -400,27 +400,27 @@ def join_cruise_btl(datasets, verbose = True,
             N[varnm].attrs['stations_A'] = ', '.join(where_sensor_A)
             N[varnm].attrs['stations_B'] = ', '.join(where_sensor_B)
             N[varnm].attrs['sensor_calibration_date'] = (
-                f'A: {caldates_unique[0]}, B: {caldates_unique[1]}') 
+                f'A: {caldates_unique[0]}, B: {caldates_unique[1]}')
             N[varnm].attrs['sensor_serial_number'] = (
-                f'A: {sns_unique[0]}, B: {sns_unique[1]}') 
+                f'A: {sns_unique[0]}, B: {sns_unique[1]}')
 
     ### FINAL TOUCHES AND EXPORTS
-    
+
     # Transpose so that variables are structured like (TIME, PRES) rather than
     # (PRES, TIME). Convenient when plotting etc.
-    N = N.transpose() 
+    N = N.transpose()
 
     # Sort chronologically
     N = N.sortby('TIME')
 
     # Add some standard metadata to the measurement variables
-    N = _add_standard_variable_attributes(N)    
+    N = _add_standard_variable_attributes(N)
 
     # Add some metadata to the STATION variable
     if 'STATION' in N.data_vars:
         N['STATION'].attrs = {'long_name' : 'CTD station ID',
                               'cf_role':'profile_id'}
-    
+
     # Warn the user if we used different sources for profile start time
     if different_start_time_sources:
         print('\nNOTE: The start_time variable was read from different '
@@ -434,11 +434,11 @@ def join_cruise_btl(datasets, verbose = True,
         cruise = N.cruise_name
     else:
         cruise = '!! CRUISE !!'
-        
+
     N['CRUISE'] =  xr.DataArray(cruise, dims=())
     N['CRUISE'].attrs = {'long_name':'Cruise ID',}
 
-    # Generalize (insert "e.g.") in attributes with specific file names 
+    # Generalize (insert "e.g.") in attributes with specific file names
     N.attrs['source_files'] = f"E.g. {N.attrs['source_files']}"
     SBEproc_file_ind = N.SBE_processing.rfind('Raw data read from ')+19
     N.attrs['SBE_processing'] = (N.SBE_processing[:SBEproc_file_ind]
@@ -450,12 +450,12 @@ def join_cruise_btl(datasets, verbose = True,
 
     # Delete some non-useful attributes (that are only relevant to individual
     # profiles)
-    del_attrs = ['SBE_processing_date', 'start_time_source', 'station', 
+    del_attrs = ['SBE_processing_date', 'start_time_source', 'station',
                  'start_time', 'SBE_flags_applied', 'latitude', 'longitude']
-    
+
     for attr in del_attrs:
         if attr in N.attrs:
-            del N.attrs[attr]     
+            del N.attrs[attr]
 
     # Set the featureType attribute
     N.attrs['featureType'] = 'profile'
@@ -475,7 +475,7 @@ def bin_to_pressure(ds, dp = 1):
     pressure* (in practice a small but noteiceable difference)
     (See page 13 for the formula used)
     No surface bin included.
-   
+
     Equivalent to this in SBE terms (I think)
     # binavg_bintype = decibars
     # binavg_binsize = *dp*
@@ -494,11 +494,11 @@ def bin_to_pressure(ds, dp = 1):
 
     # We have to reassign the values of the variables which are not on the
     # pressure dimension.
-    
+
     # Save a copy of the pre-binned data
     ds0 = ds.copy()
     # Make a list of variables with only a TIME dimension
-    time_vars = [var_name for var_name, var in ds.variables.items() 
+    time_vars = [var_name for var_name, var in ds.variables.items()
                  if 'TIME' in var.dims and len(var.dims) == 1]
     # Make a copy with only the pressure-dimensional variables
     ds_pres = ds.drop_vars(time_vars)
@@ -510,10 +510,10 @@ def bin_to_pressure(ds, dp = 1):
     pmin = float(ds_pres.PRES.min())
     pmin_bound = np.floor(pmin+dp/2)-dp/2
 
-    p_bounds = np.arange(pmin_bound, pmax_bound+1e-9, dp) 
+    p_bounds = np.arange(pmin_bound, pmax_bound+1e-9, dp)
     p_centre = np.arange(pmin_bound, pmax_bound, dp)+dp/2
 
-    # Pressure averaged 
+    # Pressure averaged
     ds_pavg = ds_pres.groupby_bins('PRES', bins = p_bounds).mean(dim = 'scan_count')
 
     # Get pressure *binned* according to formula on page 13 in SBEs module 13 document
@@ -536,7 +536,7 @@ def bin_to_pressure(ds, dp = 1):
     ds_binned = (ds_binned
         .swap_dims({'PRES_bins':'PRES'})
         .drop_vars('PRES_bins'))
-    
+
     ds_binned.attrs['binned'] = f'{dp} dbar'
 
     # Set xarray option "keep_attrs" back to whatever it was
@@ -544,7 +544,7 @@ def bin_to_pressure(ds, dp = 1):
 
     # Add back the non-pressure dimensional variables
     for time_var in time_vars:
-        ds_binned[time_var] = ds0[time_var] 
+        ds_binned[time_var] = ds0[time_var]
 
     return ds_binned
 
@@ -559,7 +559,7 @@ def _add_standard_variable_attributes(ds):
         'sensor_mount':'mounted_on_shipborne_profiler'}
 
     for varnm in ds.keys():
-        if ('PRES' in ds[varnm].dims 
+        if ('PRES' in ds[varnm].dims
             and varnm not in ['SBE_FLAG', 'TIME_SAMPLE', 'TIME']):
             for key, item in var_attrs.items():
                 ds[varnm].attrs[key] = item
@@ -582,16 +582,16 @@ def _btl_files_from_path(path):
     return btl_list
 
 
-def _datasets_from_cnvlist(cnv_list, 
+def _datasets_from_cnvlist(cnv_list,
                            station_from_filename = False,
                            verbose = True, start_time_NMEA = False):
     '''
-    Get a list of profile xr.Datasets from a list of .cnv files. 
+    Get a list of profile xr.Datasets from a list of .cnv files.
     '''
     dataset_list = []
     for fn in cnv_list:
         try:
-            dataset_list += [sbe.read_cnv(fn, time_dim=True, 
+            dataset_list += [sbe.read_cnv(fn, time_dim=True,
                             station_from_filename = station_from_filename,
                             suppress_time_warning=not verbose,
                             suppress_latlon_warning=not verbose,
@@ -604,19 +604,19 @@ def _datasets_from_cnvlist(cnv_list,
     return dataset_list
 
 
-def _datasets_from_btllist(btl_list, 
+def _datasets_from_btllist(btl_list,
                            station_from_filename = False,
                            verbose = True, start_time_NMEA = False,
                            time_adjust_NMEA = False):
     '''
-    Get a list of profile xr.Datasets from a list of .btl files. 
+    Get a list of profile xr.Datasets from a list of .btl files.
     '''
-    dataset_list = [sbe.read_btl(fn, time_dim=True, 
+    dataset_list = [sbe.read_btl(fn, time_dim=True,
                         station_from_filename = station_from_filename,
                         start_time_NMEA = start_time_NMEA,
-                        time_adjust_NMEA = time_adjust_NMEA) 
+                        time_adjust_NMEA = time_adjust_NMEA)
                        for fn in btl_list]
-    
+
 
     return dataset_list
 
@@ -625,7 +625,7 @@ def _datasets_from_btllist(btl_list,
 def _replace_history_dates_with_ranges(D, post_proc_times, SBE_proc_times):
     '''
     When joining files: Change the history string to show time *ranges*,
-    e.g. 
+    e.g.
        2017-09-24: Data collection
     -> 2017-09-24 to 2017-09-24: Data collection
 
@@ -643,22 +643,22 @@ def _replace_history_dates_with_ranges(D, post_proc_times, SBE_proc_times):
         ctd_range = (
             f'{cftime.num2date(ctd_min, D.TIME.units).strftime(date_fmt)}'
             f' to {cftime.num2date(ctd_max, D.TIME.units).strftime(date_fmt)}')
-        D.attrs['history'] = ctd_range + D.history[10:] 
+        D.attrs['history'] = ctd_range + D.history[10:]
 
     if sbe_max>sbe_min:
         sbe_range = f'{sbe_min.strftime(date_fmt)} to {sbe_max.strftime(date_fmt)}'
         rind = D.history.find(': Processed to .cnv using SBE')
         D.attrs['history'] = D.history[:rind-10] + sbe_range + D.attrs['history'][rind:]
-    
+
     if post_proc_times:
 
         if ppr_max>ppr_min and post_proc_times:
             ppr_range = (f'{ppr_min.strftime(date_fmt)} to'
                 f'{ppr_max.strftime(date_fmt)}')
             rind = D.history.find(': Post-processing.')
-            D.attrs['history'] = (D.history[:rind-10] + ppr_range + 
+            D.attrs['history'] = (D.history[:rind-10] + ppr_range +
                                   D.attrs['history'][rind:])
-        
+
     return D
 
 
@@ -684,7 +684,7 @@ def _dates_from_history(ds):
         proc_pattern = r"(\d{4}-\d{2}-\d{2}): Post-processing"
         proc_time_match_str = re.search(proc_pattern, ds.history).group(1)
         proc_timestamp = pd.Timestamp(proc_time_match_str)
-    except: 
+    except:
         proc_timestamp = None
     return sbe_timestamp, proc_timestamp
 
@@ -697,7 +697,7 @@ def _get_profile_variables(d, profile_var = 'PRES'):
     Alternatively, specify another profile dimension instead of PRES, e.g.
     NISKIN_NUMBER.
     '''
-    profile_variables = [varnm for varnm in d.data_vars 
-                         if profile_var in d[varnm].dims 
+    profile_variables = [varnm for varnm in d.data_vars
+                         if profile_var in d[varnm].dims
                          and 'TIME' in d[varnm].dims]
     return profile_variables
