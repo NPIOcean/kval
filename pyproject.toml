@@ -5,7 +5,7 @@ version = "0.2.0-beta"
 readme = "README.md"
 
 authors = [
-  { name = "Øyvind Foss", email = "oyvind.foss@npolar.no" }, 
+  { name = "Øyvind Foss", email = "oyvind.foss@npolar.no" },
 ]
 
 maintainers = [
@@ -22,7 +22,7 @@ dependencies = [
   "pandas>=2.1.0",
   "glob2>=0.7",
   "seawater>=3.3.4",
-  "cartopy>=0.21.1",  
+  "cartopy>=0.21.1",
   "cftime>=1.6.2",
   "scipy>=1.11.3",
   "cmocean>=3.0.3",
@@ -36,7 +36,7 @@ dependencies = [
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "License :: OSI Approved :: MIT License",
-  "Programming Languagce :: Python :: 3 :: Only",
+  "Programming Languagce :: Python :: 3",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
