@@ -18,6 +18,8 @@ from matplotlib.colors import Colormap
 import cmocean
 import numpy as np
 from kval.util import internals
+from typing import Union
+import xarray as xr
 
 def inspect_profiles(ds: 'xr.Dataset') -> None:
     """
@@ -308,6 +310,7 @@ def inspect_dual_sensors(ds: 'xr.Dataset') -> None:
     ])
     display(widgets_collected)
 
+
 def map(
     ds: 'xr.Dataset',
     height: int = 1000,
@@ -315,7 +318,7 @@ def map(
     return_fig_ax: bool = False,
     coast_resolution: str = '50m',
     figsize: tuple[int, int] = None,
-    station_labels: bool | str = False,
+    station_labels: Union[bool, str] = False,
     station_label_alpha: float = 0.5
 ) -> tuple[plt.Figure, plt.Axes] | None:
     internals.check_interactive()
