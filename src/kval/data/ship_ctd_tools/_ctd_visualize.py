@@ -38,6 +38,7 @@ def inspect_profiles(ds: 'xr.Dataset') -> None:
     Note: This function utilizes Matplotlib for plotting and ipywidgets for
     interactive controls.
     """
+    # Making sure we are in an interactive notebook environment
     internals.check_interactive()
 
     # Determine the vertical axis variable
@@ -168,6 +169,7 @@ def inspect_dual_sensors(ds: 'xr.Dataset') -> None:
     - ds: xr.Dataset
         The dataset containing the variables.
     """
+    # Making sure we are in an interactive notebook environment
     internals.check_interactive()
 
     def plot_dual_sensor(station_index: int, variable_pair: tuple) -> None:
@@ -320,7 +322,9 @@ def map(
     figsize: tuple[int, int] = None,
     station_labels: Union[bool, str] = False,
     station_label_alpha: float = 0.5
-) -> tuple[plt.Figure, plt.Axes] | None:
+) -> Union[tuple[plt.Figure, plt.Axes], None]:
+
+    # Making sure we are in an interactive notebook environment
     internals.check_interactive()
 
     lat_span = float(ds.LATITUDE.max() - ds.LATITUDE.min())
