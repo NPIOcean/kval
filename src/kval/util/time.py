@@ -1,5 +1,5 @@
 from typing import Union, List, Tuple
-from matplotlib.dates import num2date
+from matplotlib.dates import num2date, date2num
 import pandas as pd
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
@@ -110,7 +110,7 @@ def seconds_to_ISO8601(seconds: int) -> str:
     return iso_str
 
 
-def matlab_time_to_timestamp(
+def matlab_time_to_datetime(
     matlab_time: Union[float, List[float], Tuple[float], np.ndarray]
 ) -> Union[datetime, np.ndarray]:
     """
@@ -137,6 +137,27 @@ def matlab_time_to_timestamp(
         raise ValueError(
             "Input must be a single value or an array of Matlab datenums."
         )
+
+
+def matlab_time_to_python_time(
+    matlab_time: Union[float, List[float], Tuple[float], np.ndarray]
+) -> Union[datetime, np.ndarray]:
+    """
+    Convert MATLAB datenum (days) to Matplotlib dates (days).
+
+    This function converts a time value from MATLAB's datenum format,
+    which counts days from 00-Jan-0000, to Matplotlib's date format,
+    which counts days from 01-Jan-1970.
+
+    Args:
+        mattime (float): MATLAB datenum in days.
+
+    Returns:
+        float: Corresponding Matplotlib date in days.    """
+    time_stamp = matlab_time_to_datetime(matlab_time)
+    python_time = date2num(time_stamp)
+
+    return python_time
 
 
 def timestamp_to_matlab_time(
