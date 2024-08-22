@@ -76,6 +76,7 @@ def mat_to_xr_1D(
             ds[varnm] = (("TIME"), data_dict[varnm])
         except:
             if verbose:
+
                 print(
                     f'NOTE: Could not parse the variable "{varnm}" '
                     f" with shape: {data_dict[varnm].shape} as a TIME variable"
@@ -311,7 +312,7 @@ def _parse_time(data_dict, time_name="time"):
     might be cleanest to just require the fields
     """
     try:
-        time_stamps = time.matlab_time_to_timestamp(data_dict[time_name])
+        time_stamps = time.matlab_time_to_datetime(data_dict[time_name])
         return time_stamps
     except:  # May have to build other cases here, eventually.
         print(
