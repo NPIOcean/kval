@@ -104,7 +104,7 @@ def get_era5_time_series_point(
     verbose: bool = True
 ) -> xr.Dataset:
     """
-    Retrievee a time series from the ERA-5 dataset for a specified
+    Retrieve a time series from the ERA-5 dataset for a specified
     latitude and longitude, within a given time range.
 
     Data are obrained over OpenDAP from the Asia-Pacific Data Research
@@ -150,10 +150,16 @@ def get_era5_time_series_point(
     if lon < 0:
         lon += 360
 
+    # If these times are python numerals (days since 1970-1-1),
+    # convert them to datetime objects.
+    # Have to make them time zone unaware in orded to compare with ERA5
+    # (technical - all times are always assumed to be UTC in any event).
     if isinstance(time_start, float):
         time_start = num2date(time_start)
+        time_start = time_start.replace(tzinfo=None)
     if isinstance(time_end, float):
         time_end = num2date(time_end)
+        time_end = time_end.replace(tzinfo=None)
 
     time_slice = slice(time_start, time_end)
 
