@@ -275,3 +275,61 @@ def convert_timenum_to_datetime(
         except ValueError:
             reference_date = datetime.strptime(reference_date_str, "%Y-%m-%d")
     return reference_date
+
+
+def time_to_decimal_year(
+        time: Union[datetime, np.datetime64, str, Union[int, float]]
+        ) -> float:
+    """
+    Convert various time formats to a decimal year.
+
+    Args:
+        time (Union[datetime.datetime, np.datetime64, str, int, float]):
+            The time input which can be:
+            - A `datetime.datetime` object.
+            - A `numpy.datetime64` object.
+            - A string in ISO format (e.g., '2021-02-01' or
+              '2021-02-01 23:30:00').
+            - A numeric value representing days since '1970-01-01'.
+
+    Returns:
+        float: The corresponding decimal year as a floating-point number.
+
+    Raises:
+        ValueError: If the string cannot be parsed into a datetime object.
+        TypeError: If the time input is of an unexpected type.
+    """
+
+    # If time is a string, try to parse it into a datetime object
+    if isinstance(time, str):
+        try:
+            time = datetime.fromisoformat(time)
+        except ValueError:
+            raise ValueError(f"Invalid time format: {time}")
+
+    # If time is a numpy datetime64, convert it to a datetime object
+    elif isinstance(time, np.datetime64):
+        time = pd.to_datetime(time).to_pydatetime()
+
+    # If time is a numeric value, interpret it as days since 1970-01-01
+    elif isinstance(time, (int, float)):
+        base_date = datetime(1970, 1, 1)
+        time = base_date + timedelta(days=time)
+
+    # Ensure time is now a datetime object
+    if not isinstance(time, datetime):
+        raise TypeError("Expected time to be datetime, string, or numeric,"
+                        f" got {type(time)} instead.")
+
+    # Get the start and end of the year
+    year_start = datetime(time.year, 1, 1)
+    next_year_start = datetime(time.year + 1, 1, 1)
+
+    # Calculate the length of the year and the time elapsed
+    year_length = (next_year_start - year_start).total_seconds()
+    time_elapsed = (time - year_start).total_seconds()
+
+    # Compute the decimal year
+    decimal_year = time.year + time_elapsed / year_length
+
+    return decimal_year
