@@ -46,7 +46,8 @@ def get_declination(
     Returns:
     -------
     np.ndarray
-        An array of magnetic declinations in degrees corresponding to each date.
+        An array of magnetic declinations in degrees corresponding to each
+        date.
 
     Notes:
     -----
@@ -170,8 +171,9 @@ def choose_wmm_model(decimal_year: float) -> str:
         wmm_coefficients_file = 'wmm/WMM.COF'
     else:
         raise ValueError(
-            f'Year {decimal_year:.0f} is out of range. The World Magnetic Model '
-            'only covers 2010-2025. Please obtain declination values elsewhere.'
+            f'Year {decimal_year:.0f} is out of range. The World Magnetic '
+            'Model only covers 2010-2025. Please obtain declination values '
+            'elsewhere.'
         )
 
     return wmm_coefficients_file
