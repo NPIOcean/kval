@@ -7,24 +7,22 @@ calculator (https://github.com/filips123/MagneticFieldCalculator/).
 
 from typing import Union, Iterable
 from datetime import datetime
-from pygeomag import GeoMag  #
+from pygeomag import GeoMag
 from kval.util import time
 import numpy as np
 
-
-from typing import Iterable, Union
-from datetime import datetime
-import numpy as np
 
 def get_declination(
     lat: float,
     lon: float,
     dates: Iterable[Union[datetime, np.datetime64, str, Union[int, float]]],
-    altitude: float = 0.0
+    altitude: float = 0.0,
+    model: str = 'auto',  # Which WMM model to use
 ) -> np.ndarray:
+
     """
-    Get the magnetic declination for multiple date points at a specific location using
-    the World Magnetic Model (WMM).
+    Get the magnetic declination for multiple date points at a specific
+    location using the World Magnetic Model (WMM).
 
     Parameters:
     ----------
@@ -40,6 +38,10 @@ def get_declination(
         - A numeric value representing days since '1970-01-01'.
     altitude : float, optional
         Altitude in meters above sea level (default is 0.0).
+    model: str
+        Which WMM version to use.
+        Options: ['2010', '2015', '2020'], otherwise determined based on the
+        data.
 
     Returns:
     -------
@@ -49,13 +51,16 @@ def get_declination(
     Notes:
     -----
     - The World Magnetic Model (WMM) data covers the years 2010-2025.
+    - Automatic determination of WMM model can cause discontinuities
+      crossing over from 2014 to 2015 or 2019 to 2020. These are typically
+      small (<1 deg).
     """
     # Initialize an empty list to store declinations
     declinations = []
 
     # Calculate declination for each date and append to the list
     for date in dates:
-        declination = get_declination_point(lat, lon, date, altitude)
+        declination = get_declination_point(lat, lon, date, altitude, model)
         declinations.append(declination)
 
     # Convert the list of declinations to a NumPy array
@@ -66,7 +71,8 @@ def get_declination_point(
     lat: float,
     lon: float,
     date: Union[datetime, np.datetime64, str, Union[int, float]],
-    altitude: float = 0.0
+    altitude: float = 0.0,
+    model: str = 'auto',  # Which WMM model to use
 ) -> float:
     """
     Get the magnetic declination at a specific point in space and time using
@@ -87,6 +93,10 @@ def get_declination_point(
             - A numeric value representing days since '1970-01-01'.
     altitude : float, optional
         Altitude in meters above sea level (default is 0.0).
+    model: str
+        Which WMM version to use.
+        Options: ['2010', '2015', '2020'], otherwise determined based on the
+        data.
 
     Returns:
     -------
@@ -96,24 +106,41 @@ def get_declination_point(
     Notes:
     -----
     - The World Magnetic Model (WMM) data covers the years 2010-2025.
+    - Specifying the *model* will allow computing the declination outside
+      the model range (e.g 2010-2015 for WMM2010). Be careful!
     """
 
     # Convert time to decimal year if necessary
     decimal_year = time.time_to_decimal_year(date)
 
     # Choose the appropriate WMM model file for the given decimal year
-    wmm_coefficients_file = choose_wmm_model(decimal_year)
+    if model == 'auto':
+        wmm_coefficients_file = choose_wmm_model(decimal_year)
+        allow_date_outside_lifespan = False
+    else:
+        allow_date_outside_lifespan = True
+        if model == '2010':
+            wmm_coefficients_file = 'wmm/WMM_2010.COF'
+        elif model == '2015':
+            wmm_coefficients_file = 'wmm/WMM_2015.COF'
+        elif model == '2020':
+            wmm_coefficients_file = 'wmm/WMM.COF'
+        else:
+            raise ValueError(
+                f'Invalid option model={model} for choice of World Magnetic '
+                'Model version. Options are ["2010", "2015", "2020"].'
+            )
 
     # Initialize the GeoMag object with the coefficients file
     geo_mag = GeoMag(coefficients_file=wmm_coefficients_file)
 
     # Calculate the magnetic declination
     declination = geo_mag.calculate(
-        glat=lat, glon=lon, alt=altitude, time=decimal_year
+        glat=lat, glon=lon, alt=altitude, time=decimal_year,
+        allow_date_outside_lifespan=allow_date_outside_lifespan
     ).d
 
     return declination
-
 
 
 def choose_wmm_model(decimal_year: float) -> str:
