@@ -30,7 +30,7 @@ from datetime import datetime
 import os
 
 
-def read(file: str, keep_total_pres: bool = False) -> xr.Dataset:
+def read_rsk(file: str, keep_total_pres: bool = False) -> xr.Dataset:
     """
     Parse an .rsk file with data from an RBR instrument into an xarray Dataset,
     preserving available metadata and converting units and variable names

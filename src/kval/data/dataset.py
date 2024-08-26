@@ -30,7 +30,7 @@ def add_now_as_date_created(ds: xr.Dataset) -> xr.Dataset:
     ds.attrs['date_created'] = now_str
     return ds
 
-def add_processing_history_var(
+def add_processing_history_var_ctd(
     ds: xr.Dataset,
     source_files: Union[str, List[str], np.ndarray] = None,
     post_processing: bool = True,
@@ -40,8 +40,8 @@ def add_processing_history_var(
     Add a `PROCESSING` variable to store metadata about processing history.
 
     Parameters:
-    - D: The xarray.Dataset to which the variable will be added.
-    - source_files: A single file or list of files used in processing.
+    - ds: The xarray.Dataset to which the variable will be added.
+    - source_files: A single file or list of files from which data were loaded.
     - post_processing: If True, include post-processing information.
     - py_script: If True, include the Python script used for processing.
 
@@ -81,7 +81,7 @@ def add_processing_history_var(
         ds['PROCESSING'].attrs['post_processing'] = ''
         ds['PROCESSING'].attrs['comment'] += (
             '# post_processing #:\nDescription of post-processing starting with '
-            '*source_files*.\n(Note: Indexing in the PRES dimension starts at 0 - '
+            '`source_files`.\n(Note: Indexing in the PRES dimension starts at 0 - '
             'for MATLAB add 1 to the index).\n'
         )
 
@@ -89,7 +89,64 @@ def add_processing_history_var(
         ds['PROCESSING'].attrs['python_script'] = ''
         ds['PROCESSING'].attrs['comment'] += (
             '# python_script #:\nPython script for reproducing post-processing '
-            'from *source_files*.\n'
+            'from `source_files`.\n'
+        )
+
+    return ds
+
+
+
+def add_processing_history_var_moored(
+    ds: xr.Dataset,
+    source_file: str = None,
+    post_processing: bool = True,
+    py_script: bool = True
+) -> xr.Dataset:
+    """
+    Add a `PROCESSING` variable to store metadata about processing history.
+
+    Parameters:
+    - ds: The xarray.Dataset to which the variable will be added.
+    - source_file: Source data file (e.g. .cnv, .rsk).
+    - post_processing: If True, include post-processing information.
+    - py_script: If True, include the Python script used for processing.
+
+    Returns:
+    - The modified xarray.Dataset with the `PROCESSING` variable.
+    """
+
+    ds['PROCESSING'] = xr.DataArray(
+        data=None, dims=[],
+        attrs={
+            'long_name': 'Empty variable whose attributes describe processing '
+                         'history of the dataset.',
+            'comment': '** NOTE: Experimental - testing this for documentation. **\n'
+        }
+    )
+
+    if source_file is not None:
+        if isinstance(source_file, str):
+            source_file_string = os.path.basename(source_file)
+        else:
+            raise ValueError('Invalid `source_file` (should be a string).')
+
+        ds['PROCESSING'].attrs['source_file'] = source_file_string
+        ds['PROCESSING'].attrs['comment'] += (
+            '# source_files #:\nData from which data were loaded.\n'
+        )
+
+    if post_processing:
+        ds['PROCESSING'].attrs['post_processing'] = ''
+        ds['PROCESSING'].attrs['comment'] += (
+            '# post_processing #:\nDescription of post-processing starting'
+            ' with `source_file`.\n'
+        )
+
+    if py_script:
+        ds['PROCESSING'].attrs['python_script'] = ''
+        ds['PROCESSING'].attrs['comment'] += (
+            '# python_script #:\nPython script for reproducing '
+            'post-processing from `source_file`.\n'
         )
 
     return ds

@@ -4,7 +4,7 @@ import os
 import time
 import requests
 from pathlib import Path
-from kval.file.rbr import read
+from kval.file.rbr import read_rsk
 from kval.file._variable_defs import RBR_name_map, RBR_units_map
 
 # Define the URLs for the files you want to test
@@ -25,10 +25,10 @@ def setup_files():
     """
     # Create the directory for storing test files if it doesn't already exist.
     FILE_DIR.mkdir(parents=True, exist_ok=True)
-    
+
     # Track which files are downloaded
     downloaded_files = set()
-    
+
     # Download each file in FILE_URLS if it doesn't already exist locally.
     for file_name, url in FILE_URLS.items():
         file_path = FILE_DIR / file_name
@@ -38,10 +38,10 @@ def setup_files():
             with open(file_path, 'wb') as file:  # Write the file to disk
                 file.write(response.content)
             downloaded_files.add(file_name)  # Mark the file as downloaded
-    
+
     # Yield control back to the test functions. This pauses the fixture here.
     yield
-    
+
     # Teardown: This code runs after the tests are complete.
     # Only delete files that were downloaded
     for file_name in FILE_URLS.keys():
@@ -67,7 +67,7 @@ def test_read(file_name):
     file_path = FILE_DIR / file_name
 
     # Read the dataset using the read function
-    ds_rsk = read(file_path)
+    ds_rsk = read_rsk(file_path)
 
     # Check if the dataset is of type xarray.Dataset
     assert isinstance(ds_rsk, xr.Dataset), "Output is not an xarray.Dataset"
@@ -75,11 +75,11 @@ def test_read(file_name):
     # Check that the TIME dimension exists and is of correct type
     assert 'TIME' in ds_rsk.dims, "TIME dimension not found"
     assert ds_rsk['TIME'].dtype == 'float64', "TIME variable is not of type float64"
-    
+
     # Check for presence of expected variables in the dataset
     assert 'TIME' in ds_rsk.variables, "TIME variable not found"
     assert len(ds_rsk.data_vars) > 0, "No data variables found in dataset"
-    
+
     # Check if units are correctly assigned
     for var in ds_rsk.data_vars:
         assert 'units' in ds_rsk[var].attrs, f"Units attribute not found for variable {var}"
@@ -99,7 +99,7 @@ def test_read(file_name):
     for var in ds_rsk.data_vars:
         if 'calibration_date' in ds_rsk[var].attrs:
             assert ds_rsk[var].attrs['calibration_date'] == ds_rsk[var].attrs.get('calibration_date'), f"Calibration date for {var} is incorrect"
-    
+
     # Check for no extra variables
     expected_var_names = set(RBR_name_map.values())
     actual_var_names = set(ds_rsk.variables) - {'TIME'}
