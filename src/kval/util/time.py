@@ -256,11 +256,11 @@ def datenum_to_timestamp(
         return timestamps
 
 
+
 def convert_timenum_to_datetime(
-    TIME: float, units: str, out_fmt: str = "%d-%b-%Y %H:%M"
-) -> str:
+    TIME: float, units: str, ) -> str:
     """
-    Convert a numeric time value to a formatted datetime string.
+    Convert a numeric time value to a datetime object.
     """
     reference_date_str = units.split("since")[-1].strip()
     try:
@@ -274,7 +274,26 @@ def convert_timenum_to_datetime(
             )
         except ValueError:
             reference_date = datetime.strptime(reference_date_str, "%Y-%m-%d")
-    return reference_date
+
+
+    # Calculate the datetime from the reference date and numeric time
+    date_time = reference_date + timedelta(days=float(TIME))
+    return date_time
+
+
+def convert_timenum_to_datestring(
+    TIME: float, units: str, out_fmt: str = "%d-%b-%Y %H:%M"
+) -> str:
+    """
+    Convert a numeric time value to a formatted datetime string.
+    """
+
+    # Calculate the datetime from the reference date and numeric time
+    date_time = convert_timenum_to_datetime(TIME=TIME, units=units)
+    # Format the datetime string according to the specified format
+    reference_date_string = date_time.strftime(out_fmt)
+
+    return reference_date_string
 
 
 def time_to_decimal_year(

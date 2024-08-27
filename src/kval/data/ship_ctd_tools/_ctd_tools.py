@@ -690,14 +690,23 @@ def _dates_from_history(ds):
 
 
 # Get the profile variables
-def _get_profile_variables(d, profile_var = 'PRES'):
+def _get_profile_variables(ds, profile_var = 'PRES', require_TIME = True):
     '''
-    Return a list of profile variables (i.e. variables with TIME, PRES dimensions)
+    Return a list of profile variables (i.e. variables with TIME, PRES
+    dimensions).
 
     Alternatively, specify another profile dimension instead of PRES, e.g.
     NISKIN_NUMBER.
     '''
-    profile_variables = [varnm for varnm in d.data_vars
-                         if profile_var in d[varnm].dims
-                         and 'TIME' in d[varnm].dims]
+
+    profile_variables = []
+    for varnm in ds.data_vars:
+        if require_TIME:
+            crit = profile_var in ds[varnm].dims and 'TIME' in ds[varnm].dims
+        else:
+            crit = profile_var in ds[varnm].dims
+        if crit:
+            profile_variables += [varnm]
+
     return profile_variables
+

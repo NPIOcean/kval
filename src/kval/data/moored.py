@@ -147,3 +147,26 @@ ds = data.moored.load_moored(
     )"""
 
     return ds
+
+
+# Chop record
+
+# Hand edit outlier
+
+# Programmatic edit points
+
+# Drift
+
+# Standard metadata
+
+# Threshold edit
+
+# Filtering
+
+# Recalculating sal
+
+# Calculate gsw
+
+# Interpolate onto new TIME
+
+# Compare wth CTDs

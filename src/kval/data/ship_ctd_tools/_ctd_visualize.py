@@ -43,11 +43,14 @@ def inspect_profiles(ds: 'xr.Dataset') -> None:
 
     # Determine the vertical axis variable
     y_varnm = 'PRES' if 'PRES' in ds.dims else 'NISKIN_NUMBER'
-
     y_label = f'{y_varnm} [{ds[y_varnm].units}]' if 'units' in ds[y_varnm].attrs \
               else f'{y_varnm}'
 
-    def plot_profile(TIME_index: int, variable: str, y_varnm: str, y_label: str) -> None:
+    # Determine if this is a single profile
+    is_single_profile = ds.sizes['TIME'] == 1
+
+    def plot_profile(TIME_index: int, variable: str, y_varnm: str, y_label: str,
+                     is_single_profile: bool = False) -> None:
         """
         Plot a single profile with the option to view others in the background.
 
@@ -70,25 +73,37 @@ def inspect_profiles(ds: 'xr.Dataset') -> None:
         fig, ax = plt.subplots()
 
         # Plot all profiles in black in the background
-        for nn in np.arange(ds.sizes['TIME']):
-            if nn != TIME_index:  # Skip the selected profile
-                profile = ds[variable].isel(TIME=nn, drop=True).squeeze()
-                ax.plot(profile, ds[y_varnm], color='tab:blue', lw=0.5, alpha=0.4)
+        if not is_single_profile:
+            for nn in np.arange(ds.sizes['TIME']):
+                if nn != TIME_index:  # Skip the selected profile
+                    profile = ds[variable].isel(TIME=nn, drop=True).squeeze()
+                    ax.plot(profile, ds[y_varnm], color='tab:blue', lw=0.5, alpha=0.4)
 
         # Choose marker size based on the number of points
         Nz = len(ds[y_varnm])
         ms = 2 if Nz > 100 else 2 + (100 - Nz) * 0.05
 
         # Plot the selected profile
-        profile = ds[variable].isel(TIME=TIME_index)
+        if not is_single_profile:
+            profile = ds[variable].isel(TIME=TIME_index)
+        else:
+            profile = ds[variable]
         ax.plot(profile, ds[y_varnm], alpha=0.8, lw=0.7, color='k')
         ax.plot(profile, ds[y_varnm], '.', ms=ms, alpha=1, color='tab:orange')
 
-        time_string = time.convert_timenum_to_datetime(profile.TIME, ds.TIME.units)
-        station = ds["STATION"].values[TIME_index] if 'STATION' in ds else 'N/A'
+        if not is_single_profile:
+            time_string = time.convert_timenum_to_datestring(
+                profile.TIME, ds.TIME.units)
+            station = (ds["STATION"].values[TIME_index]
+                       if 'STATION' in ds else 'N/A')
+        else:
+            time_string = time.convert_timenum_to_datestring(ds.TIME.item(),
+                                                             ds.TIME.units)
+            station = ds["STATION"].values.item() if 'STATION' in ds else 'N/A'
 
         ax.set_title(f'Station: {station}, {time_string}')
-        var_unit = ds[variable].units if 'units' in ds[variable].attrs else 'no unit specified'
+        var_unit = (ds[variable].units if 'units' in ds[variable].attrs
+                    else 'no unit specified')
         ax.set_xlabel(f'{variable} [{var_unit}]')
         ax.set_ylabel(y_label)
         ax.invert_yaxis()
@@ -109,7 +124,9 @@ def inspect_profiles(ds: 'xr.Dataset') -> None:
         layout=widgets.Layout(width='500px')
     )
 
-    profile_vars = _ctd_tools._get_profile_variables(ds, profile_var=y_varnm)
+
+    profile_vars = _ctd_tools._get_profile_variables(
+        ds, profile_var=y_varnm, require_TIME=not is_single_profile)
 
     variable_dropdown = widgets.Dropdown(
         options=profile_vars,
@@ -138,7 +155,8 @@ def inspect_profiles(ds: 'xr.Dataset') -> None:
             'TIME_index': time_index_slider,
             'variable': variable_dropdown,
             'y_varnm': widgets.fixed(y_varnm),
-            'y_label': widgets.fixed(y_label)
+            'y_label': widgets.fixed(y_label),
+            'is_single_profile': widgets.fixed(is_single_profile)
         }
     )
 
