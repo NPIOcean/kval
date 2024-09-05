@@ -3,14 +3,18 @@ KVAL.DATA.MOORED
 """
 
 import xarray as xr
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Tuple
 import numpy as np
 import functools
 import inspect
 import os
+import matplotlib.pyplot as plt
 from kval.file import sbe, rbr
 from kval.data import dataset, edit
+from kval.util import internals
 
+if internals.is_notebook():
+    from IPython.display import display, clear_output
 
 # DECORATOR TO PRESERVE PROCESSING STEPS IN METADATA
 
@@ -90,7 +94,7 @@ def load_moored(
     Load moored instrument data from a file into an xarray Dataset.
 
     Should be able to read instruments from RBR (Concerto, Solo..) and
-    SBE (SBE37, SBE16). Mlieage may vary for older file types.
+    SBE (SBE37, SBE16). Mileage may vary for older file types.
 
     Parameters:
     - file (str):
@@ -122,7 +126,7 @@ def load_moored(
     # Add PROCESSING variable with useful metadata
     # ( + remove some excessive global attributes)
     if processing_variable:
-        ds = dataset.add_processing_history_var_ctd(
+        ds = dataset.add_processing_history_var_moored(
             ds,
         )
         # Add a source_file attribute (and remove from the global attrs)
@@ -150,6 +154,174 @@ ds = data.moored.load_moored(
 
 
 # Chop record
+# Note: We do the recording to PROCESSING inside the function, not in the
+# decorator. (Too complex otherwise)
+def chop_deck(
+    ds: xr.Dataset,
+    variable: str = 'PRES',
+    sd_thr: float = 3.0,
+    indices: Optional[Tuple[int, int]] = None,
+    auto_accept: bool = False
+) -> xr.Dataset:
+    """
+    Chop away start and end parts of a time series (xarray Dataset).
+    Default behaviour is to look for the indices to remove. Looks for
+    the indices where `variable` (e.g. temperature or pressure) is a
+    specified number of standard deviations away from the mean (the user can
+    also specify the indices to cut).
+
+    Typical application: Remove data from a mooring record during which the
+    instrument was on deck or being lowered/raised through the water column.
+
+    The function can automatically suggest chopping based on the standard
+    deviation of the specified variable or allow the user to manually input
+    the desired range for chopping. A plot is displayed showing the proposed
+    chop unless `auto_accept` is set to True.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The xarray Dataset containing the data to be chopped. The dataset
+        should include the field corresponding to the specified `variable`.
+    variable : str, optional
+        The variable in the dataset used for determining chop boundaries.
+        Defaults to 'PRES'.
+    sd_thr : float, optional
+        The standard deviation threshold for determining the chop boundaries
+        when `indices` is not provided. Defaults to 3.0.
+    indices : Optional[Tuple[int, int]], optional
+        A tuple specifying the (start, stop) indices for manually chopping the
+        dataset along the TIME dimension. If not provided, the function will
+        use the standard deviation threshold to determine the range
+        automatically. Defaults to None.
+    auto_accept : bool, optional
+        If `True`, automatically accepts the suggested chop based on the
+        pressure record without prompting the user. Defaults to False.
+
+    Returns
+    -------
+    xr.Dataset
+        The chopped xarray Dataset, with the range outside the specified or
+        computed boundaries removed.
+
+    Raises
+    ------
+    ValueError
+        If the specified `variable` is not present in the dataset or if the
+        user input during the chop confirmation is invalid.
+    """
+    # Make sure we are working with a copy
+    ds = ds.copy()
+
+    # Confirm that `variable` exists in ds
+    if variable not in ds:
+        raise ValueError(
+            f'Error: Cannot do chopping based on {variable} because it '
+            'is not a variable in the datset.')
+
+    if indices is None:
+        # Calculate the mean and standard deviation
+        chop_var = ds[variable].data
+        chop_var_mean = np.ma.median(chop_var)
+        chop_var_sd = np.ma.std(chop_var)
+
+        indices = [None, None]
+
+        # If we detect deck time at start of time series:
+        # find a start index
+        if chop_var[0] < chop_var_mean - sd_thr * chop_var_sd:
+            indices[0] = np.where(
+                np.diff(chop_var < chop_var_mean
+                        - sd_thr * chop_var_sd))[0][0] + 1
+        # If we detect deck time at end of time series:
+        # find an end index
+        if chop_var[-1] < chop_var_mean - sd_thr * chop_var_sd:
+            indices[1] = np.where(
+                np.diff(chop_var < chop_var_mean
+                        - sd_thr * chop_var_sd))[0][-1]
+
+        # A slice defining the suggested "good" range
+        keep_slice = slice(*indices)
+
+        if auto_accept:
+            accept = "y"
+        else:
+            fig, ax = plt.subplots(figsize=(8, 4))
+            index = np.arange(len(chop_var))
+
+            ylab = variable
+            if hasattr(ds[variable], 'units'):
+                ylab = f'{ylab} [{ds[variable].units}]'
+
+            ax.plot(index, chop_var, "k", label=variable)
+            ax.plot(index[keep_slice], chop_var[keep_slice], "r",
+                    label="Chopped Range")
+            ax.set_xlabel("Index")
+            ax.set_ylabel(ylab)
+            ax.invert_yaxis()
+            ax.set_title(f"Suggested chop: {indices} (to red curve).")
+            ax.legend()
+
+            # Ensure plot updates and displays (different within notebook with
+            # widget backend..)
+            if internals.is_notebook():
+                display(fig)
+            else:
+                plt.show(block=False)
+
+            print(f"Suggested chop: {indices} (to red curve)")
+            accept = input("Accept (y/n)?: ")
+
+            # Close the plot after input tochop_var avoid re-display
+            plt.close(fig)
+
+        if accept.lower() == "n":
+            print("Not accepted -> Not chopping anything now.")
+            print("NOTE: run chop(ds, indices =[A, B]) to manually set chop.")
+            return ds
+
+        elif accept.lower() == "y":
+            pass
+        else:
+            raise ValueError(f'I do not understand your input "{accept}"'
+                             '. Only "y" or "n" works. -> Exiting.')
+    else:
+        keep_slice = slice(indices[0], indices[1] + 1)
+
+    L0 = ds.sizes["TIME"]
+    print(f"Chopping to index: {indices}")
+    ds = ds.isel(TIME=keep_slice)
+
+    L1 = ds.sizes["TIME"]
+    net_str = (f"Chopped {L0 - L1} samples using -> {indices} "
+               f"(total samples {L0} -> {L1})")
+    print(net_str)
+
+    # Record to PROCESSING metadata variable
+    if "PROCESSING" in ds:
+
+        if keep_slice.start is None and keep_slice.stop is not None:
+            start_end_str = 'end'
+            indices_str = f'None, {keep_slice.stop-1}'
+        elif keep_slice.start is not None and keep_slice.stop is None:
+            start_end_str = 'start'
+            indices_str = f'{keep_slice.start}, None'
+        elif keep_slice.start is not None and keep_slice.stop is not None:
+            start_end_str = 'start and end'
+            indices_str = f'{keep_slice.start}, {keep_slice.stop-1}'
+
+        ds["PROCESSING"].attrs["post_processing"] += (
+            f"Chopped {L0 - L1} samples at the {start_end_str} "
+            "of the time series.\n"
+        )
+
+        ds["PROCESSING"].attrs["python_script"] += (
+            f'\n\n# Chopping away samples from the {start_end_str}'
+            ' of the time series\n'
+            f'ds = data.moored.chop_deck(ds, indices = [{indices_str}])'
+        )
+
+    return ds
 
 # Hand edit outlier
 
