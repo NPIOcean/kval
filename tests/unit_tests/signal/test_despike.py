@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 import xarray as xr
-from kval.signal import filt, despike
+from kval.signal import despike
 
 @pytest.fixture
 def sample_dataset():
@@ -28,7 +28,7 @@ def sample_dataset():
 def test_despike_default(sample_dataset):
     """Test despiking with default parameters."""
     ds = sample_dataset
-    result = despike.despike_window(
+    result = despike.despike_rolling(
         ds, var_name="temp", window_size=11, n_std=1.5, dim="time"
     )
 
@@ -39,7 +39,7 @@ def test_despike_default(sample_dataset):
 def test_despike_return_index(sample_dataset):
     """Test despiking with return_index=True."""
     ds = sample_dataset
-    result, outliers = despike.despike_window(
+    result, outliers = despike.despike_rolling(
         ds, var_name="temp", window_size=11, n_std=1.5, dim="time", return_index=True
     )
 
@@ -54,14 +54,14 @@ def test_despike_plot(sample_dataset, monkeypatch):
     monkeypatch.setattr(plt, "show", lambda: None)
 
     ds = sample_dataset
-    despike.despike_window(
+    despike.despike_rolling(
         ds, var_name="temp", window_size=11, n_std=1.5, dim="time", plot=True
     )
 
 def test_despike_verbose(sample_dataset, capsys):
     """Test despiking with verbose=True."""
     ds = sample_dataset
-    despike.despike_window(
+    despike.despike_rolling(
         ds, var_name="temp", window_size=11, n_std=1.5, dim="time", verbose=True
     )
     captured = capsys.readouterr()
@@ -70,7 +70,7 @@ def test_despike_verbose(sample_dataset, capsys):
 def test_despike_min_periods(sample_dataset):
     """Test despiking with min_periods set."""
     ds = sample_dataset
-    result = despike.despike_window(
+    result = despike.despike_rolling(
         ds, var_name="temp", window_size=11, n_std=1.5, dim="time", min_periods=3
     )
     assert isinstance(result, xr.Dataset), "Result should be a Dataset."

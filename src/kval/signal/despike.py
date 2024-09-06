@@ -11,13 +11,14 @@ from kval.signal import filt
 from typing import Union, Tuple
 import matplotlib.pyplot as plt
 
-def despike_window(
+
+def despike_rolling(
     ds: xr.Dataset,
     var_name: str,
     window_size: int,
     n_std: float,
     dim: str,
-    filter_type: str = 'mean',
+    filter_type: str = 'median',
     min_periods: Union[int, None] = None,
     return_ds: bool = True,
     return_index: bool = False,
@@ -103,10 +104,14 @@ def despike_window(
     # Optional plotting
     if plot:
         fig, ax = plt.subplots(2, 1, sharex=True)
-        ax[0].plot(ds[dim], ds[var_name], 'k', label=f'Original {var_name} data', alpha=0.6)
-        ax[0].plot(var_mean[dim], var_despiked, 'tab:red', label=f'Despiked {var_name} data')
-        ax[1].plot(var_mean[dim], np.abs(var_mean - ds[var_name]), label='| Data$-$rolling mean |', lw=1)
-        ax[1].plot(var_mean[dim], n_std * var_sd, 'k', lw=0.4, label=f'{n_std} $\\times$ Rolling std')
+        ax[0].plot(ds[dim], ds[var_name], 'k',
+                   label=f'Original {var_name} data', alpha=0.6)
+        ax[0].plot(var_mean[dim], var_despiked, 'tab:red',
+                   label=f'Despiked {var_name} data')
+        ax[1].plot(var_mean[dim], np.abs(var_mean - ds[var_name]),
+                   label='| Data$-$rolling mean |', lw=1)
+        ax[1].plot(var_mean[dim], n_std * var_sd, 'k', lw=0.4,
+                   label=f'{n_std} $\\times$ Rolling std')
         ax[1].plot(var_mean[dim][is_outside_criterion],
                    np.abs(var_mean - ds[var_name])[is_outside_criterion],
                    '.r', label='Labelled as outlier')
@@ -117,7 +122,6 @@ def despike_window(
                 axn.set_ylabel(ds[var_name].attrs['units'])
         fig.suptitle(f'Despiking `{var_name}` along the dimension `{dim}`:')
 
-
     # Optional printing
     if verbose:
         n_removed = np.sum(is_outside_criterion).item()
@@ -125,7 +129,6 @@ def despike_window(
             f'Removed {n_removed} points from {var_name} after despiking'
             f' along dimension {dim}.'
         )
-
 
     # Return options based on flags
     if return_ds:

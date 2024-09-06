@@ -3,18 +3,19 @@ KVAL.DATA.MOORED
 """
 
 import xarray as xr
-from typing import List, Optional, Union, Tuple
+from typing import Optional, Tuple, Union
 import numpy as np
 import functools
 import inspect
 import os
 import matplotlib.pyplot as plt
 from kval.file import sbe, rbr
-from kval.data import dataset, edit
+from kval.data import dataset
 from kval.util import internals
+from kval.signal import despike
 
 if internals.is_notebook():
-    from IPython.display import display, clear_output
+    from IPython.display import display
 
 # DECORATOR TO PRESERVE PROCESSING STEPS IN METADATA
 
@@ -69,7 +70,8 @@ def record_processing(description_template, py_comment=None):
                             args_list.append(f"{name}={value}")
 
             function_call = (
-                f"ds = data.moored.{func.__name__}(ds, " f"{', '.join(args_list)})"
+                f"ds = data.moored.{func.__name__}(ds, "
+                f"{', '.join(args_list)})"
             )
 
             if py_comment:
@@ -78,7 +80,8 @@ def record_processing(description_template, py_comment=None):
                     f"\n{function_call}"
                 )
             else:
-                ds["PROCESSING"].attrs["python_script"] += f"\n\n{function_call}"
+                ds["PROCESSING"].attrs["python_script"] += (
+                    f"\n\n{function_call}")
             return ds
 
         return wrapper
@@ -130,7 +133,7 @@ def load_moored(
             ds,
         )
         # Add a source_file attribute (and remove from the global attrs)
-        ds.PROCESSING.attrs["source_file"]= ds.source_files
+        ds.PROCESSING.attrs["source_file"] = ds.source_files
 
         # Remove some unwanted global atributes
         for attr_name in ['source_files', 'filename',
@@ -325,7 +328,73 @@ def chop_deck(
 
 # Hand edit outlier
 
+
 # Programmatic edit points
+def despike_rolling(
+    ds: xr.Dataset,
+    var_name: str,
+    window_size: int,
+    n_std: float,
+    dim: str = 'TIME',
+    filter_type: str = 'median',
+    min_periods: Union[int, None] = None,
+    plot: bool = False,
+    verbose: bool = False,
+) -> xr.Dataset:
+    '''
+
+    Despike a variable in a dataset by identifying and removing outliers
+    based on a rolling mean/median and standard deviation.
+
+    Outliers are data points where the variable deviates from the rolling
+    mean/median by a number of standard deviations. Both the mean/median
+    and standard deviation are calculated within a rolling window centered
+    on each data point.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        The dataset containing the variable to despike.
+    var_name : str
+        The name of the variable to despike.
+    window_size : int
+        The size of the rolling window for calculating the mean/median
+        and standard deviation.
+    n_std : float
+        The number of standard deviations used as the threshold to identify
+        outliers.
+    dim : str
+        The dimension along which to calculate the rolling statistics.
+        Default: 'TIME'.
+    filter_type : str, optional
+        The type of filter to apply ('mean' or 'median'). Default is 'mean'.
+    min_periods : int or None, optional
+        The minimum number of observations in the window required to return
+        a valid result. Default is None.
+    plot : bool, optional
+        If True, plots the original data and the despiking results.
+        Default is False.
+    verbose : bool, optional
+        If True, print some basic info about the result of the despiking.
+        Default is False.
+    Returns
+    -------
+
+        - If `return_ds` is True and `return_index` is False: returns the
+          updated dataset with the despiked variable.
+        - If `return_ds` is False and `return_index` is False: returns the
+          despiked variable as a DataArray.
+        - If `return_ds` is True and `return_index` is True: returns a tuple
+          of the updated dataset and a mask of outliers.
+        - If `return_ds` is False and `return_index` is True: returns a tuple
+          of the despiked variable and a mask of outliers.
+    '''
+
+    ds = despike.despike_rolling(
+        ds, var_name, window_size, n_std, dim, filter_type, min_periods,
+        True, False, plot, verbose)
+
+    return ds
 
 # Drift
 
