@@ -2,7 +2,7 @@
 
 Collection of Python functions for working with oceanography data processing and analysis.
 
-Maintained by the Oceanography section at the [Norwegian Polar Institute](https://www.npolar.no/en/). 
+Maintained by the Oceanography section at the [Norwegian Polar Institute](https://www.npolar.no/en/).
 ___
 
 Last release,`0.0.2-beta`:
@@ -21,15 +21,19 @@ ____
 
 ##### Submodules
 
-- `file`: Converting to and from various file format (e.g. read CTD .cnv data to netCDF) 
+`*` Not implemented
+
+- `file`: Converting to and from various file format (e.g. read CTD .cnv data to netCDF)
 - `data`: Data post-processing and QC (e.g. CTD post-processing)
 - `metadata`: Handling and standardizing metadata according to CF conventions
-- `plots`: Various tools to help make nice (matplotlib) figures
+- `plots*`: Various tools to help make nice (matplotlib) figures
 - `map`: Tools for making maps
-- `geo`: Geographical calculations (coordinate transformations, point-to-point distances etc)  
+- `geo`: Geographical calculations (coordinate transformations, point-to-point distances etc)
 - `ocean`: Oceanography-specific tools (e.g. vertical modes, turner angles, wkb scaling, geostrophical calculations)
-- `calc`: Various useful functions for numerical calculations. 
+- `calc`: Various useful functions for numerical calculations.
 - `util`: Various backend support functions and wrappers for xarray functionality.
+- `signal`: Filtering, spectral analysis, etc.
+
 </details>
 
 ____
@@ -54,19 +58,19 @@ ____
 ###### Metadata
 
 - All operations that modify data should be recorded in the file metadata.
-- Wherever possibly, and at as early a stage as possible, all available useful metadata should be added to Datasets. 
+- Wherever possibly, and at as early a stage as possible, all available useful metadata should be added to Datasets.
 - Metadata formatting should adhere to [CF](http://cfconventions.org/) and [ACDD](https://wiki.esipfed.org/Attribute_Convention_for_Data_Discovery_1-3) conventions, supplemented by:
     - [OceanSITES](http://www.oceansites.org/docs/oceansites_data_format_reference_manual_20140917.pdf)
     - [2021 NPI NetCDF guidelines](https://gitlab.com/npolar/netcdf-creator/-/blob/main/docs/netcdf_standard_npi.pdf?ref_type=heads)
 
 ###### Project
 
-- The project is maintained by the Oceanography section at the [Norwegian Polar Institute](www.npolar.no/en). 
+- The project is maintained by the Oceanography section at the [Norwegian Polar Institute](www.npolar.no/en).
     - External contributions (pull requests, issues, whatever) are very welcome!
-- We will attempt to follow the guidelines from the 
+- We will attempt to follow the guidelines from the
   [Scientific Python Library Development Guide](https://learn.scientific-python.org/development/).
-- *Releases* will be published relatively often, whenever a new functionality has been added. 
-   Releases will be archived on [zenodo](www.zenodo.org) and given a DOI. 
+- *Releases* will be published relatively often, whenever a new functionality has been added.
+   Releases will be archived on [zenodo](www.zenodo.org) and given a DOI.
 
 </details>
 
@@ -76,7 +80,7 @@ ____
 <details>
 <summary><strong>RELEASE NOTES</strong></summary>
 
-- *0.1.0 (in development)*: 
+- *0.1.0 (in development)*:
     - Refactoring of large parts of the code for structure, clarity and efficiency.
     - ~~Complete reproducability and self-documentation in the CTD processing functionality.~~
     - ~~Functionality for parsing moored CTD sensors (RBR and SBE)~~
@@ -90,12 +94,12 @@ ____
     - Full sphinx documentation
 
 
-- *0.0.2*: 
+- *0.0.2*:
     - Name change from `oceanograpy` to `kval`.
     - Introduction of test suite.
     - Other minor changes.
 
-- *0.0.1:* 
+- *0.0.1:*
     - Initial release.
     - Functionality tailored for CTD processing.
 
@@ -117,7 +121,7 @@ Renamed from `oceanograpy` to `kval`
 
 STATUS 08.12.23:
 
-- Developed core functionality for editing CTD data. Relies pretty heavily on Jupyter/interactive widgets. 
+- Developed core functionality for editing CTD data. Relies pretty heavily on Jupyter/interactive widgets.
 
 *TO DO:*
 

@@ -1,7 +1,7 @@
 import pytest
 import xarray as xr
 import numpy as np
-from kval.util import filt  # Update this path to your actual import
+from kval.signal import filt  # Update this path to your actual import
 
 @pytest.fixture
 def sample_dataset():
