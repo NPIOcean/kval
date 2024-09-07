@@ -3,15 +3,15 @@ KVAL.DATA.MOORED
 """
 
 import xarray as xr
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, List
 import numpy as np
 import functools
 import inspect
 import os
 import gsw
 import matplotlib.pyplot as plt
-from kval.file import sbe, rbr
-from kval.data import dataset
+from kval.file import sbe, rbr, matfile
+from kval.data import dataset, edit
 from kval.util import internals
 from kval.signal import despike, filt
 
@@ -405,11 +405,59 @@ def despike_rolling(
 
 # Threshold edit
 
+
+@record_processing(
+    "Rejected values of {variable} outside the range ({min_val}, {max_val})",
+    py_comment="Rejecting values of {variable} outside the range ({min_val}, {max_val}):",
+)
+def threshold(
+    ds: xr.Dataset,
+    variable: str,
+    min_val: Optional[float] = None,
+    max_val: Optional[float] = None,
+) -> xr.Dataset:
+    """
+    Apply a threshold to a specified variable in an xarray Dataset, setting
+    values outside the specified range (min_val, max_val) to NaN.
+
+    Also modifies the valid_min and valid_max variable attributes.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The input xarray Dataset.
+    variable : str
+        The name of the variable within the Dataset to be thresholded.
+    min_val : Optional[float], default=None
+        The minimum allowed value for the variable. Values less than
+        this will be set to NaN. If None, no lower threshold is applied.
+    max_val : Optional[float], default=None
+        The maximum allowed value for the variable. Values greater than
+        this will be set to NaN. If None, no upper threshold is applied.
+
+    Returns
+    -------
+    xr.Dataset
+        A new xarray Dataset with the thresholded variable. The `valid_min`
+        and `valid_max` attributes are updated accordingly.
+
+    Examples
+    --------
+    # Reject temperatures below -1 and above 3
+    ds_thresholded = threshold(ds, 'TEMP', max_val=3, min_val=-1)
+    """
+    ds = edit.threshold(ds=ds, variable=variable, max_val=max_val,
+                        min_val=min_val)
+
+    return ds
+
 # Filtering
 
 @record_processing(
     "Ran a {window_size}-point rolling {filter_type} filter "
     "on the variable {dim}.",
+    py_comment=('Run a {window_size}-point rolling {filter_type} filter '
+                'on {dim}')
 )
 def rolling_mean(
         ds: xr.Dataset, var_name: str, window_size: int,
@@ -457,23 +505,52 @@ def rolling_mean(
 
 # Recalculating sal
 
-def calculate_PSAL(ds, cndc_var='CNDC', temp_var='TEMP', pres_var='PRES',
-                   psal_var='PSAL'):
-    '''
-    Recalculate Practical Salinity PSAL from conductivity, temperature and
-    pressure using the gsw module.
 
-    Note: The operation will preserve the metadata attributes of PSAL.
-          If the input sensors change (e.g., if you used another temperature
-          sensor), you should update the PSAL metadata attributes!
-    '''
+@record_processing(
+    "Recalculated PSAL using the GSW-Python module.",
+)
+def calculate_PSAL(
+        ds: xr.Dataset, cndc_var: str = 'CNDC', temp_var: str = 'TEMP',
+        pres_var: str = 'PRES', psal_var: str = 'PSAL') -> xr.Dataset:
 
+    """Recalculate Practical Salinity (PSAL) from conductivity, temperature,
+    and pressure using the GSW-Python module
+    (https://teos-10.github.io/GSW-Python/).
+
+    This function updates the PSAL variable in the dataset with newly computed
+    salinity values while preserving the metadata attributes of PSAL.
+
+    Args:
+        ds (xr.Dataset):
+            The input dataset containing conductivity, temperature, and
+            pressure variables.
+        cndc_var (str):
+            The name of the conductivity variable in the dataset.
+            Defaults to 'CNDC'.
+        temp_var (str):
+            The name of the temperature variable in the dataset.
+            Defaults to 'TEMP'.
+        pres_var (str):
+            The name of the pressure variable in the dataset.
+            Defaults to 'PRES'.
+        psal_var (str):
+            The name of the salinity variable in the dataset.
+            Defaults to 'PSAL'.
+
+    Returns:
+        xr.Dataset: The updated dataset with recalculated PSAL values.
+
+    Notes:
+        The operation preserves PSAL metadata attributes. If the input sensors
+        change (e.g., if a different temperature sensor is used), the PSAL
+        metadata attributes should be updated accordingly.
+    """
     PSAL = gsw.SP_from_C(ds[cndc_var], ds[temp_var], ds[pres_var])
     ds[psal_var][:] = PSAL
 
     ds[psal_var].attrs['note'] = (
-        f'Computed from {cndc_var}, {temp_var}, {pres_var} using the Python'
-        ' gsw module. ')
+        f'Computed from {cndc_var}, {temp_var}, {pres_var} '
+        'using the Python gsw module.')
 
     return ds
 
@@ -482,3 +559,111 @@ def calculate_PSAL(ds, cndc_var='CNDC', temp_var='TEMP', pres_var='PRES',
 # Interpolate onto new TIME
 
 # Compare wth CTDs
+
+
+### Load and export
+
+
+
+# Note: Doing PROCESSING.post_processing record keeping within the
+# drop_variables() function because we want to access the *dropped* list.
+@record_processing("", py_comment="Dropping some variables")
+def drop_variables(
+    ds: xr.Dataset,
+    retain_vars: Optional[Union[List[str], bool]] = None,
+    drop_vars: Optional[List[str]] = None,
+) -> xr.Dataset:
+    """
+    Drop measurement variables from the dataset based on specified criteria.
+
+    This function retains or drops variables from an xarray.Dataset based on
+    provided lists of variables to retain or drop. If `retain_vars` is True,
+    no variables will be dropped.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The dataset from which variables will be dropped.
+    retain_vars : Optional[Union[List[str], bool]], default=None
+        List of variables to retain. If a boolean `True` is provided, all
+        variables are retained (no changes made). This parameter is ignored if
+        `drop_vars` is specified.
+    drop_vars : Optional[List[str]], default=None
+        List of variables to drop from the dataset. If specified, this will
+        override `retain_vars`.
+
+    Returns
+    -------
+    xr.Dataset
+        The modified dataset with specified variables dropped or retained.
+
+    Notes
+    -----
+    Provide *either* `retain_vars` or `drop_vars`, but not both.
+    Variables without a TIME dimension are always retained.
+
+    """
+    if retain_vars is None and drop_vars is None:
+        return ds
+
+    if drop_vars is not None:
+        ds = ds.drop_vars(drop_vars)
+        dropped = drop_vars
+    else:
+        if retain_vars is None:
+            raise ValueError(
+                "Either `drop_vars` or `retain_vars` must be specified, "
+                "not both."
+            )
+
+        if isinstance(retain_vars, bool):
+            if retain_vars:
+                return ds
+            retain_vars = []
+
+        all_vars = list(ds.data_vars)
+        dropped = []
+        for varnm in all_vars:
+            if varnm not in retain_vars and "TIME" in ds[varnm].dims:
+                ds = ds.drop_vars(varnm)
+                dropped.append(varnm)
+
+    if dropped:
+        drop_str = f"Dropped these variables from the Dataset: {dropped}."
+        print(drop_str)
+        if "PROCESSING" in ds:
+            ds["PROCESSING"].attrs["post_processing"] += f"{drop_str}\n"
+
+    return ds
+
+
+@record_processing(
+    "Converted dataset to MATLAB .mat file '{outfile}'. Simplify: {simplify}.",
+    "Converted dataset to MATLAB .mat file '{outfile}' with simplify={simplify}.",
+)
+def to_mat(ds, outfile, simplify=False):
+    """
+    Convert the CTD data (xarray.Dataset) to a MATLAB .mat file.
+
+    A field 'TIME_mat' with Matlab datenums is added along with the data.
+
+    Parameters:
+    - ds (xarray.Dataset): Input dataset to be converted.
+    - outfile (str): Output file path for the MATLAB .mat file. If the path
+      doesn't end with '.mat', it will be appended.
+    - simplify (bool, optional): If True, simplify the dataset by extracting
+      only coordinate and data variables (no metadata attributes). If False,
+      the matfile will be a struct containing [attrs, data_vars, coords, dims].
+      Defaults to False.
+
+    Returns:
+    None: The function saves the dataset as a MATLAB .mat file.
+
+    Example:
+    >>> ctd.xr_to_mat(ds, 'output_matfile', simplify=True)
+    """
+    # Drop the empty PROCESSING variable (doesn't work well with MATLAB)
+    ds_wo_proc = drop_variables(ds, drop_vars="PROCESSING")
+
+    # Also transposing dimensions to PRES, TIME for ease of plotting etc in MATLAB.
+    matfile.xr_to_mat(ds_wo_proc.transpose(), outfile, simplify=simplify)
