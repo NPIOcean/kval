@@ -8,11 +8,12 @@ import numpy as np
 import functools
 import inspect
 import os
+import gsw
 import matplotlib.pyplot as plt
 from kval.file import sbe, rbr
 from kval.data import dataset
 from kval.util import internals
-from kval.signal import despike
+from kval.signal import despike, filt
 
 if internals.is_notebook():
     from IPython.display import display
@@ -330,6 +331,7 @@ def chop_deck(
 
 
 # Programmatic edit points
+# LACKS PROCESSING LOG
 def despike_rolling(
     ds: xr.Dataset,
     var_name: str,
@@ -396,6 +398,7 @@ def despike_rolling(
 
     return ds
 
+
 # Drift
 
 # Standard metadata
@@ -404,7 +407,75 @@ def despike_rolling(
 
 # Filtering
 
+@record_processing(
+    "Ran a {window_size}-point rolling {filter_type} filter "
+    "on the variable {dim}.",
+)
+def rolling_mean(
+        ds: xr.Dataset, var_name: str, window_size: int,
+        filter_type: str = 'mean', dim: str = 'TIME',
+        min_periods: Union[bool, int] = None,
+        nan_edges: bool = True) -> xr.Dataset:
+    """
+    Apply a running mean or median filter on a variable of an xarray Dataset
+    along a specific dimension, with options to handle NaNs and edge values.
+
+    Parameters:
+    - ds: xarray.Dataset
+        The dataset containing the variable to filter.
+    - var_name: str
+        The name of the variable in the dataset to apply the filter on.
+    - dim: str
+        The dimension along which to apply the filter.
+        Default: TIME
+    - window_size: int
+        The size of the rolling window.
+    - filter_type: str, optional
+        The type of filter to apply: 'mean' for running mean, 'median' for
+        running median, 'sd' for standard deviation. Defaults to 'mean'.
+    - min_periods: Union[bool, int], optional
+        Minimum number of observations in the window required to have a value.
+        If an integer, it specifies the minimum number of observations in a
+        rolling window.
+        If `None` (default), all windows with a NaN will be set to Nan.
+    - nan_edges: bool, optional
+        Whether to set edge values (half of the window length) to NaN.
+        (Redundant if min_periods is set to `None`)
+        Defaults to `True`.
+
+    Returns:
+    - ds_filt: xarray.Dataset
+        The dataset with the filtered variable, where edge values may be NaN
+        if `nan_edges` is `True`.
+    """
+
+    ds = filt.rolling(ds=ds, var_name=var_name, window_size=window_size,
+                      filter_type=filter_type, dim=dim,
+                      min_periods=min_periods, nan_edges=nan_edges)
+
+    return ds
+
 # Recalculating sal
+
+def calculate_PSAL(ds, cndc_var='CNDC', temp_var='TEMP', pres_var='PRES',
+                   psal_var='PSAL'):
+    '''
+    Recalculate Practical Salinity PSAL from conductivity, temperature and
+    pressure using the gsw module.
+
+    Note: The operation will preserve the metadata attributes of PSAL.
+          If the input sensors change (e.g., if you used another temperature
+          sensor), you should update the PSAL metadata attributes!
+    '''
+
+    PSAL = gsw.SP_from_C(ds[cndc_var], ds[temp_var], ds[pres_var])
+    ds[psal_var][:] = PSAL
+
+    ds[psal_var].attrs['note'] = (
+        f'Computed from {cndc_var}, {temp_var}, {pres_var} using the Python'
+        ' gsw module. ')
+
+    return ds
 
 # Calculate gsw
 
