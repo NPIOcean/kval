@@ -137,13 +137,31 @@ def load_moored(
         ds.PROCESSING.attrs["source_file"] = ds.source_files
 
         # Remove some unwanted global atributes
-        for attr_name in ['source_files', 'filename',
-                          'SBE_flags_applied', 'SBE_processing_date']:
+        for attr_name in [
+            "source_files",
+            "filename",
+            "SBE_flags_applied",
+            "SBE_processing_date",
+        ]:
             if attr_name in ds.attrs:
                 del ds.attrs[attr_name]
 
+        # For SBE: Move the SBE_processing attribute to PROCESSING.
+        if instr_type == "SBE" and "SBE_processing" in ds.attrs:
+            ds.PROCESSING.attrs["SBE_processing"] = ds.SBE_processing
+            del ds.attrs['SBE_processing']
+
+            # Adde exlanation of `SBE_processing` to the `comment` attribute
+            ds.PROCESSING.attrs["comment"] += (
+                '# SBE_processing #:\nSummary of the post-processing applied '
+                'within SeaBird software to produce the .cnv file.'
+            )
+
         # Add python scipt snipped to reproduce this operation
-        ds.PROCESSING.attrs["python_script"] += f"""from kval import data
+        ds.PROCESSING.attrs[
+            "python_script"
+        ] += f"""from kval import data
+
 
 data_dir = "./" # Directory containing `filename` (MUST BE SET BY THE USER!)
 filename = "{os.path.basename(file)}"
@@ -162,10 +180,10 @@ ds = data.moored.load_moored(
 # decorator. (Too complex otherwise)
 def chop_deck(
     ds: xr.Dataset,
-    variable: str = 'PRES',
+    variable: str = "PRES",
     sd_thr: float = 3.0,
     indices: Optional[Tuple[int, int]] = None,
-    auto_accept: bool = False
+    auto_accept: bool = False,
 ) -> xr.Dataset:
     """
     Chop away start and end parts of a time series (xarray Dataset).
@@ -220,8 +238,9 @@ def chop_deck(
     # Confirm that `variable` exists in ds
     if variable not in ds:
         raise ValueError(
-            f'Error: Cannot do chopping based on {variable} because it '
-            'is not a variable in the datset.')
+            f"Error: Cannot do chopping based on {variable} because it "
+            "is not a variable in the datset."
+        )
 
     if indices is None:
         # Calculate the mean and standard deviation
@@ -234,15 +253,17 @@ def chop_deck(
         # If we detect deck time at start of time series:
         # find a start index
         if chop_var[0] < chop_var_mean - sd_thr * chop_var_sd:
-            indices[0] = np.where(
-                np.diff(chop_var < chop_var_mean
-                        - sd_thr * chop_var_sd))[0][0] + 1
+            indices[0] = (
+                np.where(np.diff(chop_var < chop_var_mean
+                                 - sd_thr * chop_var_sd))[0][0]
+                + 1
+            )
         # If we detect deck time at end of time series:
         # find an end index
         if chop_var[-1] < chop_var_mean - sd_thr * chop_var_sd:
             indices[1] = np.where(
-                np.diff(chop_var < chop_var_mean
-                        - sd_thr * chop_var_sd))[0][-1]
+                np.diff(chop_var < chop_var_mean - sd_thr * chop_var_sd)
+            )[0][-1]
 
         # A slice defining the suggested "good" range
         keep_slice = slice(*indices)
@@ -254,12 +275,12 @@ def chop_deck(
             index = np.arange(len(chop_var))
 
             ylab = variable
-            if hasattr(ds[variable], 'units'):
-                ylab = f'{ylab} [{ds[variable].units}]'
+            if hasattr(ds[variable], "units"):
+                ylab = f"{ylab} [{ds[variable].units}]"
 
             ax.plot(index, chop_var, "k", label=variable)
-            ax.plot(index[keep_slice], chop_var[keep_slice], "r",
-                    label="Chopped Range")
+            ax.plot(index[keep_slice], chop_var[keep_slice],
+                    "r", label="Chopped Range")
             ax.set_xlabel("Index")
             ax.set_ylabel(ylab)
             ax.invert_yaxis()
@@ -287,8 +308,10 @@ def chop_deck(
         elif accept.lower() == "y":
             pass
         else:
-            raise ValueError(f'I do not understand your input "{accept}"'
-                             '. Only "y" or "n" works. -> Exiting.')
+            raise ValueError(
+                f'I do not understand your input "{accept}"'
+                '. Only "y" or "n" works. -> Exiting.'
+            )
     else:
         keep_slice = slice(indices[0], indices[1] + 1)
 
@@ -297,22 +320,24 @@ def chop_deck(
     ds = ds.isel(TIME=keep_slice)
 
     L1 = ds.sizes["TIME"]
-    net_str = (f"Chopped {L0 - L1} samples using -> {indices} "
-               f"(total samples {L0} -> {L1})")
+    net_str = (
+        f"Chopped {L0 - L1} samples using -> {indices} "
+        f"(total samples {L0} -> {L1})"
+    )
     print(net_str)
 
     # Record to PROCESSING metadata variable
     if "PROCESSING" in ds:
 
         if keep_slice.start is None and keep_slice.stop is not None:
-            start_end_str = 'end'
-            indices_str = f'None, {keep_slice.stop-1}'
+            start_end_str = "end"
+            indices_str = f"None, {keep_slice.stop-1}"
         elif keep_slice.start is not None and keep_slice.stop is None:
-            start_end_str = 'start'
-            indices_str = f'{keep_slice.start}, None'
+            start_end_str = "start"
+            indices_str = f"{keep_slice.start}, None"
         elif keep_slice.start is not None and keep_slice.stop is not None:
-            start_end_str = 'start and end'
-            indices_str = f'{keep_slice.start}, {keep_slice.stop-1}'
+            start_end_str = "start and end"
+            indices_str = f"{keep_slice.start}, {keep_slice.stop-1}"
 
         ds["PROCESSING"].attrs["post_processing"] += (
             f"Chopped {L0 - L1} samples at the {start_end_str} "
@@ -320,30 +345,38 @@ def chop_deck(
         )
 
         ds["PROCESSING"].attrs["python_script"] += (
-            f'\n\n# Chopping away samples from the {start_end_str}'
-            ' of the time series\n'
-            f'ds = data.moored.chop_deck(ds, indices = [{indices_str}])'
+            f"\n\n# Chopping away samples from the {start_end_str}"
+            " of the time series\n"
+            f"ds = data.moored.chop_deck(ds, indices = [{indices_str}])"
         )
 
     return ds
 
-# Hand edit outlier
+
+# Hand edit outliers
 
 
 # Programmatic edit points
-# LACKS PROCESSING LOG
+# Note: Processing history is pwritten in the function itself
+
+@record_processing(
+    "",
+    py_comment=(
+        "Find/reject {var_name} outliers (points exceeding {window_size}-"
+        "pt rolling {filter_type} by>{n_std} SDs."),
+)
 def despike_rolling(
     ds: xr.Dataset,
     var_name: str,
     window_size: int,
     n_std: float,
-    dim: str = 'TIME',
-    filter_type: str = 'median',
+    dim: str = "TIME",
+    filter_type: str = "median",
     min_periods: Union[int, None] = None,
     plot: bool = False,
     verbose: bool = False,
 ) -> xr.Dataset:
-    '''
+    """
 
     Despike a variable in a dataset by identifying and removing outliers
     based on a rolling mean/median and standard deviation.
@@ -390,11 +423,30 @@ def despike_rolling(
           of the updated dataset and a mask of outliers.
         - If `return_ds` is False and `return_index` is True: returns a tuple
           of the despiked variable and a mask of outliers.
-    '''
+    """
 
-    ds = despike.despike_rolling(
-        ds, var_name, window_size, n_std, dim, filter_type, min_periods,
-        True, False, plot, verbose)
+    ds, is_outside_criterion = despike.despike_rolling(
+        ds,
+        var_name,
+        window_size,
+        n_std,
+        dim,
+        filter_type,
+        min_periods,
+        True,
+        True,
+        plot,
+        verbose,
+    )
+
+    n_removed = np.sum(is_outside_criterion).item()
+    if 'PROCESSING' in ds:
+        ds.PROCESSING.attrs['post_processing'] +=(
+            f"Edited out spikes {var_name} using a rolling window criterion. "
+            f"Values exceeding the {window_size}-point rolling {filter_type} "
+            f"by more than {n_std} (rolling) standard deviations were "
+            f"interpreted as outliers and masked (found {n_removed} "
+            "outliers).")
 
     return ds
 
@@ -408,7 +460,8 @@ def despike_rolling(
 
 @record_processing(
     "Rejected values of {variable} outside the range ({min_val}, {max_val})",
-    py_comment="Rejecting values of {variable} outside the range ({min_val}, {max_val}):",
+    py_comment=("Rejecting values of {variable} outside the range "
+                "({min_val}, {max_val}):"),
 )
 def threshold(
     ds: xr.Dataset,
@@ -446,24 +499,30 @@ def threshold(
     # Reject temperatures below -1 and above 3
     ds_thresholded = threshold(ds, 'TEMP', max_val=3, min_val=-1)
     """
-    ds = edit.threshold(ds=ds, variable=variable, max_val=max_val,
-                        min_val=min_val)
+    ds = edit.threshold(ds=ds, variable=variable,
+                        max_val=max_val, min_val=min_val)
 
     return ds
 
+
 # Filtering
+
 
 @record_processing(
     "Ran a {window_size}-point rolling {filter_type} filter "
     "on the variable {dim}.",
-    py_comment=('Run a {window_size}-point rolling {filter_type} filter '
-                'on {dim}')
+    py_comment=("Run a {window_size}-point rolling {filter_type} filter "
+                "on {dim}"),
 )
 def rolling_mean(
-        ds: xr.Dataset, var_name: str, window_size: int,
-        filter_type: str = 'mean', dim: str = 'TIME',
-        min_periods: Union[bool, int] = None,
-        nan_edges: bool = True) -> xr.Dataset:
+    ds: xr.Dataset,
+    var_name: str,
+    window_size: int,
+    filter_type: str = "mean",
+    dim: str = "TIME",
+    min_periods: Union[bool, int] = None,
+    nan_edges: bool = True,
+) -> xr.Dataset:
     """
     Apply a running mean or median filter on a variable of an xarray Dataset
     along a specific dimension, with options to handle NaNs and edge values.
@@ -497,22 +556,33 @@ def rolling_mean(
         if `nan_edges` is `True`.
     """
 
-    ds = filt.rolling(ds=ds, var_name=var_name, window_size=window_size,
-                      filter_type=filter_type, dim=dim,
-                      min_periods=min_periods, nan_edges=nan_edges)
+    ds = filt.rolling(
+        ds=ds,
+        var_name=var_name,
+        window_size=window_size,
+        filter_type=filter_type,
+        dim=dim,
+        min_periods=min_periods,
+        nan_edges=nan_edges,
+    )
 
     return ds
+
 
 # Recalculating sal
 
 
 @record_processing(
     "Recalculated PSAL using the GSW-Python module.",
+    py_comment="Recalculating PSAL"
 )
 def calculate_PSAL(
-        ds: xr.Dataset, cndc_var: str = 'CNDC', temp_var: str = 'TEMP',
-        pres_var: str = 'PRES', psal_var: str = 'PSAL') -> xr.Dataset:
-
+    ds: xr.Dataset,
+    cndc_var: str = "CNDC",
+    temp_var: str = "TEMP",
+    pres_var: str = "PRES",
+    psal_var: str = "PSAL",
+) -> xr.Dataset:
     """Recalculate Practical Salinity (PSAL) from conductivity, temperature,
     and pressure using the GSW-Python module
     (https://teos-10.github.io/GSW-Python/).
@@ -548,11 +618,13 @@ def calculate_PSAL(
     PSAL = gsw.SP_from_C(ds[cndc_var], ds[temp_var], ds[pres_var])
     ds[psal_var][:] = PSAL
 
-    ds[psal_var].attrs['note'] = (
-        f'Computed from {cndc_var}, {temp_var}, {pres_var} '
-        'using the Python gsw module.')
+    ds[psal_var].attrs["note"] = (
+        f"Computed from {cndc_var}, {temp_var}, {pres_var} "
+        "using the Python gsw module."
+    )
 
     return ds
+
 
 # Calculate gsw
 
@@ -560,10 +632,7 @@ def calculate_PSAL(
 
 # Compare wth CTDs
 
-
-### Load and export
-
-
+# -- Load and export
 
 # Note: Doing PROCESSING.post_processing record keeping within the
 # drop_variables() function because we want to access the *dropped* list.
@@ -637,9 +706,69 @@ def drop_variables(
     return ds
 
 
+# -- INTERACTIVE
+
+
+def drop_vars_pick(ds: xr.Dataset) -> xr.Dataset:
+    """
+    Interactively drop (remove) selected variables from an xarray Dataset.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The dataset from which variables will be dropped.
+
+    Returns
+    -------
+    xr.Dataset
+        The dataset with the selected variables removed.
+
+    Notes
+    -----
+    Displays an interactive widget with checkboxes for each variable, allowing
+    users to select variables to remove. The removal is performed by clicking
+    the "Drop variables" button. The removed variables are also printed to the
+    output.
+    """
+    edit_obj = edit.drop_vars_pick(ds, moored=True)
+    return edit_obj.D
+
+
+def threshold_pick(ds: xr.Dataset) -> xr.Dataset:
+    """
+    Interactively select a valid range for data variables and apply thresholds
+    to the data.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The dataset to modify.
+
+    Returns
+    -------
+    xr.Dataset
+        The dataset with thresholds applied.
+
+    Notes
+    -----
+    Utilizes interactive widgets for selecting thresholds within a Jupyter
+    environment.
+    """
+
+    data_variables = []
+
+    for varnm in ds.data_vars:
+        if "TIME" in ds[varnm].dims:
+            data_variables += [varnm]
+
+    edit.threshold_edit(ds, variables=data_variables)
+    return ds
+
+
 @record_processing(
     "Converted dataset to MATLAB .mat file '{outfile}'. Simplify: {simplify}.",
-    "Converted dataset to MATLAB .mat file '{outfile}' with simplify={simplify}.",
+    "Converted dataset to MATLAB .mat file '{outfile}' "
+    "with simplify={simplify}.",
 )
 def to_mat(ds, outfile, simplify=False):
     """
@@ -660,10 +789,11 @@ def to_mat(ds, outfile, simplify=False):
     None: The function saves the dataset as a MATLAB .mat file.
 
     Example:
-    >>> ctd.xr_to_mat(ds, 'output_matfile', simplify=True)
+    >>> moored.xr_to_mat(ds, 'output_matfile', simplify=True)
     """
     # Drop the empty PROCESSING variable (doesn't work well with MATLAB)
     ds_wo_proc = drop_variables(ds, drop_vars="PROCESSING")
 
-    # Also transposing dimensions to PRES, TIME for ease of plotting etc in MATLAB.
+    # Also transposing dimensions to PRES, TIME for ease of plotting etc in
+    # MATLAB.
     matfile.xr_to_mat(ds_wo_proc.transpose(), outfile, simplify=simplify)

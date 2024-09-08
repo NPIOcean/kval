@@ -970,10 +970,13 @@ def set_attr_var(ds: xr.Dataset, variable: str, attr: str) -> xr.Dataset:
     return ds
 
 
-#### EDITING (WRAPPER FOR FUNCTIONS IN THE data.ship_ctd_tools._ctd_edit.py MODULE)
+#### EDITING
+# (Wrappers for functions in the data.edit and data.ship_ctd_tools._ctd_edit.py
+#  module)
 
 
-def hand_remove_points(ds: xr.Dataset, variable: str, TIME_index: str) -> xr.Dataset:
+def hand_remove_points(ds: xr.Dataset, variable: str, TIME_index: str
+                       ) -> xr.Dataset:
     """
     Interactively remove data points from CTD profiles.
 
@@ -997,7 +1000,8 @@ def hand_remove_points(ds: xr.Dataset, variable: str, TIME_index: str) -> xr.Dat
 
     Notes
     -----
-    Use the interactive plot to select points for removal, then click the corresponding buttons for actions.
+    Use the interactive plot to select points for removal, then click the
+    corresponding buttons for actions.
     """
     ds0 = ds.copy()
     hand_remove = ctd_edit.hand_remove_points(ds, variable, TIME_index)
@@ -1024,7 +1028,9 @@ def apply_threshold(ds: xr.Dataset) -> xr.Dataset:
     -----
     Utilizes interactive widgets for selecting thresholds within a Jupyter environment.
     """
-    ctd_edit.threshold_edit(ds)
+
+    variables = tools._get_profile_variables(ds)
+    edit.threshold_edit(ds, variables=variables)
     return ds
 
 
@@ -1073,7 +1079,7 @@ def drop_vars_pick(ds: xr.Dataset) -> xr.Dataset:
     Displays an interactive widget with checkboxes for each variable, allowing users to select variables to remove.
     The removal is performed by clicking the "Drop variables" button. The removed variables are also printed to the output.
     """
-    edit_obj = ctd_edit.drop_vars_pick(ds)
+    edit_obj = edit.drop_vars_pick(ds)
     return edit_obj.D
 
 
