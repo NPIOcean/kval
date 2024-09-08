@@ -21,18 +21,19 @@ ____
 
 ##### Submodules
 
-`*` Not implemented
 
-- `file`: Converting to and from various file format (e.g. read CTD .cnv data to netCDF)
+- `file`: Converting to and from various file format (e.g. read CTD .cnv data to xarray/netCDF)
 - `data`: Data post-processing and QC (e.g. CTD post-processing)
 - `metadata`: Handling and standardizing metadata according to CF conventions
 - `plots*`: Various tools to help make nice (matplotlib) figures
 - `map`: Tools for making maps
 - `geo`: Geographical calculations (coordinate transformations, point-to-point distances etc)
-- `ocean`: Oceanography-specific tools (e.g. vertical modes, turner angles, wkb scaling, geostrophical calculations)
+- `ocean`: Oceanography-specific tools (e.g. (`*`) vertical modes, turner angles, wkb scaling, geostrophical calculations)
 - `calc`: Various useful functions for numerical calculations.
 - `util`: Various backend support functions and wrappers for xarray functionality.
 - `signal`: Filtering, spectral analysis, etc.
+
+`*` Not implemented
 
 </details>
 
@@ -72,6 +73,15 @@ ____
 - *Releases* will be published relatively often, whenever a new functionality has been added.
    Releases will be archived on [zenodo](www.zenodo.org) and given a DOI.
 
+###### Contributing
+
+Pull requests, issues, etc are very welcome!
+
+*[Something about branches here]*
+
+*[Something about python style, test suite]*
+
+
 </details>
 
 ____
@@ -83,16 +93,17 @@ ____
 - *0.1.0 (in development)*:
     - Refactoring of large parts of the code for structure, clarity and efficiency.
     - ~~Complete reproducability and self-documentation in the CTD processing functionality.~~
-    - ~~Functionality for parsing moored CTD sensors (RBR and SBE)~~
+    - Adding mooring processing functionality
+        - ~~Functionality for parsing moored CTD sensors (RBR and SBE)~~
+        - Functionality for basic processing source file -> CF-NetCDF
     - ~~Test suite (comprehensive but not entirely complete)~~
     - ~~Decluttering the repo bringing it down from its currently bloated state.~~
+    - Reasonably useful documentation wit hnotebook examples (readthedocs).
     - Possibly: release to PyPi and conda-forge.
 
 - *Changes tabled but* not *planned included in 0.1.0*
 
     - Removal of NPI-specific content.
-    - Full sphinx documentation
-
 
 - *0.0.2*:
     - Name change from `oceanograpy` to `kval`.
@@ -106,42 +117,5 @@ ____
 </details>
 
 
-
-____
-
-
-<details>
-<summary><strong>STATUS UPDATES</strong></summary>
-
-____
-
-STATUS 21.04.24:
-
-Renamed from `oceanograpy` to `kval`
-
-STATUS 08.12.23:
-
-- Developed core functionality for editing CTD data. Relies pretty heavily on Jupyter/interactive widgets.
-
-*TO DO:*
-
-- A look-over of the entire codebase with the view of cleaning up the structure.
-    - There is a bit of an unholy mixture between general and specific functions. Should
-      make specific modules that are either general or application specific, and give
-      them names and locations that reflect their use.
-- Test suite (!)
-- More extensive documentation/example scripts.
-
-____
-
-STATUS 18.11.23:
-- Now contains extensive functionality for working with CTD data:
-    - Parsing cnvs
-    - Reformatting and adding metadata for pulishing CTD data
-    - Starting to become quite useful
-
-____
-
-</details>
 
 

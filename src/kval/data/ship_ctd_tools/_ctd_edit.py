@@ -6,7 +6,6 @@ from IPython.display import display, clear_output
 from kval.util import time, internals
 from kval.data import edit, ctd
 from kval.data.ship_ctd_tools import _ctd_tools
-from kval.calc.number import order_of_magnitude
 
 
 ###########################
