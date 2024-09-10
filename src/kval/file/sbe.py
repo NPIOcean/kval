@@ -103,7 +103,7 @@ def read_cnv(
 
         time_dim : bool, optional
             Choose whether to include a 0-D TIME coordinate. Useful if
-            combining several profiles. Default is False.
+            combining several profiles. Default is False,.
 
         inspect_plot : bool, optional
             Return a plot of the whole pressure time series, showing the part
@@ -124,24 +124,7 @@ def read_cnv(
 
         suppress_latlon_warning : bool, optional
             Don't show a warning if there is no lat/lon information. Default is
-            False.
-
-        start_time_NMEA : bool, optional
-            Choose whether to get start_time attribute from the "NMEA UTC
-            (Time)" header line. Default is to grab it from the "start_time"
-            line - this is technically correct but typically identical results,
-            and the "start_time" line can occasionally look funny. If unsure,
-            check your header! Default is False (= read from "start_time"
-            header line).
-
-        lat, lon : [float, bool], optional
-            Option to specify latitude/longitude manually. (E.g. if there is no
-            lat/lon info in the header or variables).
-
-        station : [str, bool], optional
-            Option to specify station manually. Otherwise: extracting from
-            'station line' if available and from the cnv file name if not.
-
+            False. some
         station_from_filename : bool, optional
             Option to read the station name from the file name, e.g. "STA001"
             from a file "STA001.cnv". Otherwise, we try to grab it from the
@@ -153,26 +136,44 @@ def read_cnv(
         - Tests
             - Make a test_ctd_data.cnv file with mock values and use pytest
     """
-
+    # Parse useful information from the file header
     header_info = read_header(source_file)
     _is_moored = header_info["moored_sensor"]
+
     # Not looking for down/upcast if this is a moored sensor..
     if _is_moored:
         profile = "none"
+
+    # Read the columnar data to an xarray Dataset
     ds = _read_column_data_xr(source_file, header_info)
+
+    # Remove duplicate varaiables
     ds = _remove_duplicate_variables(ds)
+
+    # Update variable names (e.g. t090C -> TEMP1)
     ds = _update_variables(ds, source_file)
-    ds = _remove_duplicate_variables(ds)
+
+    # Assign lat/lon/statin if specified in the function call
     ds = _assign_specified_lat_lon_station(ds, lat, lon, station)
+
+    # Parse time from "timeJ" or "timeS" fields
     ds = _convert_time(
         ds,
         header_info,
         suppress_time_warning=suppress_time_warning,
         start_time_NMEA=start_time_NMEA,
     )
+
+    # Start a history attribute tracking the post-processing history
     ds.attrs["history"] = header_info["start_history"]
+
+    # Add various attributes read from the header
     ds = _add_header_attrs(ds, header_info, station_from_filename)
+
+    # Add a start_time attribute
     ds = _add_start_time(ds, header_info, start_time_NMEA=start_time_NMEA)
+
+    # Parse the SBE processing steps to a human-readble string
     try:
         ds = _read_SBE_proc_steps(ds, header_info)
     except Exception as err:
@@ -181,39 +182,47 @@ def read_cnv(
         )
         raise Warning(f"Unable to parse from file.\n(Error: {err}).")
 
+    # Create a copy of the dataset before we apply any flags
     ds0 = ds.copy()
 
+    # Apply the flags specified in the "flag" column of the cnv file
     if apply_flags:
         ds = _apply_flag(ds)
         ds.attrs["SBE_flags_applied"] = "yes"
     else:
         ds.attrs["SBE_flags_applied"] = "no"
 
-    if time_dim:
+    # Add a time dimension to a profile dataset
+    if time_dim and not _is_moored:
         ds = _add_time_dim_profile(
             ds, suppress_latlon_warning=suppress_latlon_warning
         )
 
+    # Isolate up- or downcast (before/after pressure maximum)
     if profile in ["upcast", "downcast", "dncast"]:
         if ds.binned == "no":
             ds = _remove_up_dncast(ds, keep=profile)
     else:
         ds.attrs["profile_extracted"] = "All available good data"
 
+    # If we have specified a start/end scan: Isolate only the desired range
     if start_scan:
         ds = _remove_start_scan(ds, start_scan)
     if end_scan:
         ds = _remove_end_scan(ds, end_scan)
 
+    # Plot the pressure track, showing which data were flagged
     if inspect_plot:
         _inspect_extracted(ds, ds0, start_scan, end_scan)
 
-    # Set e.g. TEMP1 -> TEMP if we only have one
+    # Set e.g. TEMP1 -> TEMP if there is no TEMP2
     ds = remove_numbers_in_var_names(ds)
 
+    # Some custom modifications for moored sensors
     if _is_moored:
         ds = _modify_moored(ds, header_info)
 
+    # Record the start of post-processing as the now time stamp
     now_str = pd.Timestamp.now().strftime("%Y-%m-%d")
     ds.attrs["history"] += f"\n{now_str}: Post-processing."
 
@@ -271,6 +280,7 @@ def read_btl(
 
             # Reapply variable attributes
             ds.TIME.attrs = time_attrs
+
     return ds
 
 
@@ -330,7 +340,7 @@ def read_header(filename: str) -> dict:
 
                 # If this is a SBE37 or SBE56, we will assume that
                 # this is a moored sensor.
-                if "SBE37" in line or "SBE56" in line:
+                if "SBE37" in line or "SBE56" in line or "SBE16" in line:
                     hdict["moored_sensor"] = True
 
             # Read the column header info (which variable is in which data

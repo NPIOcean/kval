@@ -10,10 +10,13 @@ import inspect
 import os
 import gsw
 import matplotlib.pyplot as plt
+import matplotlib as mpl
+
 from kval.file import sbe, rbr, matfile
 from kval.data import dataset, edit
 from kval.util import internals
 from kval.signal import despike, filt
+from kval.metadata import conventionalize, _standard_attrs
 
 if internals.is_notebook():
     from IPython.display import display
@@ -93,6 +96,8 @@ def record_processing(description_template, py_comment=None):
 def load_moored(
     file: str,
     processing_variable=True,
+    lat=None,
+    lon=None,
 ) -> xr.Dataset:
     """
     Load moored instrument data from a file into an xarray Dataset.
@@ -126,6 +131,12 @@ def load_moored(
         ds = rbr.read_rsk(file)
     elif instr_type == "SBE":
         ds = sbe.read_cnv(file)
+
+    # Assign lat/lon if we have specified them
+    if lat:
+        ds["LATITUDE"] = ((), lat)
+    if lon:
+        ds["LONGITUDE"] = ((), lon)
 
     # Add PROCESSING variable with useful metadata
     # ( + remove some excessive global attributes)
@@ -290,7 +301,11 @@ def chop_deck(
             # Ensure plot updates and displays (different within notebook with
             # widget backend..)
             if internals.is_notebook():
-                display(fig)
+                if mpl.get_backend() != 'tkagg':
+                    display(fig)
+                else:
+                    plt.ion()
+                    plt.show()
             else:
                 plt.show(block=False)
 
@@ -454,6 +469,56 @@ def despike_rolling(
 # Drift
 
 # Standard metadata
+
+
+### MODIFYING METADATA
+
+@record_processing(
+    "Applied automatic standardization of metadata.",
+    py_comment="Applying standard metadata (global+variable attributes):",
+)
+def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
+    """
+    Various modifications to the metadata to standardize the dataset for
+    publication.
+
+    This function applies several standardizations and conventions to the
+    dataset's metadata, including renaming variables, adding standard
+    attributes, and ensuring the metadata is consistent.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The input xarray Dataset whose metadata is to be standardized.
+    NPI : bool, optional
+        Not used in this function. Default is True.
+
+    Returns
+    -------
+    xr.Dataset
+        The dataset with updated metadata.
+
+    Notes
+    -----
+    This function calls multiple sub-functions to update the metadata:
+    - `remove_numbers_in_var_names`: Removes numbers from variable names.
+    - `add_standard_var_attrs`: Adds standard variable attributes.
+    - `add_standard_glob_attrs_ctd`: Adds standard global attributes specific to CTD data.
+    - `add_standard_glob_attrs_org`: Adds standard global attributes for the organization.
+    - `add_gmdc_keywords_ctd`: Adds GMDC keywords for CTD data.
+    - `add_range_attrs`: Adds range attributes.
+    - `reorder_attrs`: Reorders attributes for consistency.
+    """
+    ds = conventionalize.remove_numbers_in_var_names(ds)
+    ds = conventionalize.add_standard_var_attrs(ds)
+    ds = conventionalize.add_standard_glob_attrs_moor(ds, override=False)
+    ds = conventionalize.add_standard_glob_attrs_org(ds)
+    ds = conventionalize.add_gmdc_keywords_ctd(ds)
+    ds = conventionalize.add_range_attrs(ds)
+    ds = conventionalize.reorder_attrs(ds)
+
+    return ds
+
 
 # Threshold edit
 
