@@ -195,6 +195,7 @@ def chop_deck(
     sd_thr: float = 3.0,
     indices: Optional[Tuple[int, int]] = None,
     auto_accept: bool = False,
+    verbose: bool = True,
 ) -> xr.Dataset:
     """
     Chop away start and end parts of a time series (xarray Dataset).
@@ -331,7 +332,7 @@ def chop_deck(
         keep_slice = slice(indices[0], indices[1] + 1)
 
     L0 = ds.sizes["TIME"]
-    print(f"Chopping to index: {indices}")
+
     ds = ds.isel(TIME=keep_slice)
 
     L1 = ds.sizes["TIME"]
@@ -339,7 +340,9 @@ def chop_deck(
         f"Chopped {L0 - L1} samples using -> {indices} "
         f"(total samples {L0} -> {L1})"
     )
-    print(net_str)
+    if verbose:
+        print(f"Chopping to index: {indices}")
+        print(net_str)
 
     # Record to PROCESSING metadata variable
     if "PROCESSING" in ds:
@@ -706,6 +709,7 @@ def drop_variables(
     ds: xr.Dataset,
     retain_vars: Optional[Union[List[str], bool]] = None,
     drop_vars: Optional[List[str]] = None,
+    verbose: bool = True,
 ) -> xr.Dataset:
     """
     Drop measurement variables from the dataset based on specified criteria.
@@ -764,7 +768,8 @@ def drop_variables(
 
     if dropped:
         drop_str = f"Dropped these variables from the Dataset: {dropped}."
-        print(drop_str)
+        if verbose:
+            print(drop_str)
         if "PROCESSING" in ds:
             ds["PROCESSING"].attrs["post_processing"] += f"{drop_str}\n"
 

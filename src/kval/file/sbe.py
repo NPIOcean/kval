@@ -785,7 +785,7 @@ def _read_SBE_proc_steps(ds, header_info):
             history_str = (
                 f"{proc_date_dmy}: Processed to "
                 f'.{header_info["source_file_type"]} using'
-                ' SBE software (details in "SBE_processing").'
+                ' SBE software.'
             )
 
         # Get input file names (without paths)

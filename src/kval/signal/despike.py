@@ -116,12 +116,13 @@ def despike_rolling(
                    np.abs(var_mean - ds[var_name])[is_outside_criterion],
                    '.r', label='Labelled as outlier')
         for axn in ax:
-            axn.legend(fontsize=10, ncol=2)
+            leg = axn.legend(fontsize=9, ncol=1, handlelength = 1, bbox_to_anchor = (1, 0.5))
+            leg.set_zorder(0)
             axn.set_xlabel('Index')
             if 'units' in ds[var_name].attrs:
                 axn.set_ylabel(ds[var_name].attrs['units'])
         fig.suptitle(f'Despiking `{var_name}` along the dimension `{dim}`:')
-
+        plt.tight_layout()
     # Optional printing
     if verbose:
         n_removed = np.sum(is_outside_criterion).item()
