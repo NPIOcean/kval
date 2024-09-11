@@ -25,8 +25,8 @@ def add_range_attrs(D, vertical_var=None):
       geospatial range attributes
     - TIME variable is required in order to set
       time_coverage range attributes
-    - Vertical coordinate variable (see above) isadd_standard_glob_attrs_ctd required in order to set
-      geospatial_vertical range attributes
+    - Vertical coordinate variable (see above) isadd_standard_glob_attrs_ctd
+      required in order to set geospatial_vertical range attributes
     """
 
     # Lateral
@@ -44,7 +44,6 @@ def add_range_attrs(D, vertical_var=None):
         )
 
     # Vertical
-
     try:
         # If not specified: look for a variable with attribute *axis='Z'*
         if vertical_var is None:
@@ -75,10 +74,17 @@ def add_range_attrs(D, vertical_var=None):
             end_time = cftime.num2date(D.TIME.max().values, D.TIME.units)
         D.attrs["time_coverage_start"] = time.datetime_to_ISO8601(start_time)
         D.attrs["time_coverage_end"] = time.datetime_to_ISO8601(end_time)
-        # Note: Should not be variable for fixed sampling rate instruments!!! -> Fix this!
-        D.attrs["time_coverage_resolution"] = (
-            "variable"
-        )
+
+        # Keep time_coverage_resolution if already present
+        if "time_coverage_resolution" not in D.attrs:
+            tdiff_std = np.std(np.diff(D.TIME))
+            tdiff_median = np.median(np.diff(D.TIME))
+            if tdiff_std / tdiff_median < 1e-5:  # <- Looks like fixed interval
+                D.attrs["time_coverage_resolution"] = (
+                    time.days_to_ISO8601(tdiff_median))
+            else:  # <- Looks like a variable interval
+                D.attrs["time_coverage_resolution"] = "variable"
+
         D.attrs["time_coverage_duration"] = _get_time_coverage_duration_str(D)
     except:
         print(

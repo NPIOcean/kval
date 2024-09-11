@@ -83,7 +83,7 @@ def start_end_times_cftime_to_duration(
 
 def seconds_to_ISO8601(seconds: int) -> str:
     """
-    Takes an integer number of seconds (i.e. a sampling rate) and
+    Takes an integer number of seconds (e.g. a sampling rate) and
     returns a ISO8601 string (P[YYYY]-[MM]-[DD]T[hh]:[mm]:[ss]).
     """
     seconds = int(seconds)
@@ -107,6 +107,16 @@ def seconds_to_ISO8601(seconds: int) -> str:
     iso_str = (
         f"P0000-00-{days:02}T{hours:02}:{minutes:02}:{seconds_residual:02}"
     )
+    return iso_str
+
+
+def days_to_ISO8601(days: float) -> str:
+    """
+    Takes an number of days (e.g. a sampling rate) and
+    returns a ISO8601 string (P[YYYY]-[MM]-[DD]T[hh]:[mm]:[ss]).
+    """
+    seconds = int(np.round(days*86400))
+    iso_str = seconds_to_ISO8601(seconds=seconds)
     return iso_str
 
 
@@ -258,7 +268,7 @@ def datenum_to_timestamp(
 
 
 def convert_timenum_to_datetime(
-    TIME: float, units: str, ) -> str:
+        TIME: float, units: str, ) -> str:
     """
     Convert a numeric time value to a datetime object.
     """
