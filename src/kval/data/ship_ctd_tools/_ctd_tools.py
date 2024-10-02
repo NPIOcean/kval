@@ -76,7 +76,6 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     else:
         valid_nc_files = False
 
-
     # Raise an exception if we don't have either (1) or (2)
     if valid_nc_files == False:
         raise Exception('''
@@ -86,7 +85,6 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
             2. A list containing xr.Datasets with the individual profiles,
                e.g. [d1, d2] with d1, d2 being xr.Datasets.
                         ''')
-
     ### BINNING
     # If unbinned: bin data
     if any(n_input.binned == 'no' for n_input in ns_input):
@@ -188,14 +186,18 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
                     _list += [None]
 
 
-
-
         sns_filtered = np.array([value for value in sns if value is not None])
         sns_unique = np.array(list(OrderedDict.fromkeys(sns_filtered)))
         caldates_filtered = np.array([value for value in caldates if value is not None])
         caldates_unique = np.array(list(OrderedDict.fromkeys(caldates_filtered)))
 
         if len(sns_unique)==2:
+
+            # Handle case where two different sensors have the same calibration
+            # dates (make a duplicate entry in caldates_unique)
+            if len(caldates_unique)==1:
+                caldates_unique = [caldates_unique] + [caldates_unique]
+
             if 'comment' in N[varnm].attrs:
                 comment_0 = N[varnm].comment
             else:
@@ -209,6 +211,10 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
                 f'A: {caldates_unique[0]}, B: {caldates_unique[1]}')
             N[varnm].attrs['sensor_serial_number'] = (
                 f'A: {sns_unique[0]}, B: {sns_unique[1]}')
+        elif len(sns_unique)>2:
+            print(f'NOTE: More than 2 sensors were used for the variable {varnm}. '
+                  '\nMetadata attributes will have to be adjusted manually!')
+
 
     ### FINAL TOUCHES AND EXPORTS
 

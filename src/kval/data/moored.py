@@ -192,7 +192,7 @@ ds = data.moored.load_moored(
 def chop_deck(
     ds: xr.Dataset,
     variable: str = "PRES",
-    sd_thr: float = 3.0,
+    sd_thr: float = 1.0,
     indices: Optional[Tuple[int, int]] = None,
     auto_accept: bool = False,
     verbose: bool = True,
@@ -296,7 +296,8 @@ def chop_deck(
             ax.set_xlabel("Index")
             ax.set_ylabel(ylab)
             ax.invert_yaxis()
-            ax.set_title(f"Suggested chop: {indices} (to red curve).")
+            ax.set_title(f"Suggested chop: [{keep_slice.start}, "
+                         f"{keep_slice.stop}] (to red curve).")
             ax.legend()
 
             # Ensure plot updates and displays (different within notebook with
@@ -310,7 +311,8 @@ def chop_deck(
             else:
                 plt.show(block=False)
 
-            print(f"Suggested chop: {indices} (to red curve)")
+            print(f"Suggested chop: [{keep_slice.start}, "
+                         f"{keep_slice.stop}] (to red curve).")
             accept = input("Accept (y/n)?: ")
 
             # Close the plot after input tochop_var avoid re-display
@@ -835,11 +837,12 @@ def threshold_pick(ds: xr.Dataset) -> xr.Dataset:
     return ds
 
 
-@record_processing(
-    "Converted dataset to MATLAB .mat file '{outfile}'. Simplify: {simplify}.",
-    "Converted dataset to MATLAB .mat file '{outfile}' "
-    "with simplify={simplify}.",
-)
+# I don't think we neeed to record this!
+#@record_processing(
+#    "Converted dataset to MATLAB .mat file '{outfile}'. Simplify: {simplify}.",
+#    "Converted dataset to MATLAB .mat file '{outfile}' "
+#    "with simplify={simplify}.",
+#)
 def to_mat(ds, outfile, simplify=False):
     """
     Convert the CTD data (xarray.Dataset) to a MATLAB .mat file.

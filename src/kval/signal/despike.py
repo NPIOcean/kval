@@ -123,6 +123,7 @@ def despike_rolling(
                 axn.set_ylabel(ds[var_name].attrs['units'])
         fig.suptitle(f'Despiking `{var_name}` along the dimension `{dim}`:')
         plt.tight_layout()
+
     # Optional printing
     if verbose:
         n_removed = np.sum(is_outside_criterion).item()
