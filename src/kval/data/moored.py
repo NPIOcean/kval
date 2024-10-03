@@ -14,6 +14,8 @@ import matplotlib as mpl
 
 from kval.file import sbe, rbr, matfile
 from kval.data import dataset, edit
+from kval.data.moored_tools import _moored_tools
+
 from kval.util import internals
 from kval.signal import despike, filt
 from kval.metadata import conventionalize, _standard_attrs
@@ -67,7 +69,7 @@ def record_processing(description_template, py_comment=None):
                 # Skip the 'ds' argument as it's always present
                 if name != "ds":
                     default_value = sig.parameters[name].default
-                    if value != default_value:
+                    if value is not default_value:
                         if isinstance(value, str):
                             args_list.append(f"{name}='{value}'")
                         else:
@@ -172,16 +174,14 @@ def load_moored(
         ds.PROCESSING.attrs[
             "python_script"
         ] += f"""from kval import data
-
-
 data_dir = "./" # Directory containing `filename` (MUST BE SET BY THE USER!)
 filename = "{os.path.basename(file)}"
 
 # Load file into an xarray Dataset:
 ds = data.moored.load_moored(
     data_dir + filename,
-    processing_variable={processing_variable}
-    )"""
+    processing_variable={processing_variable})
+    """
 
     return ds
 
@@ -870,3 +870,65 @@ def to_mat(ds, outfile, simplify=False):
     # Also transposing dimensions to PRES, TIME for ease of plotting etc in
     # MATLAB.
     matfile.xr_to_mat(ds_wo_proc.transpose(), outfile, simplify=simplify)
+
+@record_processing(
+    "Rejecting (setting to NaN) the following time indices from {varnm}:\n{remove_inds}.",
+    py_comment=("Reject {varnm} values at specific points"),
+)
+def remove_points(ds: xr.Dataset, varnm: str,
+                          remove_inds, time_var = 'TIME') -> xr.Dataset:
+
+    """
+    Remove specified points from a time series in the dataset by setting them to NaN.
+
+    Parameters:
+    - ds: xarray.Dataset
+      The dataset containing the variable to modify.
+    - varnm: str
+      The name of the variable to modify.
+    - remove_inds: list or array-like
+      Indices of points to remove (set to NaN).
+
+    Returns:
+    - ds: xarray.Dataset
+      The dataset with specified points removed (set to NaN).
+    """
+
+    ds = edit.remove_points_timeseries(
+        ds=ds, varnm=varnm, remove_inds=remove_inds, time_var=time_var)
+
+    return ds
+
+def hand_remove_points(ds: xr.Dataset, variable: str,
+                       ) -> xr.Dataset:
+    """
+    Interactively remove data points from CTD profiles.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The dataset containing the CTD data.
+    variable : str
+        The name of the variable to visualize and edit (e.g., 'TEMP1', 'CHLA').
+    TIME_index : str
+        The name of the station (e.g., '003', '012_01', 'AT290', 'StationA').
+
+    Returns
+    -------
+    xr.Dataset
+        The dataset with data points removed based on interactive input.
+
+    Examples
+    --------
+    >>> ds = hand_remove_points(ds, 'TEMP1', 'StationA')
+
+    Notes
+    -----
+    Use the interactive plot to select points for removal, then click the
+    corresponding buttons for actions.
+    """
+    ds0 = ds.copy()
+    hand_remove = _moored_tools.hand_remove_points(ds, variable)
+    ds = hand_remove.ds
+
+    return ds

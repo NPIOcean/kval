@@ -50,6 +50,44 @@ def remove_points_profile(ds: xr.Dataset, varnm: str, TIME_index: int,
 
     return ds
 
+
+
+def remove_points_timeseries(ds: xr.Dataset, varnm: str,
+                          remove_inds, time_var = 'TIME') -> xr.Dataset:
+    """
+    Remove specified points from a time series in the dataset by setting them to NaN.
+
+    Parameters:
+    - ds: xarray.Dataset
+      The dataset containing the variable to modify.
+    - varnm: str
+      The name of the variable to modify.
+    - remove_inds: list or array-like or slice
+      Indices of points to remove (set to NaN).
+
+    Returns:
+    - ds: xarray.Dataset
+      The dataset with specified points removed (set to NaN).
+    """
+
+    # We want remove_inds to be an iterable (array)
+    if isinstance(remove_inds, slice) or isinstance(remove_inds, int):
+        remove_inds = [remove_inds]
+        remove_inds = np.arange(remove_inds.start, remove_inds.stop,)
+    remove_inds = np.asarray(remove_inds)
+
+    # Create a boolean array for removal
+    remove_bool = np.zeros(len(ds[varnm]), dtype=bool)
+    for remove_ind in remove_inds:
+        remove_bool[remove_ind] = True
+
+    # Use the `where` method to set the selected points to NaN
+    ds[varnm].values[:] = np.where(
+        ~remove_bool, ds[varnm].values[:], ds[varnm].values[:]*np.nan)
+
+    return ds
+
+
 def offset(ds: xr.Dataset, variable: str, offset: float) -> xr.Dataset:
     """
     Apply a fixed offset to a specified variable in an xarray Dataset.

@@ -53,14 +53,14 @@ def add_processing_history_var_ctd(
         attrs={
             'long_name': 'Empty variable whose attributes describe processing '
                          'history of the dataset.',
-            'comment': '** NOTE: Experimental - testing this for documentation. **\n\n'
+            'comment': ''
         }
     )
 
     if 'SBE_processing' in ds.attrs:
         ds['PROCESSING'].attrs['SBE_processing'] = ds.attrs.pop('SBE_processing')
         ds['PROCESSING'].attrs['comment'] += (
-            '# SBE_processing #:\nDescription of automated editing applied using '
+            '# SBE_processing #: Description of automated editing applied using '
             'SeaBird software before post-processing in Python.\n'
         )
 
@@ -73,8 +73,8 @@ def add_processing_history_var_ctd(
             )
             source_file_string = ', '.join(file_names)
         ds['PROCESSING'].attrs['source_files'] = source_file_string
-        ds['PROCESSING'].attrs['comment'] += (
-            '# source_files #:\nList of files produced by SBE processing.\n'
+        ds['PROCESSING'].attrs['comment'] = (
+            '# source_files #: List of files produced by SBE processing.\n'
         )
 
     if post_processing:
@@ -88,7 +88,7 @@ def add_processing_history_var_ctd(
     if py_script:
         ds['PROCESSING'].attrs['python_script'] = ''
         ds['PROCESSING'].attrs['comment'] += (
-            '# python_script #:\nPython script for reproducing post-processing '
+            '# python_script #: Python script for reproducing post-processing '
             'from `source_files`.\n'
         )
 
@@ -120,7 +120,7 @@ def add_processing_history_var_moored(
         attrs={
             'long_name': 'Empty variable whose attributes describe processing '
                          'history of the dataset.',
-            'comment': '** NOTE: Experimental - testing this for documentation. **\n'
+            'comment': ''
         }
     )
 
@@ -132,20 +132,20 @@ def add_processing_history_var_moored(
 
         ds['PROCESSING'].attrs['source_file'] = source_file_string
         ds['PROCESSING'].attrs['comment'] += (
-            '# source_files #:\nData from which data were loaded.\n'
+            '# source_files #: Data from which data were loaded.\n'
         )
 
     if post_processing:
         ds['PROCESSING'].attrs['post_processing'] = ''
         ds['PROCESSING'].attrs['comment'] += (
-            '# post_processing #:\nDescription of post-processing starting'
+            '# post_processing #: Description of post-processing starting'
             ' with `source_file`.\n'
         )
 
     if py_script:
         ds['PROCESSING'].attrs['python_script'] = ''
         ds['PROCESSING'].attrs['comment'] += (
-            '# python_script #:\nPython script for reproducing '
+            '# python_script #: Python script for reproducing '
             'post-processing from `source_file`.\n'
         )
 
