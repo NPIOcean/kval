@@ -2,7 +2,8 @@ import pytest
 import xarray as xr
 import requests
 from pathlib import Path
-from kval.data.moored import load_moored, assign_pressure, drop_variables
+import gsw
+from kval.data.moored import load_moored, assign_pressure, drop_variables, calculate_PSAL
 from unittest import mock
 from unittest import mock
 import numpy as np
