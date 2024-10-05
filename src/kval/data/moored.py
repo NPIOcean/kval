@@ -932,3 +932,134 @@ def hand_remove_points(ds: xr.Dataset, variable: str,
     ds = hand_remove.ds
 
     return ds
+
+def assign_pressure(
+    ds_main: xr.Dataset,
+    ds_above: xr.Dataset,
+    ds_below: xr.Dataset,
+    nom_dep_main: float,
+    nom_dep_above: float,
+    nom_dep_below: float,
+    auto_accept: bool = False,
+    plot: bool = True,
+    lat: float = None
+) -> xr.Dataset:
+    """
+    Estimate and assign sea pressure to an instrument without a pressure record by interpolating
+    between pressure sensors located above and below the instrument.
+
+    This method is useful for instruments like an RBR Solo (temperature-only) located between
+    two instruments (e.g., RBR Concertos with pressure sensors) on a mooring. The function
+    interpolates pressure from the adjacent sensors and can display a plot comparing estimated
+    and nominal pressures.
+
+    Parameters
+    ----------
+    ds_main : xarray.Dataset
+        Dataset for the instrument without pressure record, which will receive the estimated pressure.
+    ds_above : xarray.Dataset
+        Dataset for the instrument with pressure sensor located above the main instrument.
+    ds_below : xarray.Dataset
+        Dataset for the instrument with pressure sensor located below the main instrument.
+    nom_dep_main : float
+        Nominal (planned) depth of the main instrument [meters].
+    nom_dep_above : float
+        Nominal depth of the above sensor [meters].
+    nom_dep_below : float
+        Nominal depth of the below sensor [meters].
+    auto_accept : bool, optional
+        Automatically accept the pressure estimate without user confirmation. Default is False.
+    plot : bool, optional
+        Display a plot comparing the interpolated pressure to the recorded pressures of the adjacent
+        sensors. Default is True.
+    lat : float, optional
+        Latitude for converting depth to pressure. If not provided, it will be inferred from `ds_main`.
+
+    Returns
+    -------
+    xarray.Dataset
+        Updated dataset `ds_main` with an added 'PRES' variable containing the estimated pressures [dbar].
+
+    Raises
+    ------
+    Exception
+        If latitude (`lat`) is not provided and cannot be inferred from `ds_main`.
+    """
+
+    # Ensure we have latitude for depth-to-pressure conversion
+    if lat is None:
+        try:
+            lat = ds_main.LATITUDE.item()
+        except AttributeError:
+            raise Exception(
+                'Could not find latitude for depth->pressure calculation. '
+                'Specify `lat` in `assign_pressure`.'
+            )
+
+    # Convert nominal depth to nominal pressure
+    nom_pres_main = gsw.p_from_z(-nom_dep_main, lat=lat)
+    nom_pres_above = gsw.p_from_z(-nom_dep_above, lat=lat)
+    nom_pres_below = gsw.p_from_z(-nom_dep_below, lat=lat)
+
+    # Interpolate pressure records of above/below sensors onto main sensor's time grid
+    pres_above = ds_above.interp_like(ds_main).PRES
+    pres_below = ds_below.interp_like(ds_main).PRES
+
+    # Calculate interpolation weights based on nominal depths
+    above_weight = (nom_pres_below - nom_pres_main) / (nom_pres_below - nom_pres_above)
+    below_weight = (nom_pres_main - nom_pres_above) / (nom_pres_below - nom_pres_above)
+
+    # Calculate interpolated pressure for main sensor
+    pres_main = pres_above * above_weight + pres_below * below_weight
+    pres_main_median = np.nanmedian(pres_main)
+    dep_main_median = -gsw.z_from_p(pres_main_median, lat=lat)
+
+    # Set default instrument and serial number if they don't exist
+    instr_main = getattr(ds_main, 'instrument', 'Main instrument')
+    serial_main = getattr(ds_main, 'instrument_serial_number', 'Unknown serial')
+
+    if plot:
+
+        # For figure legends: Set above/below instrument and serial number if they don't exist
+        instr_above = getattr(ds_above, 'instrument', 'Above instrument')
+        serial_above = getattr(ds_above, 'instrument_serial_number', 'Unknown serial')
+        instr_below = getattr(ds_below, 'instrument', 'Below instrument')
+        serial_below = getattr(ds_below, 'instrument_serial_number', 'Unknown serial')
+
+        fig, ax = plt.subplots()
+        ax.plot(ds_above.TIME, ds_above.PRES, label=f'{instr_above} {serial_above}')
+        ax.plot(ds_below.TIME, ds_below.PRES, label=f'{instr_below} {serial_below}')
+        ax.plot(ds_main.TIME, pres_main, label=f'**Estimate**: {instr_main} {serial_main}\n'
+                                               f'(Median: {pres_main_median:.1f} dbar / {dep_main_median:.1f} m)')
+        hline_args = {'ls': '--', 'color': 'k', 'zorder': 0, 'lw': 0.7}
+        ax.axhline(nom_pres_main, **hline_args, label='Nominal pressures')
+        ax.axhline(nom_pres_above, **hline_args)
+        ax.axhline(nom_pres_below, **hline_args)
+        ax.invert_yaxis()
+        ax.set_ylabel('Pressure [dbar]')
+        ax.legend(fontsize=8)
+
+        if internals.is_notebook() and mpl.get_backend() != 'tkagg':
+            display(fig)
+        else:
+            plt.show()
+
+    if not auto_accept:
+        accept = input(f'Estimated offset: {pres_main_median - nom_pres_main:.2f} dbar. '
+                       f'Assign to {instr_main} {serial_main}? (y/n):')
+        if plot:
+            plt.close(fig)
+        if accept.lower() not in ['y', 'yes']:
+            print('No -> `Not` assigning pressure to the dataset.')
+            return ds_main
+
+    # Assign interpolated pressure to main dataset
+    ds_main['PRES'] = (('TIME'), pres_main.data, {
+        'units': 'dbar',
+        'long_name': 'Sea pressure (estimate from interpolation)',
+        'processing_level': 'Data interpolated',
+        'coverage_content_type': 'referenceInformation',
+        'comment': 'Estimated by interpolating between adjacent instruments with pressure sensors.'
+    })
+
+    return ds_main

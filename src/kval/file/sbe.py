@@ -321,6 +321,7 @@ def read_header(filename: str) -> dict:
             "longitude",
             "NMEA_time",
             "start_time",
+            "start_history"
         ]
         hdict = {hkey: [] for hkey in hkeys}
 

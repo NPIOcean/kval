@@ -182,7 +182,8 @@ def threshold(ds: xr.Dataset, variable: str,
         ds_new[variable].attrs['valid_min'] = min_val
 
         if max_val is not None and max_val <= min_val:
-            raise ValueError(f'Threshold editing: max_val ({max_val}) must be greater than min_val ({min_val}).')
+            raise ValueError(f'Threshold editing: max_val ({max_val}) must be '
+                             f'greater than min_val ({min_val}).')
 
     return ds_new
 
