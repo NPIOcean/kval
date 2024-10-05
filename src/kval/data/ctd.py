@@ -53,7 +53,6 @@ from kval.data.dataset import metadata_to_txt, to_netcdf
 # DECORATOR TO PRESERVE PROCESSING STEPS IN METADATA
 
 
-
 # LOADING AND SAVING DATA
 
 
@@ -104,7 +103,8 @@ def ctds_from_cnv_dir(
     # Add PROCESSING variable
     if processing_variable:
         ds = dataset.add_processing_history_var_ctd(
-            ds, source_files=np.sort(cnv_files))
+            ds, source_files=np.sort(cnv_files)
+        )
         ds.attrs["history"] = ds.history.replace(
             '"SBE_processing"', '"PROCESSING.SBE_processing"'
         )
@@ -153,8 +153,8 @@ def ctds_from_cnv_list(
     - time_warnings (bool): Enable/disable time-related warnings.
     - verbose: If False, suppress some prints output.
     - start_time_NMEA (bool, optional): If True, get start_time attribute from
-      the "NMEA UTC (Time)" header line. Default is to grab it from the "start_time"
-      line.
+      the "NMEA UTC (Time)" header line. Default is to grab it from the
+      "start_time" line.
     - processing_variable (bool): Whether to add a processing history variable.
 
     Returns:
@@ -170,7 +170,9 @@ def ctds_from_cnv_list(
 
     # Add PROCESSING variable
     if processing_variable:
-        ds = dataset.add_processing_history_var_ctd(ds, source_files=np.sort(cnv_list))
+        ds = dataset.add_processing_history_var_ctd(
+            ds, source_files=np.sort(cnv_list)
+        )
         ds.attrs["history"] = ds.history.replace(
             '"SBE_processing"', '"PROCESSING.SBE_processing"'
         )
@@ -178,21 +180,25 @@ def ctds_from_cnv_list(
         # Add python script snippet to reproduce this operation
         ds.PROCESSING.attrs["python_script"] += (
             "from kval import data\n"
-            + "cnv_list = [{files}] # A list of strings specifying paths to all files in *source_files*.\n\n"
-            + "# Load all .cnv files and join together into a single xarray Dataset:\n"
-            + "ds = data.ctd.ctds_from_cnv_list(cnv_list,\n"
-            + f"    station_from_filename={station_from_filename},\n"
-            + f"    start_time_NMEA={start_time_NMEA},\n"
-            + f"    processing_variable={processing_variable})"
+            "cnv_list = [{files}] # A list of strings specifying paths to all"
+            " files in *source_files*.\n\n"
+            "# Load all .cnv files and join together into a single xarray"
+            " Dataset:\n"
+            "ds = data.ctd.ctds_from_cnv_list(cnv_list,\n"
+            f"    station_from_filename={station_from_filename},\n"
+            f"    start_time_NMEA={start_time_NMEA},\n"
+            f"    processing_variable={processing_variable})"
         )
 
     return ds
 
 
 @record_processing(
-    ("Created CTD dataset from BTL files in directory '{path}'. Station info "
-     "from filenames: {station_from_filename}. Start time from NMEA: "
-     "{start_time_NMEA}. Time adjust from NMEA: {time_adjust_NMEA}."),
+    (
+        "Created CTD dataset from BTL files in directory '{path}'. Station "
+        "info from filenames: {station_from_filename}. Start time from NMEA: "
+        "{start_time_NMEA}. Time adjust from NMEA: {time_adjust_NMEA}."
+    ),
     "Loaded and combined BTL files from directory into a single dataset.",
 )
 def dataset_from_btl_dir(
@@ -253,7 +259,8 @@ def from_netcdf(path_to_file):
 
 @record_processing(
     "Converted dataset to MATLAB .mat file '{outfile}'. Simplify: {simplify}.",
-    "Converted dataset to MATLAB .mat file '{outfile}' with simplify={simplify}.",
+    "Converted dataset to MATLAB .mat file '{outfile}' with "
+    "simplify={simplify}.",
 )
 def to_mat(ds, outfile, simplify=False):
     """
@@ -279,7 +286,8 @@ def to_mat(ds, outfile, simplify=False):
     # Drop the empty PROCESSING variable (doesn't work well with MATLAB)
     ds_wo_proc = drop_variables(ds, drop_vars="PROCESSING")
 
-    # Also transposing dimensions to PRES, TIME for ease of plotting etc in MATLAB.
+    # Also transposing dimensions to PRES, TIME for ease of plotting etc
+    # in MATLAB.
     matfile.xr_to_mat(ds_wo_proc.transpose(), outfile, simplify=simplify)
 
 
@@ -318,7 +326,9 @@ def to_csv(ds, outfile):
     with open(outfile, "w") as f:
         for time_ in ds.TIME.values:
             ds_prof = ds.sel(TIME=time_)
-            time_str = time.datenum_to_timestamp(time_).strftime("%Y-%m-%d %H:%M:%S")
+            time_str = time.datenum_to_timestamp(time_).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
             print("#" * 88, file=f)
             print(
                 f"#####  {ds_prof.STATION.values:<8} ###  {time_str}  "
@@ -331,16 +341,19 @@ def to_csv(ds, outfile):
             ds_pd = ds_prof[prof_vars].to_pandas()
             ds_pd = ds_pd.drop("TIME", axis=1)
 
-            ds_pd = ds_pd.dropna(subset=ds_pd.columns.difference(["PRES"]), how="all")
+            ds_pd = ds_pd.dropna(
+                subset=ds_pd.columns.difference(["PRES"]), how="all"
+            )
             print(ds_pd.to_csv(), file=f)
 
 
-### MODIFYING DATA
+# MODIFYING DATA
 
 
 @record_processing(
     "Rejected values of {variable} outside the range ({min_val}, {max_val})",
-    py_comment="Rejecting values of {variable} outside the range ({min_val}, {max_val}):",
+    py_comment="Rejecting values of {variable} outside the range "
+    "({min_val}, {max_val}):",
 )
 def threshold(
     ds: xr.Dataset,
@@ -378,7 +391,9 @@ def threshold(
     # Reject temperatures below -1 and above 3
     ds_thresholded = threshold(ds, 'TEMP', max_val=3, min_val=-1)
     """
-    ds = edit.threshold(ds=ds, variable=variable, max_val=max_val, min_val=min_val)
+    ds = edit.threshold(
+        ds=ds, variable=variable, max_val=max_val, min_val=min_val
+    )
     return ds
 
 
@@ -420,11 +435,12 @@ def offset(ds: xr.Dataset, variable: str, offset: float) -> xr.Dataset:
     return ds
 
 
-## APPLYING CORRECTIONS ETC
+# APPLYING CORRECTIONS ETC
 
 
 @record_processing(
-    "Applied a calibration to chlorophyll: {chl_name_out} = {A} * {chl_name_in} + {B}.",
+    "Applied a calibration to chlorophyll: "
+    "{chl_name_out} = {A} * {chl_name_in} + {B}.",
     py_comment="Applying chlorophyll calibration based on fit to lab values:",
 )
 def calibrate_chl(
@@ -439,28 +455,32 @@ def calibrate_chl(
     """
     Apply a calibration to chlorophyll based on a fit to water samples.
 
-    Converts uncalibrated chlorophyll (CHLA_fluorescence) to calibrated chlorophyll (CHLA) using the formula:
+    Converts uncalibrated chlorophyll (CHLA_fluorescence) to calibrated
+    chlorophyll (CHLA) using the formula:
 
     CHLA = A * CHLA_fluorescence + B
 
     Parameters
     ----------
     ds : xr.Dataset
-        Dataset containing A, B: Linear coefficients based on fitting to chl samples.
+        Dataset containing A, B: Linear coefficients based on fitting to chl
+        samples.
     A : float
         Linear coefficient for calibration.
     B : float
         Linear coefficient for calibration.
     chl_name_in : str, optional
-        Name of the variable containing uncalibrated chlorophyll from the instrument.
-        Default is 'CHLA_fluorescence'. Will look for 'CHLA1_fluorescence' if that doesn't exist.
+        Name of the variable containing uncalibrated chlorophyll from the
+        instrument. Default is 'CHLA_fluorescence'. Will look for
+        'CHLA1_fluorescence' if that doesn't exist.
     chl_name_out : str, optional
-        Name of the calibrated chlorophyll variable. If not provided, it is derived from chl_name_in.
-        Default is 'CHLA'.
+        Name of the calibrated chlorophyll variable. If not provided, it is
+        derived from chl_name_in. Default is 'CHLA'.
     verbose : bool, optional
         If True, print messages about the calibration process. Default is True.
     remove_uncal : bool, optional
-        If True, remove the uncalibrated chlorophyll from the dataset. Default is False.
+        If True, remove the uncalibrated chlorophyll from the dataset.
+        Default is False.
 
     Returns
     -------
@@ -470,7 +490,8 @@ def calibrate_chl(
     Examples
     --------
     # Apply calibration with coefficients A=0.5 and B=2
-    ds_calibrated = calibrate_chl(ds, A=0.5, B=2, chl_name_in='CHLA_fluorescence', chl_name_out='CHLA')
+    ds_calibrated = calibrate_chl(ds, A=0.5, B=2,
+          chl_name_in='CHLA_fluorescence', chl_name_out='CHLA')
     """
 
     # Determine the input variable name
@@ -495,11 +516,14 @@ def calibrate_chl(
 
     # Create a new variable with the coefficients applied
     ds[chl_name_out] = A * ds[chl_name_in] + B
-    ds[chl_name_out].attrs = {key: item for key, item in ds[chl_name_in].attrs.items()}
+    ds[chl_name_out].attrs = {
+        key: item for key, item in ds[chl_name_in].attrs.items()
+    }
 
     # Add suitable attributes
     new_attrs = {
-        "long_name": "Chlorophyll-A concentration calibrated against water sample measurements",
+        "long_name": ("Chlorophyll-A concentration calibrated "
+                      "against water sample measurements"),
         "calibration_formula": f"{chl_name_out} = {A} * {chl_name_in} + {B}",
         "coefficient_A": A,
         "coefficient_B": B,
@@ -517,7 +541,9 @@ def calibrate_chl(
 
     # Remove the uncalibrated chl
     if remove_uncal:
-        remove_str = f' Removed uncalibrated Chl-A ("{chl_name_in}") from the dataset.'
+        remove_str = (
+            f' Removed uncalibrated Chl-A ("{chl_name_in}") from the dataset.'
+        )
         ds = ds.drop_vars(chl_name_in)
     else:
         remove_str = ""
@@ -525,13 +551,14 @@ def calibrate_chl(
     # Print
     if verbose:
         print(
-            f'Added calibrated Chl-A ("{chl_name_out}") calculated from variable "{chl_name_in}".{remove_str}'
+            f'Added calibrated Chl-A ("{chl_name_out}") calculated from'
+            f' variable "{chl_name_in}".{remove_str}'
         )
 
     return ds
 
 
-### MODIFYING METADATA
+# MODIFYING METADATA
 
 
 @record_processing(
@@ -562,13 +589,20 @@ def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
     Notes
     -----
     This function calls multiple sub-functions to update the metadata:
-    - `remove_numbers_in_var_names`: Removes numbers from variable names.
-    - `add_standard_var_attrs`: Adds standard variable attributes.
-    - `add_standard_glob_attrs_ctd`: Adds standard global attributes specific to CTD data.
-    - `add_standard_glob_attrs_org`: Adds standard global attributes for the organization.
-    - `add_gmdc_keywords_ctd`: Adds GMDC keywords for CTD data.
-    - `add_range_attrs`: Adds range attributes.
-    - `reorder_attrs`: Reorders attributes for consistency.
+    - `remove_numbers_in_var_names`:
+            Removes numbers from variable names.
+    - `add_standard_var_attrs`:
+            Adds standard variable attributes.
+    - `add_standard_glob_attrs_ctd`:
+            Adds standard global attributes specific to CTD data.
+    - `add_standard_glob_attrs_org`:
+            Adds standard global attributes for the organization.
+    - `add_gmdc_keywords_ctd`:
+         Adds GMDC keywords for CTD data.
+    - `add_range_attrs`:
+            Adds range attributes.
+    - `reorder_attrs`:
+            Reorders attributes for consistency.
     """
     ds = conventionalize.remove_numbers_in_var_names(ds)
     ds = conventionalize.add_standard_var_attrs(ds)
@@ -593,20 +627,20 @@ def drop_variables(
     Drop measurement variables from the dataset based on specified criteria.
 
     This function retains or drops variables from an xarray.Dataset based on
-    provided lists of variables to retain or drop. If `retain_vars` is True,
-    no variables will be dropped.
+    provided lists of variables to retain or drop. If `retain_vars` is True, no
+    variables will be dropped.
 
     Parameters
     ----------
     ds : xr.Dataset
         The dataset from which variables will be dropped.
     retain_vars : Optional[Union[List[str], bool]], default=None
-        List of variables to retain. If a boolean `True` is provided, all variables
-        are retained (no changes made). This parameter is ignored if `drop_vars` is
-        specified.
+        List of variables to retain. If a boolean `True` is provided, all
+        variables are retained (no changes made). This parameter is ignored if
+        `drop_vars` is specified.
     drop_vars : Optional[List[str]], default=None
-        List of variables to drop from the dataset. If specified, this will override
-        `retain_vars`.
+        List of variables to drop from the dataset. If specified, this will
+        override `retain_vars`.
 
     Returns
     -------
@@ -615,9 +649,8 @@ def drop_variables(
 
     Notes
     -----
-    Provide *either* `retain_vars` or `drop_vars`, but not both.
-    Variables that do not have a 'PRES' or 'NISKIN_NUMBER' dimension will always
-    be retained.
+    Provide *either* `retain_vars` or `drop_vars`, but not both. Variables that
+    do not have a 'PRES' or 'NISKIN_NUMBER' dimension will always be retained.
     """
     if retain_vars is None and drop_vars is None:
         return ds
@@ -628,7 +661,8 @@ def drop_variables(
     else:
         if retain_vars is None:
             raise ValueError(
-                "Either `drop_vars` or `retain_vars` must be specified, not both."
+                "Either `drop_vars` or `retain_vars` must be specified,"
+                " not both."
             )
 
         if isinstance(retain_vars, bool):
@@ -654,11 +688,13 @@ def drop_variables(
     return ds
 
 
-#### VISUALIZATION (WRAPPER FOR FUNCTIONS IN THE data.ship_ctd_tools._ctd_visualize.py MODULE)
-
+# VISUALIZATION (WRAPPER FOR FUNCTIONS IN THE
+# data.ship_ctd_tools._ctd_visualize.py MODULE)
 
 def map(
-    ds: xr.Dataset, station_labels: bool = False, station_label_alpha: float = 0.5
+    ds: xr.Dataset,
+    station_labels: bool = False,
+    station_label_alpha: float = 0.5,
 ) -> None:
     """
     Generate a quick map of the cruise CTD stations.
@@ -666,19 +702,22 @@ def map(
     Parameters
     ----------
     ds : xr.Dataset
-        The dataset containing latitude (`LATITUDE`) and longitude (`LONGITUDE`).
+        The dataset containing latitude (`LATITUDE`) and longitude
+        (`LONGITUDE`).
     station_labels : bool, optional
-        Whether to display labels for the stations on the map. Default is False.
+        Whether to display labels for the stations on the map. Default is
+        False.
     station_label_alpha : float, optional
-        The transparency level of the station labels, between 0 and 1. Default is 0.5.
+        The transparency level of the station labels, between 0 and 1. Default
+        is 0.5.
 
-    Displays a quick map using the provided xarray Dataset with latitude and longitude information.
-    The map includes a plot of the cruise track and red dots at data points.
+    Displays a quick map using the provided xarray Dataset with latitude and
+    longitude information. The map includes a plot of the cruise track and red
+    dots at data points.
 
-    Additionally, the function provides interactive buttons:
-    - "Close" minimizes and closes the plot.
-    - "Original Size" restores the plot to its original size.
-    - "Larger" increases the plot size.
+    Additionally, the function provides interactive buttons: - "Close"
+    minimizes and closes the plot. - "Original Size" restores the plot to its
+    original size. - "Larger" increases the plot size.
 
     Examples
     --------
@@ -687,10 +726,15 @@ def map(
 
     Notes
     -----
-    This function utilizes the `quickmap` module for generating a stereographic map.
-    It is designed to come up with reasonable autoscaling and produce grid lines.
+    This function utilizes the `quickmap` module for generating a stereographic
+    map. It is designed to come up with reasonable autoscaling and produce grid
+    lines.
     """
-    viz.map(ds, station_labels=station_labels, station_label_alpha=station_label_alpha)
+    viz.map(
+        ds,
+        station_labels=station_labels,
+        station_label_alpha=station_label_alpha,
+    )
 
 
 def inspect_profiles(ds: xr.Dataset) -> None:
@@ -700,12 +744,15 @@ def inspect_profiles(ds: xr.Dataset) -> None:
     Parameters
     ----------
     ds : xr.Dataset
-        The xarray dataset containing variables such as `PRES`, `STATION`, and other profile variables.
+        The xarray dataset containing variables such as `PRES`, `STATION`, and
+        other profile variables.
 
-    This function creates an interactive plot that allows users to explore profiles within the
-    given xarray dataset. It displays a slider to choose a profile by its index, a dropdown
-    menu to select a variable for visualization, and another dropdown to pick a specific station.
-    The selected profile is highlighted in color, while others are shown in the background.
+    This function creates an interactive plot that allows users to explore
+    profiles within the given xarray dataset. It displays a slider to choose a
+    profile by its index, a dropdown menu to select a variable for
+    visualization, and another dropdown to pick a specific station. The
+    selected profile is highlighted in color, while others are shown in the
+    background.
 
     Examples
     --------
@@ -713,7 +760,8 @@ def inspect_profiles(ds: xr.Dataset) -> None:
 
     Notes
     -----
-    This function utilizes Matplotlib for plotting and ipywidgets for interactive controls.
+    This function utilizes Matplotlib for plotting and ipywidgets for
+    interactive controls.
     """
     viz.inspect_profiles(ds)
 
@@ -729,7 +777,8 @@ def inspect_dual_sensors(ds: xr.Dataset) -> None:
 
     Usage
     -----
-    Call `inspect_dual_sensors(ds)` to interactively inspect profiles of sensor pairs.
+    Call `inspect_dual_sensors(ds)` to interactively inspect profiles of sensor
+    pairs.
     """
     viz.inspect_dual_sensors(ds)
 
@@ -743,10 +792,11 @@ def contour(ds: xr.Dataset) -> None:
     ds : xr.Dataset
         The xarray dataset containing profile variables and coordinates.
 
-    This function generates interactive contour plots for two selected profile variables
-    from the given xarray dataset. It provides dropdown menus to choose the variables,
-    select the x-axis variable (e.g., 'TIME', 'LONGITUDE', 'LATITUDE', 'Profile #'), and
-    set the maximum depth for the y-axis.
+    This function generates interactive contour plots for two selected profile
+    variables from the given xarray dataset. It provides dropdown menus to
+    choose the variables, select the x-axis variable (e.g., 'TIME',
+    'LONGITUDE', 'LATITUDE', 'Profile #'), and set the maximum depth for the
+    y-axis.
 
     Additionally, the function includes a button to close the plot.
 
@@ -756,20 +806,22 @@ def contour(ds: xr.Dataset) -> None:
 
     Notes
     -----
-    This function uses Matplotlib for creating contour plots and ipywidgets for interactive elements.
+    This function uses Matplotlib for creating contour plots and ipywidgets for
+    interactive elements.
     """
     viz.ctd_contours(ds)
 
 
-### INSPECTING METADATA
+# INSPECTING METADATA
 
 
 def quick_metadata_check(ds: xr.Dataset) -> None:
     """
     Perform a quick metadata check on the dataset.
 
-    This function checks for the presence of required global and variable attributes.
-    It is a preliminary check; a more comprehensive verification is done on export to NetCDF.
+    This function checks for the presence of required global and variable
+    attributes. It is a preliminary check; a more comprehensive verification is
+    done on export to NetCDF.
 
     Parameters
     ----------
@@ -832,12 +884,14 @@ def quick_metadata_check(ds: xr.Dataset) -> None:
 
 def check_metadata(ds: Union[xr.Dataset, str]) -> None:
     """
-    Use the IOOS compliance checker to check an NetCDF file (CF and ACDD conventions).
+    Use the IOOS compliance checker to check an NetCDF file (CF and ACDD
+    conventions).
 
     Parameters
     ----------
     ds : Union[xr.Dataset, str]
-        The dataset or file path to check. Can be either an xarray Dataset or a file path.
+        The dataset or file path to check. Can be either an xarray Dataset or a
+        file path.
 
     Displays the compliance check results with a "Close" button.
     """
@@ -846,10 +900,9 @@ def check_metadata(ds: Union[xr.Dataset, str]) -> None:
 
 ############
 
-## SMALL FUNCTIONS FOR MODIFYING METADATA ETC
+# SMALL FUNCTIONS FOR MODIFYING METADATA ETC
 
-## Consider moving some (all?) of these to nc_attrs.conventionalize?
-
+# Consider moving some (all?) of these to nc_attrs.conventionalize?
 
 def set_attr_glob(ds: xr.Dataset, attr: str) -> xr.Dataset:
     """
@@ -901,13 +954,14 @@ def set_attr_var(ds: xr.Dataset, variable: str, attr: str) -> xr.Dataset:
     return ds
 
 
-#### EDITING
+# EDITING
 # (Wrappers for functions in the data.edit and data.ship_ctd_tools._ctd_edit.py
 #  module)
 
 
-def hand_remove_points(ds: xr.Dataset, variable: str, TIME_index: str
-                       ) -> xr.Dataset:
+def hand_remove_points(
+    ds: xr.Dataset, variable: str, TIME_index: str
+) -> xr.Dataset:
     """
     Interactively remove data points from CTD profiles.
 
@@ -934,7 +988,7 @@ def hand_remove_points(ds: xr.Dataset, variable: str, TIME_index: str
     Use the interactive plot to select points for removal, then click the
     corresponding buttons for actions.
     """
-    ds0 = ds.copy()
+
     hand_remove = ctd_edit.hand_remove_points(ds, variable, TIME_index)
     ds = hand_remove.d
 
@@ -943,7 +997,8 @@ def hand_remove_points(ds: xr.Dataset, variable: str, TIME_index: str
 
 def apply_threshold(ds: xr.Dataset) -> xr.Dataset:
     """
-    Interactively select a valid range for data variables and apply thresholds to the data.
+    Interactively select a valid range for data variables and apply thresholds
+    to the data.
 
     Parameters
     ----------
@@ -957,7 +1012,8 @@ def apply_threshold(ds: xr.Dataset) -> xr.Dataset:
 
     Notes
     -----
-    Utilizes interactive widgets for selecting thresholds within a Jupyter environment.
+    Utilizes interactive widgets for selecting thresholds within a Jupyter
+    environment.
     """
 
     variables = tools._get_profile_variables(ds)
@@ -1007,14 +1063,16 @@ def drop_vars_pick(ds: xr.Dataset) -> xr.Dataset:
 
     Notes
     -----
-    Displays an interactive widget with checkboxes for each variable, allowing users to select variables to remove.
-    The removal is performed by clicking the "Drop variables" button. The removed variables are also printed to the output.
+    Displays an interactive widget with checkboxes for each variable, allowing
+    users to select variables to remove. The removal is performed by clicking
+    the "Drop variables" button. The removed variables are also printed to the
+    output.
     """
     edit_obj = edit.drop_vars_pick(ds)
     return edit_obj.D
 
 
-### TABLED/UNFINISHED/COULD PERHAPS BECOME USEFUL
+# TABLED/UNFINISHED/COULD PERHAPS BECOME USEFUL
 
 if False:
 
@@ -1022,7 +1080,8 @@ if False:
         """
         UNFINISHED! Tabled for fixing.
 
-        Interactive class for dropping selected time points from an xarray Dataset based on the value of STATION(TIME).
+        Interactive class for dropping selected time points from an xarray
+        Dataset based on the value of STATION(TIME).
 
         Parameters
         ----------
@@ -1036,8 +1095,9 @@ if False:
 
         Notes
         -----
-        Displays an interactive widget with checkboxes for each time point, showing the associated STATION.
-        Users can select time points to remove. The removal is performed by clicking the "Drop time points" button.
+        Displays an interactive widget with checkboxes for each time point,
+        showing the associated STATION. Users can select time points to remove.
+        The removal is performed by clicking the "Drop time points" button.
         """
         edit_obj = ctd_edit.drop_stations_pick(ds)
         return edit_obj.D
