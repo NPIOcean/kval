@@ -1,12 +1,43 @@
 """
 KVAL.DATA.MOORED
+
+Loadin and processing data from fixed instruments.
+
+Currently works for SBE and RBR CTD sensors - may want to broaden functionality
+for other moored sensors.
+
+- Loading data from .cnv or .rsk
+- QC (!)
+    - Compare with CTD (!)
+    - Deck PRES values (!)
+    - Quicklook functions (!)
+- Editing
+    - Chop deck time from the record
+    - Despike*
+    - Rolling filter*
+    - Threshold editing*
+    - Drift corr (!)
+    - Remove points by index
+    - Remove pick by hand picking
+    - Drop variables
+    - Drop variables (interactive)
+- Calculations
+    - Recalculate PSAL
+    - Calculate depth (!)
+    - Calculate all TEOS-10 (!)
+- Standard metadata fixes*
+- Saving
+    - To matfile*
+
+(!) To be written
+* Simple wrappers
+
 """
 
 import xarray as xr
 from typing import Optional, Tuple, Union, List
 import numpy as np
-import functools
-import inspect
+
 import os
 import gsw
 import matplotlib.pyplot as plt
@@ -15,84 +46,14 @@ import matplotlib as mpl
 from kval.file import sbe, rbr, matfile
 from kval.data import dataset, edit
 from kval.data.moored_tools import _moored_tools
+from kval.data.moored_tools._moored_decorator import record_processing
 
 from kval.util import internals
 from kval.signal import despike, filt
-from kval.metadata import conventionalize, _standard_attrs
+from kval.metadata import conventionalize
 
 if internals.is_notebook():
     from IPython.display import display
-
-# DECORATOR TO PRESERVE PROCESSING STEPS IN METADATA
-
-
-def record_processing(description_template, py_comment=None):
-    """
-    A decorator to record processing steps and their input arguments in the
-    dataset's metadata.
-
-    Parameters:
-    - description_template (str): A template for the description that includes
-                                  placeholders for input arguments.
-
-    Returns:
-    - decorator function
-    """
-
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(ds, *args, **kwargs):
-
-            # Apply the function
-            ds = func(ds, *args, **kwargs)
-
-            # Check if the 'PROCESSING' field exists in the dataset
-            if "PROCESSING" not in ds:
-                # If 'PROCESSING' is not present, return the dataset without
-                # any changes
-                return ds
-
-            # Prepare the description with input arguments
-            sig = inspect.signature(func)
-            bound_args = sig.bind(ds, *args, **kwargs)
-            bound_args.apply_defaults()
-
-            # Format the description template with the actual arguments
-            description = description_template.format(**bound_args.arguments)
-
-            # Record the processing step
-            ds["PROCESSING"].attrs["post_processing"] += description + "\n"
-
-            # Prepare the function call code with arguments
-            args_list = []
-            for name, value in bound_args.arguments.items():
-                # Skip the 'ds' argument as it's always present
-                if name != "ds":
-                    default_value = sig.parameters[name].default
-                    if value is not default_value:
-                        if isinstance(value, str):
-                            args_list.append(f"{name}='{value}'")
-                        else:
-                            args_list.append(f"{name}={value}")
-
-            function_call = (
-                f"ds = data.moored.{func.__name__}(ds, "
-                f"{', '.join(args_list)})"
-            )
-
-            if py_comment:
-                ds["PROCESSING"].attrs["python_script"] += (
-                    f"\n\n# {py_comment.format(**bound_args.arguments)}"
-                    f"\n{function_call}"
-                )
-            else:
-                ds["PROCESSING"].attrs["python_script"] += (
-                    f"\n\n{function_call}")
-            return ds
-
-        return wrapper
-
-    return decorator
 
 
 def load_moored(
@@ -102,7 +63,8 @@ def load_moored(
     lon=None,
 ) -> xr.Dataset:
     """
-    Load moored instrument data from a file into an xarray Dataset.
+    Load moored instrument data from a file into an xarray Dataset, preserving
+    metadata whevever possible.
 
     Should be able to read instruments from RBR (Concerto, Solo..) and
     SBE (SBE37, SBE16). Mileage may vary for older file types.
@@ -162,12 +124,12 @@ def load_moored(
         # For SBE: Move the SBE_processing attribute to PROCESSING.
         if instr_type == "SBE" and "SBE_processing" in ds.attrs:
             ds.PROCESSING.attrs["SBE_processing"] = ds.SBE_processing
-            del ds.attrs['SBE_processing']
+            del ds.attrs["SBE_processing"]
 
             # Adde exlanation of `SBE_processing` to the `comment` attribute
             ds.PROCESSING.attrs["comment"] += (
-                '# SBE_processing #:\nSummary of the post-processing applied '
-                'within SeaBird software to produce the .cnv file.'
+                "# SBE_processing #:\nSummary of the post-processing applied "
+                "within SeaBird software to produce the .cnv file."
             )
 
         # Add python scipt snipped to reproduce this operation
@@ -266,8 +228,9 @@ def chop_deck(
         # find a start index
         if chop_var[0] < chop_var_mean - sd_thr * chop_var_sd:
             indices[0] = (
-                np.where(np.diff(chop_var < chop_var_mean
-                                 - sd_thr * chop_var_sd))[0][0]
+                np.where(
+                    np.diff(chop_var < chop_var_mean - sd_thr * chop_var_sd)
+                )[0][0]
                 + 1
             )
         # If we detect deck time at end of time series:
@@ -291,19 +254,25 @@ def chop_deck(
                 ylab = f"{ylab} [{ds[variable].units}]"
 
             ax.plot(index, chop_var, "k", label=variable)
-            ax.plot(index[keep_slice], chop_var[keep_slice],
-                    "r", label="Chopped Range")
+            ax.plot(
+                index[keep_slice],
+                chop_var[keep_slice],
+                "r",
+                label="Chopped Range",
+            )
             ax.set_xlabel("Index")
             ax.set_ylabel(ylab)
             ax.invert_yaxis()
-            ax.set_title(f"Suggested chop: [{keep_slice.start}, "
-                         f"{keep_slice.stop}] (to red curve).")
+            ax.set_title(
+                f"Suggested chop: [{keep_slice.start}, "
+                f"{keep_slice.stop}] (to red curve)."
+            )
             ax.legend()
 
             # Ensure plot updates and displays (different within notebook with
             # widget backend..)
             if internals.is_notebook():
-                if mpl.get_backend() != 'tkagg':
+                if mpl.get_backend() != "tkagg":
                     display(fig)
                 else:
                     plt.ion()
@@ -311,8 +280,10 @@ def chop_deck(
             else:
                 plt.show(block=False)
 
-            print(f"Suggested chop: [{keep_slice.start}, "
-                         f"{keep_slice.stop}] (to red curve).")
+            print(
+                f"Suggested chop: [{keep_slice.start}, "
+                f"{keep_slice.stop}] (to red curve)."
+            )
             accept = input("Accept (y/n)?: ")
 
             # Close the plot after input tochop_var avoid re-display
@@ -373,17 +344,13 @@ def chop_deck(
     return ds
 
 
-# Hand edit outliers
-
-
-# Programmatic edit points
-# Note: Processing history is pwritten in the function itself
-
+# Despike
 @record_processing(
     "",
     py_comment=(
         "Find/reject {var_name} outliers (points exceeding {window_size}-"
-        "pt rolling {filter_type} by>{n_std} SDs."),
+        "pt rolling {filter_type} by>{n_std} SDs."
+    ),
 )
 def despike_rolling(
     ds: xr.Dataset,
@@ -460,129 +427,25 @@ def despike_rolling(
     )
 
     n_removed = np.sum(is_outside_criterion).item()
-    if 'PROCESSING' in ds:
-        ds.PROCESSING.attrs['post_processing'] +=(
+    if "PROCESSING" in ds:
+        ds.PROCESSING.attrs["post_processing"] += (
             f"Edited out spikes {var_name} using a rolling window criterion. "
             f"Values exceeding the {window_size}-point rolling {filter_type} "
             f"by more than {n_std} (rolling) standard deviations were "
             f"interpreted as outliers and masked (found {n_removed} "
-            "outliers).")
-
-    return ds
-
-
-# Drift
-
-# Standard metadata
-
-
-### MODIFYING METADATA
-
-@record_processing(
-    "Applied automatic standardization of metadata.",
-    py_comment="Applying standard metadata (global+variable attributes):",
-)
-def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
-    """
-    Various modifications to the metadata to standardize the dataset for
-    publication.
-
-    This function applies several standardizations and conventions to the
-    dataset's metadata, including renaming variables, adding standard
-    attributes, and ensuring the metadata is consistent.
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        The input xarray Dataset whose metadata is to be standardized.
-    NPI : bool, optional
-        Not used in this function. Default is True.
-
-    Returns
-    -------
-    xr.Dataset
-        The dataset with updated metadata.
-
-    Notes
-    -----
-    This function calls multiple sub-functions to update the metadata:
-    - `remove_numbers_in_var_names`: Removes numbers from variable names.
-    - `add_standard_var_attrs`: Adds standard variable attributes.
-    - `add_standard_glob_attrs_ctd`: Adds standard global attributes specific to CTD data.
-    - `add_standard_glob_attrs_org`: Adds standard global attributes for the organization.
-    - `add_gmdc_keywords_ctd`: Adds GMDC keywords for CTD data.
-    - `add_range_attrs`: Adds range attributes.
-    - `reorder_attrs`: Reorders attributes for consistency.
-    """
-    ds = conventionalize.remove_numbers_in_var_names(ds)
-    ds = conventionalize.add_standard_var_attrs(ds)
-    ds = conventionalize.add_standard_glob_attrs_moor(ds, override=False)
-    ds = conventionalize.add_standard_glob_attrs_org(ds)
-    ds = conventionalize.add_gmdc_keywords_ctd(ds)
-    ds = conventionalize.add_range_attrs(ds)
-    ds = conventionalize.reorder_attrs(ds)
-
-    return ds
-
-
-# Threshold edit
-
-
-@record_processing(
-    "Rejected values of {variable} outside the range ({min_val}, {max_val})",
-    py_comment=("Rejecting values of {variable} outside the range "
-                "({min_val}, {max_val}):"),
-)
-def threshold(
-    ds: xr.Dataset,
-    variable: str,
-    min_val: Optional[float] = None,
-    max_val: Optional[float] = None,
-) -> xr.Dataset:
-    """
-    Apply a threshold to a specified variable in an xarray Dataset, setting
-    values outside the specified range (min_val, max_val) to NaN.
-
-    Also modifies the valid_min and valid_max variable attributes.
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        The input xarray Dataset.
-    variable : str
-        The name of the variable within the Dataset to be thresholded.
-    min_val : Optional[float], default=None
-        The minimum allowed value for the variable. Values less than
-        this will be set to NaN. If None, no lower threshold is applied.
-    max_val : Optional[float], default=None
-        The maximum allowed value for the variable. Values greater than
-        this will be set to NaN. If None, no upper threshold is applied.
-
-    Returns
-    -------
-    xr.Dataset
-        A new xarray Dataset with the thresholded variable. The `valid_min`
-        and `valid_max` attributes are updated accordingly.
-
-    Examples
-    --------
-    # Reject temperatures below -1 and above 3
-    ds_thresholded = threshold(ds, 'TEMP', max_val=3, min_val=-1)
-    """
-    ds = edit.threshold(ds=ds, variable=variable,
-                        max_val=max_val, min_val=min_val)
+            "outliers)."
+        )
 
     return ds
 
 
 # Filtering
-
-
 @record_processing(
     "Ran a {window_size}-point rolling {filter_type} filter "
     "on the variable {dim}.",
-    py_comment=("Run a {window_size}-point rolling {filter_type} filter "
-                "on {dim}"),
+    py_comment=(
+        "Run a {window_size}-point rolling {filter_type} filter " "on {dim}"
+    ),
 )
 def rolling_mean(
     ds: xr.Dataset,
@@ -639,12 +502,167 @@ def rolling_mean(
     return ds
 
 
-# Recalculating sal
+# Drift
 
 
+# Threshold edit
+@record_processing(
+    "Rejected values of {variable} outside the range ({min_val}, {max_val})",
+    py_comment=(
+        "Rejecting values of {variable} outside the range "
+        "({min_val}, {max_val}):"
+    ),
+)
+def threshold(
+    ds: xr.Dataset,
+    variable: str,
+    min_val: Optional[float] = None,
+    max_val: Optional[float] = None,
+) -> xr.Dataset:
+    """
+    Apply a threshold to a specified variable in an xarray Dataset, setting
+    values outside the specified range (min_val, max_val) to NaN.
+
+    Also modifies the valid_min and valid_max variable attributes.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The input xarray Dataset.
+    variable : str
+        The name of the variable within the Dataset to be thresholded.
+    min_val : Optional[float], default=None
+        The minimum allowed value for the variable. Values less than
+        this will be set to NaN. If None, no lower threshold is applied.
+    max_val : Optional[float], default=None
+        The maximum allowed value for the variable. Values greater than
+        this will be set to NaN. If None, no upper threshold is applied.
+
+    Returns
+    -------
+    xr.Dataset
+        A new xarray Dataset with the thresholded variable. The `valid_min`
+        and `valid_max` attributes are updated accordingly.
+
+    Examples
+    --------
+    # Reject temperatures below -1 and above 3
+    ds_thresholded = threshold(ds, 'TEMP', max_val=3, min_val=-1)
+    """
+    ds = edit.threshold(
+        ds=ds, variable=variable, max_val=max_val, min_val=min_val
+    )
+
+    return ds
+
+
+# Interactive threshold edit
+def threshold_pick(ds: xr.Dataset) -> xr.Dataset:
+    """
+    Interactively select a valid range for data variables and apply thresholds
+    to the data.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The dataset to modify.
+
+    Returns
+    -------
+    xr.Dataset
+        The dataset with thresholds applied.
+
+    Notes
+    -----
+    Utilizes interactive widgets for selecting thresholds within a Jupyter
+    environment.
+    """
+
+    data_variables = []
+
+    for varnm in ds.data_vars:
+        if "TIME" in ds[varnm].dims:
+            data_variables += [varnm]
+
+    edit.threshold_edit(ds, variables=data_variables)
+    return ds
+
+
+# Remove points by index
+@record_processing(
+    "Rejecting (setting to NaN) the following time indices from"
+    " {varnm}:\n{remove_inds}.",
+    py_comment=("Reject {varnm} values at specific points"),
+)
+def remove_points(
+    ds: xr.Dataset, varnm: str, remove_inds, time_var="TIME"
+) -> xr.Dataset:
+    """
+    Remove specified points from a time series in the dataset by setting them
+    to NaN.
+
+    Parameters:
+    - ds: xarray.Dataset
+      The dataset containing the variable to modify.
+    - varnm: str
+      The name of the variable to modify.
+    - remove_inds: list or array-like
+      Indices of points to remove (set to NaN).
+
+    Returns:
+    - ds: xarray.Dataset
+      The dataset with specified points removed (set to NaN).
+    """
+
+    ds = edit.remove_points_timeseries(
+        ds=ds, varnm=varnm, remove_inds=remove_inds, time_var=time_var
+    )
+
+    return ds
+
+
+# Remove points (hand pick)
+def hand_remove_points(
+    ds: xr.Dataset,
+    variable: str,
+) -> xr.Dataset:
+    """
+    Interactively remove data points from CTD profiles.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The dataset containing the CTD data.
+    variable : str
+        The name of the variable to visualize and edit (e.g., 'TEMP1', 'CHLA').
+    TIME_index : str
+        The name of the station (e.g., '003', '012_01', 'AT290', 'StationA').
+
+    Returns
+    -------
+    xr.Dataset
+        The dataset with data points removed based on interactive input.
+
+    Examples
+    --------
+    >>> ds = hand_remove_points(ds, 'TEMP1', 'StationA')
+
+    Notes
+    -----
+    Use the interactive plot to select points for removal, then click the
+    corresponding buttons for actions.
+    """
+
+    hand_remove = _moored_tools.hand_remove_points(ds, variable)
+    ds = hand_remove.ds
+
+    return ds
+
+
+# Recalculate sal
 @record_processing(
     "Recalculated PSAL using the GSW-Python module.",
-    py_comment="Recalculating PSAL"
+    py_comment="Recalculating PSAL",
 )
 def calculate_PSAL(
     ds: xr.Dataset,
@@ -696,21 +714,181 @@ def calculate_PSAL(
     return ds
 
 
-# Calculate gsw
+# Assign pressure from adjacent instruments
+def assign_pressure(
+    ds_main: xr.Dataset,
+    ds_above: xr.Dataset,
+    ds_below: xr.Dataset,
+    nom_dep_main: float,
+    nom_dep_above: float,
+    nom_dep_below: float,
+    auto_accept: bool = False,
+    plot: bool = True,
+    lat: float = None,
+) -> xr.Dataset:
+    """
+    Estimate and assign sea pressure to an instrument without a pressure record
+    by interpolating between pressure sensors located above and below the
+    instrument.
 
-# Interpolate onto new TIME
+    This method is useful for instruments like an RBR Solo (temperature-only)
+    located between two instruments (e.g., RBR Concertos with pressure sensors)
+    on a mooring. The function interpolates pressure from the adjacent sensors
+    and can display a plot comparing estimated and nominal pressures.
 
-# Compare wth CTDs
+    Parameters
+    ----------
+    ds_main : xarray.Dataset
+        Dataset for the instrument without pressure record, which will receive
+        the estimated pressure.
+    ds_above : xarray.Dataset
+        Dataset for the instrument with pressure sensor located above the main
+        instrument.
+    ds_below : xarray.Dataset
+        Dataset for the instrument with pressure sensor located below the main
+        instrument.
+    nom_dep_main : float
+        Nominal (planned) depth of the main instrument [meters].
+    nom_dep_above : float
+        Nominal depth of the above sensor [meters].
+    nom_dep_below : float
+        Nominal depth of the below sensor [meters].
+    auto_accept : bool, optional
+        Automatically accept the pressure estimate without user confirmation.
+        Default is False.
+    plot : bool, optional
+        Display a plot comparing the interpolated pressure to the recorded
+        pressures of the adjacent sensors. Default is True.
+    lat : float, optional
+        Latitude for converting depth to pressure. If not provided, it will be
+        inferred from `ds_main`.
 
-# -- Load and export
+    Returns
+    -------
+    xarray.Dataset
+        Updated dataset `ds_main` with an added 'PRES' variable containing the
+        estimated pressures [dbar].
 
+    Raises
+    ------
+    Exception
+        If latitude (`lat`) is not provided and cannot be inferred from
+        `ds_main`.
+    """
+
+    # Ensure we have latitude for depth-to-pressure conversion
+    if lat is None:
+        try:
+            lat = ds_main.LATITUDE.item()
+        except AttributeError:
+            raise Exception(
+                "Could not find latitude for depth->pressure calculation. "
+                "Specify `lat` in `assign_pressure`."
+            )
+
+    # Convert nominal depth to nominal pressure
+    nom_pres_main = gsw.p_from_z(-nom_dep_main, lat=lat)
+    nom_pres_above = gsw.p_from_z(-nom_dep_above, lat=lat)
+    nom_pres_below = gsw.p_from_z(-nom_dep_below, lat=lat)
+
+    # Interpolate pressure records of above/below sensors onto main sensor's
+    # time grid
+    pres_above = ds_above.interp_like(ds_main).PRES
+    pres_below = ds_below.interp_like(ds_main).PRES
+
+    # Calculate interpolation weights based on nominal depths
+    above_weight = (nom_pres_below - nom_pres_main) / (
+        nom_pres_below - nom_pres_above
+    )
+    below_weight = (nom_pres_main - nom_pres_above) / (
+        nom_pres_below - nom_pres_above
+    )
+
+    # Calculate interpolated pressure for main sensor
+    pres_main = pres_above * above_weight + pres_below * below_weight
+    pres_main_median = np.nanmedian(pres_main)
+    dep_main_median = -gsw.z_from_p(pres_main_median, lat=lat)
+
+    # Set default instrument and serial number if they don't exist
+    instr_main = getattr(ds_main, "instrument", "Main instrument")
+    serial_main = getattr(ds_main, "instrument_serial_number",
+                          "Unknown serial")
+
+    if plot:
+
+        # For figure legends: Set above/below instrument and serial number if
+        # they don't exist
+        instr_above = getattr(ds_above, "instrument", "Above instrument")
+        serial_above = getattr(
+            ds_above, "instrument_serial_number", "Unknown serial"
+        )
+        instr_below = getattr(ds_below, "instrument", "Below instrument")
+        serial_below = getattr(
+            ds_below, "instrument_serial_number", "Unknown serial"
+        )
+
+        fig, ax = plt.subplots()
+        ax.plot(
+            ds_above.TIME, ds_above.PRES, label=f"{instr_above} {serial_above}"
+        )
+        ax.plot(
+            ds_below.TIME, ds_below.PRES, label=f"{instr_below} {serial_below}"
+        )
+        ax.plot(
+            ds_main.TIME,
+            pres_main,
+            label=f"**Estimate**: {instr_main} {serial_main}\n"
+            f"(Median: {pres_main_median:.1f} dbar / {dep_main_median:.1f} m)",
+        )
+        hline_args = {"ls": "--", "color": "k", "zorder": 0, "lw": 0.7}
+        ax.axhline(nom_pres_main, **hline_args, label="Nominal pressures")
+        ax.axhline(nom_pres_above, **hline_args)
+        ax.axhline(nom_pres_below, **hline_args)
+        ax.invert_yaxis()
+        ax.set_ylabel("Pressure [dbar]")
+        ax.legend(fontsize=8)
+
+        if internals.is_notebook() and mpl.get_backend() != "tkagg":
+            display(fig)
+        else:
+            plt.show()
+
+    if not auto_accept:
+        accept = input(
+            f"Estimated offset: {pres_main_median - nom_pres_main:.2f} dbar. "
+            f"Assign to {instr_main} {serial_main}? (y/n):"
+        )
+        if plot:
+            plt.close(fig)
+        if accept.lower() not in ["y", "yes"]:
+            print("No -> `Not` assigning pressure to the dataset.")
+            return ds_main
+
+    # Assign interpolated pressure to main dataset
+    ds_main["PRES"] = (
+        ("TIME"),
+        pres_main.data,
+        {
+            "units": "dbar",
+            "long_name": "Sea pressure (estimate from interpolation)",
+            "processing_level": "Data interpolated",
+            "coverage_content_type": "referenceInformation",
+            "comment": ("Estimated by interpolating between adjacent"
+                        " instruments with pressure sensors."),
+        },
+    )
+
+    return ds_main
+
+
+# Drop variables
+@record_processing("", py_comment="Dropping some variables")
 # Note: Doing PROCESSING.post_processing record keeping within the
 # drop_variables() function because we want to access the *dropped* list.
-@record_processing("", py_comment="Dropping some variables")
 def drop_variables(
     ds: xr.Dataset,
-    retain_vars: Optional[Union[List[str], bool]] = None,
     drop_vars: Optional[List[str]] = None,
+    retain_vars: Optional[Union[List[str], bool]] = None,
     verbose: bool = True,
 ) -> xr.Dataset:
     """
@@ -731,6 +909,8 @@ def drop_variables(
     drop_vars : Optional[List[str]], default=None
         List of variables to drop from the dataset. If specified, this will
         override `retain_vars`.
+    verbose : bool, default=True
+        Whether to print information about the dropped variables.
 
     Returns
     -------
@@ -741,46 +921,51 @@ def drop_variables(
     -----
     Provide *either* `retain_vars` or `drop_vars`, but not both.
     Variables without a TIME dimension are always retained.
-
     """
+
+    if retain_vars is not None and drop_vars is not None:
+        raise ValueError(
+            "Specify either `retain_vars` or `drop_vars`, but not both."
+        )
+
     if retain_vars is None and drop_vars is None:
         return ds
 
+    dropped = []  # To keep track of dropped variables
+
+    # Case: drop variables by explicitly provided drop_vars
     if drop_vars is not None:
         ds = ds.drop_vars(drop_vars)
         dropped = drop_vars
+    # Case: retain variables based on retain_vars list
     else:
-        if retain_vars is None:
-            raise ValueError(
-                "Either `drop_vars` or `retain_vars` must be specified, "
-                "not both."
-            )
-
         if isinstance(retain_vars, bool):
-            if retain_vars:
+            if retain_vars:  # If retain_vars is True, return unchanged dataset
                 return ds
-            retain_vars = []
+            retain_vars = []  # If False, treat it as an empty retain list
 
         all_vars = list(ds.data_vars)
-        dropped = []
         for varnm in all_vars:
+            # Drop variables not in retain_vars, and those having "TIME" in
+            # dimensions
             if varnm not in retain_vars and "TIME" in ds[varnm].dims:
                 ds = ds.drop_vars(varnm)
                 dropped.append(varnm)
 
+    # Inform and log dropped variables
     if dropped:
-        drop_str = f"Dropped these variables from the Dataset: {dropped}."
+        drop_str = f"Dropped variables from the Dataset: {dropped}."
         if verbose:
             print(drop_str)
         if "PROCESSING" in ds:
-            ds["PROCESSING"].attrs["post_processing"] += f"{drop_str}\n"
+            ds["PROCESSING"].attrs["post_processing"] = (
+                ds["PROCESSING"].attrs.get("post_processing", "")
+                + f"{drop_str}\n")
 
     return ds
 
 
-# -- INTERACTIVE
-
-
+# Drop variables (interactive)
 def drop_vars_pick(ds: xr.Dataset) -> xr.Dataset:
     """
     Interactively drop (remove) selected variables from an xarray Dataset.
@@ -806,43 +991,62 @@ def drop_vars_pick(ds: xr.Dataset) -> xr.Dataset:
     return edit_obj.D
 
 
-def threshold_pick(ds: xr.Dataset) -> xr.Dataset:
+# Standardize metadata
+@record_processing(
+    "Applied automatic standardization of metadata.",
+    py_comment="Applying standard metadata (global+variable attributes):",
+)
+def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
     """
-    Interactively select a valid range for data variables and apply thresholds
-    to the data.
+    Various modifications to the metadata to standardize the dataset for
+    publication.
+
+    This function applies several standardizations and conventions to the
+    dataset's metadata, including renaming variables, adding standard
+    attributes, and ensuring the metadata is consistent.
 
     Parameters
     ----------
     ds : xr.Dataset
-        The dataset to modify.
+        The input xarray Dataset whose metadata is to be standardized.
+    NPI : bool, optional
+        Not used in this function. Default is True.
 
     Returns
     -------
     xr.Dataset
-        The dataset with thresholds applied.
+        The dataset with updated metadata.
 
     Notes
     -----
-    Utilizes interactive widgets for selecting thresholds within a Jupyter
-    environment.
+    This function calls multiple sub-functions to update the metadata:
+    -  `remove_numbers_in_var_names`:
+        Removes numbers from variable names.
+    - `add_standard_var_attrs`:
+        Adds standard variable attributes.
+    - `add_standard_glob_attrs_ctd`:
+        Adds standard global attributes specific to CTD data.
+    - `add_standard_glob_attrs_org`:
+        Adds standard global attributes for the organization.
+    - `add_gmdc_keywords_ctd`:
+        Adds GMDC keywords for CTD data.
+    - `add_range_attrs`:
+        Adds range attributes.
+    - `reorder_attrs`:
+        Reorders attributes for consistency.
     """
+    ds = conventionalize.remove_numbers_in_var_names(ds)
+    ds = conventionalize.add_standard_var_attrs(ds)
+    ds = conventionalize.add_standard_glob_attrs_moor(ds, override=False)
+    ds = conventionalize.add_standard_glob_attrs_org(ds)
+    ds = conventionalize.add_gmdc_keywords_ctd(ds)
+    ds = conventionalize.add_range_attrs(ds)
+    ds = conventionalize.reorder_attrs(ds)
 
-    data_variables = []
-
-    for varnm in ds.data_vars:
-        if "TIME" in ds[varnm].dims:
-            data_variables += [varnm]
-
-    edit.threshold_edit(ds, variables=data_variables)
     return ds
 
 
-# I don't think we neeed to record this!
-#@record_processing(
-#    "Converted dataset to MATLAB .mat file '{outfile}'. Simplify: {simplify}.",
-#    "Converted dataset to MATLAB .mat file '{outfile}' "
-#    "with simplify={simplify}.",
-#)
+# Export to matfile
 def to_mat(ds, outfile, simplify=False):
     """
     Convert the CTD data (xarray.Dataset) to a MATLAB .mat file.
@@ -870,196 +1074,3 @@ def to_mat(ds, outfile, simplify=False):
     # Also transposing dimensions to PRES, TIME for ease of plotting etc in
     # MATLAB.
     matfile.xr_to_mat(ds_wo_proc.transpose(), outfile, simplify=simplify)
-
-@record_processing(
-    "Rejecting (setting to NaN) the following time indices from {varnm}:\n{remove_inds}.",
-    py_comment=("Reject {varnm} values at specific points"),
-)
-def remove_points(ds: xr.Dataset, varnm: str,
-                          remove_inds, time_var = 'TIME') -> xr.Dataset:
-
-    """
-    Remove specified points from a time series in the dataset by setting them to NaN.
-
-    Parameters:
-    - ds: xarray.Dataset
-      The dataset containing the variable to modify.
-    - varnm: str
-      The name of the variable to modify.
-    - remove_inds: list or array-like
-      Indices of points to remove (set to NaN).
-
-    Returns:
-    - ds: xarray.Dataset
-      The dataset with specified points removed (set to NaN).
-    """
-
-    ds = edit.remove_points_timeseries(
-        ds=ds, varnm=varnm, remove_inds=remove_inds, time_var=time_var)
-
-    return ds
-
-def hand_remove_points(ds: xr.Dataset, variable: str,
-                       ) -> xr.Dataset:
-    """
-    Interactively remove data points from CTD profiles.
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        The dataset containing the CTD data.
-    variable : str
-        The name of the variable to visualize and edit (e.g., 'TEMP1', 'CHLA').
-    TIME_index : str
-        The name of the station (e.g., '003', '012_01', 'AT290', 'StationA').
-
-    Returns
-    -------
-    xr.Dataset
-        The dataset with data points removed based on interactive input.
-
-    Examples
-    --------
-    >>> ds = hand_remove_points(ds, 'TEMP1', 'StationA')
-
-    Notes
-    -----
-    Use the interactive plot to select points for removal, then click the
-    corresponding buttons for actions.
-    """
-    ds0 = ds.copy()
-    hand_remove = _moored_tools.hand_remove_points(ds, variable)
-    ds = hand_remove.ds
-
-    return ds
-
-def assign_pressure(
-    ds_main: xr.Dataset,
-    ds_above: xr.Dataset,
-    ds_below: xr.Dataset,
-    nom_dep_main: float,
-    nom_dep_above: float,
-    nom_dep_below: float,
-    auto_accept: bool = False,
-    plot: bool = True,
-    lat: float = None
-) -> xr.Dataset:
-    """
-    Estimate and assign sea pressure to an instrument without a pressure record by interpolating
-    between pressure sensors located above and below the instrument.
-
-    This method is useful for instruments like an RBR Solo (temperature-only) located between
-    two instruments (e.g., RBR Concertos with pressure sensors) on a mooring. The function
-    interpolates pressure from the adjacent sensors and can display a plot comparing estimated
-    and nominal pressures.
-
-    Parameters
-    ----------
-    ds_main : xarray.Dataset
-        Dataset for the instrument without pressure record, which will receive the estimated pressure.
-    ds_above : xarray.Dataset
-        Dataset for the instrument with pressure sensor located above the main instrument.
-    ds_below : xarray.Dataset
-        Dataset for the instrument with pressure sensor located below the main instrument.
-    nom_dep_main : float
-        Nominal (planned) depth of the main instrument [meters].
-    nom_dep_above : float
-        Nominal depth of the above sensor [meters].
-    nom_dep_below : float
-        Nominal depth of the below sensor [meters].
-    auto_accept : bool, optional
-        Automatically accept the pressure estimate without user confirmation. Default is False.
-    plot : bool, optional
-        Display a plot comparing the interpolated pressure to the recorded pressures of the adjacent
-        sensors. Default is True.
-    lat : float, optional
-        Latitude for converting depth to pressure. If not provided, it will be inferred from `ds_main`.
-
-    Returns
-    -------
-    xarray.Dataset
-        Updated dataset `ds_main` with an added 'PRES' variable containing the estimated pressures [dbar].
-
-    Raises
-    ------
-    Exception
-        If latitude (`lat`) is not provided and cannot be inferred from `ds_main`.
-    """
-
-    # Ensure we have latitude for depth-to-pressure conversion
-    if lat is None:
-        try:
-            lat = ds_main.LATITUDE.item()
-        except AttributeError:
-            raise Exception(
-                'Could not find latitude for depth->pressure calculation. '
-                'Specify `lat` in `assign_pressure`.'
-            )
-
-    # Convert nominal depth to nominal pressure
-    nom_pres_main = gsw.p_from_z(-nom_dep_main, lat=lat)
-    nom_pres_above = gsw.p_from_z(-nom_dep_above, lat=lat)
-    nom_pres_below = gsw.p_from_z(-nom_dep_below, lat=lat)
-
-    # Interpolate pressure records of above/below sensors onto main sensor's time grid
-    pres_above = ds_above.interp_like(ds_main).PRES
-    pres_below = ds_below.interp_like(ds_main).PRES
-
-    # Calculate interpolation weights based on nominal depths
-    above_weight = (nom_pres_below - nom_pres_main) / (nom_pres_below - nom_pres_above)
-    below_weight = (nom_pres_main - nom_pres_above) / (nom_pres_below - nom_pres_above)
-
-    # Calculate interpolated pressure for main sensor
-    pres_main = pres_above * above_weight + pres_below * below_weight
-    pres_main_median = np.nanmedian(pres_main)
-    dep_main_median = -gsw.z_from_p(pres_main_median, lat=lat)
-
-    # Set default instrument and serial number if they don't exist
-    instr_main = getattr(ds_main, 'instrument', 'Main instrument')
-    serial_main = getattr(ds_main, 'instrument_serial_number', 'Unknown serial')
-
-    if plot:
-
-        # For figure legends: Set above/below instrument and serial number if they don't exist
-        instr_above = getattr(ds_above, 'instrument', 'Above instrument')
-        serial_above = getattr(ds_above, 'instrument_serial_number', 'Unknown serial')
-        instr_below = getattr(ds_below, 'instrument', 'Below instrument')
-        serial_below = getattr(ds_below, 'instrument_serial_number', 'Unknown serial')
-
-        fig, ax = plt.subplots()
-        ax.plot(ds_above.TIME, ds_above.PRES, label=f'{instr_above} {serial_above}')
-        ax.plot(ds_below.TIME, ds_below.PRES, label=f'{instr_below} {serial_below}')
-        ax.plot(ds_main.TIME, pres_main, label=f'**Estimate**: {instr_main} {serial_main}\n'
-                                               f'(Median: {pres_main_median:.1f} dbar / {dep_main_median:.1f} m)')
-        hline_args = {'ls': '--', 'color': 'k', 'zorder': 0, 'lw': 0.7}
-        ax.axhline(nom_pres_main, **hline_args, label='Nominal pressures')
-        ax.axhline(nom_pres_above, **hline_args)
-        ax.axhline(nom_pres_below, **hline_args)
-        ax.invert_yaxis()
-        ax.set_ylabel('Pressure [dbar]')
-        ax.legend(fontsize=8)
-
-        if internals.is_notebook() and mpl.get_backend() != 'tkagg':
-            display(fig)
-        else:
-            plt.show()
-
-    if not auto_accept:
-        accept = input(f'Estimated offset: {pres_main_median - nom_pres_main:.2f} dbar. '
-                       f'Assign to {instr_main} {serial_main}? (y/n):')
-        if plot:
-            plt.close(fig)
-        if accept.lower() not in ['y', 'yes']:
-            print('No -> `Not` assigning pressure to the dataset.')
-            return ds_main
-
-    # Assign interpolated pressure to main dataset
-    ds_main['PRES'] = (('TIME'), pres_main.data, {
-        'units': 'dbar',
-        'long_name': 'Sea pressure (estimate from interpolation)',
-        'processing_level': 'Data interpolated',
-        'coverage_content_type': 'referenceInformation',
-        'comment': 'Estimated by interpolating between adjacent instruments with pressure sensors.'
-    })
-
-    return ds_main

@@ -2,7 +2,7 @@ import pytest
 import xarray as xr
 import requests
 from pathlib import Path
-from kval.data.moored import load_moored, assign_pressure
+from kval.data.moored import load_moored, assign_pressure, drop_variables
 from unittest import mock
 from unittest import mock
 import numpy as np
@@ -94,7 +94,7 @@ def test_load_moored_sbe37(setup_files):
     assert ds.PROCESSING.attrs["python_script"].strip(), "python_script attribute should not be empty"
 
 
-
+# Test assign_pressure
 
 @pytest.fixture
 def example_datasets_assign_pres():
@@ -168,3 +168,107 @@ def test_assign_pressure_manual_reject(mock_input, example_datasets_assign_pres)
 
     # Assert that the pressure is NOT assigned to the main dataset
     assert "PRES" not in result
+
+
+# Test drop_variables
+
+@pytest.fixture
+def sample_dataset_dropvars():
+    """Fixture to create a sample xarray Dataset for testing."""
+    time = np.arange(10)
+    var1 = np.random.rand(10)
+    var2 = np.random.rand(10)
+    static_var = 42  # A variable without TIME dimension
+
+    ds = xr.Dataset(
+        {
+            "var1": (("TIME"), var1),
+            "var2": (("TIME"), var2),
+            "static_var": ((), static_var)  # Static variable with no TIME dimension
+        },
+        coords={"TIME": time}
+    )
+    return ds
+
+def test_drop_vars(sample_dataset_dropvars):
+    """Test dropping specific variables using the drop_vars argument."""
+    ds = drop_variables(sample_dataset_dropvars, drop_vars=["var1"])
+    assert "var1" not in ds
+    assert "var2" in ds
+    assert "static_var" in ds  # static_var should not be dropped
+
+def test_retain_vars(sample_dataset_dropvars):
+    """Test retaining specific variables using the retain_vars argument."""
+    ds = drop_variables(sample_dataset_dropvars, retain_vars=["var1"])
+    assert "var1" in ds
+    assert "var2" not in ds
+    assert "static_var" in ds  # static_var should not be dropped
+
+def test_retain_all_vars(sample_dataset_dropvars):
+    """Test retaining all variables by setting retain_vars to True."""
+    ds = drop_variables(sample_dataset_dropvars, retain_vars=True)
+    assert "var1" in ds
+    assert "var2" in ds
+    assert "static_var" in ds  # All variables should be retained
+
+def test_no_retain_vars(sample_dataset_dropvars):
+    """Test that no variables are retained when retain_vars is an empty list."""
+    ds = drop_variables(sample_dataset_dropvars, retain_vars=[])
+    assert "var1" not in ds
+    assert "var2" not in ds
+    assert "static_var" in ds  # static_var should not be dropped since it has no TIME dimension
+
+def test_error_if_both_retain_and_drop(sample_dataset_dropvars):
+    """Test that an error is raised if both retain_vars and drop_vars are specified."""
+    with pytest.raises(ValueError):
+        drop_variables(sample_dataset_dropvars, retain_vars=["var1"], drop_vars=["var2"])
+
+def test_verbose_output(capfd, sample_dataset_dropvars):
+    """Test verbose output when dropping variables."""
+    drop_variables(sample_dataset_dropvars, drop_vars=["var1"], verbose=True)
+    captured = capfd.readouterr()
+    assert "Dropped variables from the Dataset: ['var1']" in captured.out
+
+def test_no_action(sample_dataset_dropvars):
+    """Test that nothing happens if neither retain_vars nor drop_vars is specified."""
+    ds = drop_variables(sample_dataset_dropvars)
+    assert ds.equals(sample_dataset_dropvars)  # The dataset should remain unchanged
+
+# Test Calculate_psal
+
+def test_calculate_psal():
+    # Create a mock dataset with CNDC, TEMP, and PRES variables
+    data = {
+        "CNDC": (["TIME", "DEPTH"], np.random.rand(10, 5) * 3.0),  # Random conductivity data
+        "TEMP": (["TIME", "DEPTH"], np.random.rand(10, 5) * 20.0),  # Random temperature data (°C)
+        "PRES": (["TIME", "DEPTH"], np.random.rand(10, 5) * 500.0), # Random pressure data (dbar)
+        "PSAL": (["TIME", "DEPTH"], np.zeros((10, 5))),             # Placeholder salinity (PSAL)
+    }
+
+    ds = xr.Dataset(
+        data,
+        coords={"TIME": np.arange(10), "DEPTH": np.arange(5)},
+        attrs={"title": "Test Dataset"}
+    )
+
+    # Set expected salinity using gsw directly for comparison
+    expected_psal = gsw.SP_from_C(ds["CNDC"], ds["TEMP"], ds["PRES"])
+
+    # Call the function to calculate PSAL
+    ds_updated = calculate_PSAL(ds)
+
+    # Assert that the PSAL variable was updated correctly
+    np.testing.assert_allclose(ds_updated["PSAL"], expected_psal, rtol=1e-5)
+
+    # Check that the attributes are updated
+    assert "note" in ds_updated["PSAL"].attrs
+    assert "Python gsw module" in ds_updated["PSAL"].attrs["note"]
+
+    # Ensure no other variables were altered
+    assert ds["CNDC"].equals(ds_updated["CNDC"])
+    assert ds["TEMP"].equals(ds_updated["TEMP"])
+    assert ds["PRES"].equals(ds_updated["PRES"])
+
+    # Ensure PSAL has the same shape and type as before
+    assert ds_updated["PSAL"].shape == (10, 5)
+    assert isinstance(ds_updated["PSAL"].values, np.ndarray)
