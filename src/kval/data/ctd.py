@@ -37,6 +37,7 @@ import xarray as xr
 from kval.data.ship_ctd_tools import _ctd_tools as tools
 from kval.data.ship_ctd_tools import _ctd_visualize as viz
 from kval.data.ship_ctd_tools import _ctd_edit as ctd_edit
+from kval.data.ship_ctd_tools._ctd_decorator import record_processing
 from kval.file import matfile
 from kval.data import dataset, edit
 from kval.util import time
@@ -44,8 +45,6 @@ from kval.metadata import conventionalize, _standard_attrs
 from kval.metadata.check_conventions import check_file_with_button
 from typing import List, Optional, Union
 import numpy as np
-import functools
-import inspect
 
 
 # Want to be able to use these functions directly..
@@ -53,74 +52,6 @@ from kval.data.dataset import metadata_to_txt, to_netcdf
 
 # DECORATOR TO PRESERVE PROCESSING STEPS IN METADATA
 
-
-def record_processing(description_template, py_comment=None):
-    """
-    A decorator to record processing steps and their input arguments in the
-    dataset's metadata.
-
-    Parameters:
-    - description_template (str): A template for the description that includes
-                                  placeholders for input arguments.
-
-    Returns:
-    - decorator function
-    """
-
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(ds, *args, **kwargs):
-
-            # Apply the function
-            ds = func(ds, *args, **kwargs)
-
-            # Check if the 'PROCESSING' field exists in the dataset
-            if "PROCESSING" not in ds:
-                # If 'PROCESSING' is not present, return the dataset without
-                # any changes
-                return ds
-
-            # Prepare the description with input arguments
-            sig = inspect.signature(func)
-            bound_args = sig.bind(ds, *args, **kwargs)
-            bound_args.apply_defaults()
-
-            # Format the description template with the actual arguments
-            description = description_template.format(**bound_args.arguments)
-
-            # Record the processing step
-            ds["PROCESSING"].attrs["post_processing"] += description + "\n"
-
-            # Prepare the function call code with arguments
-            args_list = []
-            for name, value in bound_args.arguments.items():
-                # Skip the 'ds' argument as it's always present
-                if name != "ds":
-                    default_value = sig.parameters[name].default
-                    if value != default_value:
-                        if isinstance(value, str):
-                            args_list.append(f"{name}='{value}'")
-                        else:
-                            args_list.append(f"{name}={value}")
-
-            function_call = (
-                f"ds = data.ctd.{func.__name__}(ds, "
-                "{', '.join(args_list)})"
-            )
-
-            if py_comment:
-                ds["PROCESSING"].attrs["python_script"] += (
-                    f"\n\n# {py_comment.format(**bound_args.arguments)}"
-                    f"\n{function_call}"
-                )
-            else:
-                ds["PROCESSING"].attrs["python_script"] += (
-                    f"\n\n{function_call}")
-            return ds
-
-        return wrapper
-
-    return decorator
 
 
 # LOADING AND SAVING DATA
