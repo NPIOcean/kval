@@ -4,6 +4,9 @@ KVAL.UTIL.INDEX
 Various functions related ti slicing/indexing
 '''
 
+import pandas as pd
+import xarray as xr
+
 def indices_to_slices(indices):
 
     if len(indices) == 0:
@@ -29,3 +32,25 @@ def indices_to_slices(indices):
         slices.append(slice(int(start), int(indices[-1] + 1)))
 
     return slices
+
+
+def closest_index(arr, val):
+
+    closest_index = abs(arr - val).argmin().item()
+
+    return closest_index
+
+
+def closest_index_time(ds, time_stamp, time_name='TIME'):
+
+    ds_cp = xr.decode_cf(ds.copy())
+
+    # Assuming you have a dataset `ds` with a coordinate 'time'
+    # First, use sel to select the value closest to a point
+    selected_data = ds_cp.sel({time_name: time_stamp}, method='nearest')
+
+    # Get the index of the 'time' coordinate where the selection happened
+    time_index = ds_cp.get_index(time_name).get_loc(selected_data[time_name].values)
+
+    return time_index
+

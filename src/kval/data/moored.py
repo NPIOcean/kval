@@ -48,7 +48,7 @@ from kval.data import dataset, edit
 from kval.data.moored_tools import _moored_tools
 from kval.data.moored_tools._moored_decorator import record_processing
 
-from kval.util import internals
+from kval.util import internals, index, time
 from kval.signal import despike, filt
 from kval.metadata import conventionalize
 from kval.metadata.check_conventions import check_file_with_button
@@ -448,6 +448,8 @@ def despike_rolling(
         )
 
     return ds
+
+
 
 # Adjust for clock drift
 @record_processing(

@@ -12,9 +12,11 @@ import xarray as xr
 import ipywidgets as widgets
 from typing import Optional
 from IPython.display import display, clear_output
-from kval.util import internals
 from kval.data import ctd, moored
 from kval.calc.number import order_of_magnitude
+from kval.util import internals, index, time
+from typing import Optional
+
 
 def remove_points_profile(ds: xr.Dataset, varnm: str, TIME_index: int,
                           remove_inds) -> xr.Dataset:
@@ -188,6 +190,103 @@ def threshold(ds: xr.Dataset, variable: str,
     return ds_new
 
 
+
+
+def linear_drift_offset(
+    ds: xr.Dataset,
+    variable: str,
+    end_val: float,
+    start_val: float = 0,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+) -> xr.Dataset:
+    """
+    Apply a linearly increasing drift offset to a variable in the dataset.
+
+    This function adds a drift that increases linearly over time to a given
+    variable in an xarray Dataset, starting from `start_val` at `start_date`
+    (or the beginning of the dataset) and ending at `end_val` at `end_date` (or
+    the end of the dataset). The drift is applied to the values of the
+    specified variable.
+
+    Args:
+        ds (xr.Dataset):
+            Input xarray Dataset.
+        variable (str):
+            Name of the variable in the dataset to apply the drift to.
+        end_val (float):
+            The value to which the drift will increase at the end.
+        start_val (float, optional):
+         The value at the start of the drift. Default is 0.
+        start_date (str, optional):
+            The date at which to start the drift in 'YYYY-MM-DD' format. If
+            None, the drift starts at the first time value in the dataset.
+            Default is None.
+        end_date (str, optional):
+            The date at which to end the drift in 'YYYY-MM-DD' format. If None,
+            the drift ends at the last time value in the dataset. Default is
+            None.
+
+    Returns:
+        xr.Dataset: A new dataset with the drift applied to the specified
+        variable.
+    """
+
+    # Convert string dates to numpy datetime64 objects
+    if start_date:
+        start_date = np.datetime64(start_date)
+    if end_date:
+        end_date = np.datetime64(end_date)
+
+    # Step 1: Calculate `add_val`, an array of values increasing linearly
+    # from `start_val` at `start_date` (or time series start) to `end_val` at `end_date` (or time series end)
+    t_end = ds.TIME.values[-1]
+    t_start = ds.TIME.values[0]
+    ind_start, ind_end = None, None
+
+    # Initialize `add_val` with zeros
+    add_val = np.zeros(ds.sizes['TIME'])
+
+    # Modify if we have start and end dates
+    if start_date:
+        ind_start = index.closest_index_time(ds, start_date)
+        t_start = ds.TIME.values[ind_start]
+    if end_date:
+        ind_end = index.closest_index_time(ds, end_date) + 1
+        t_end = ds.TIME.values[ind_end]
+
+    # Set the slice for linear drift
+    drift_slice = slice(ind_start, ind_end)
+
+    # Populate the section of `add_val` with linearly drifting values
+    add_val[drift_slice] = (
+        start_val + (ds.TIME.values[drift_slice] - t_start)
+        / (t_end - t_start) * (end_val - start_val)
+    )
+
+    # Handle before and after the drift
+    if start_date:
+        add_val[:ind_start] = start_val
+    if end_date:
+        add_val[ind_end:] = end_val
+
+    # Step 2: Apply `add_val` to the variable
+    ds_out = ds.copy(deep=True)
+    ds_out[variable].values += add_val
+
+    # Convert time for comments
+    start_str = time.convert_timenum_to_datestring(t_start, ds_out.TIME.units)
+    end_str = time.convert_timenum_to_datestring(t_end, ds_out.TIME.units)
+
+    # Add or update comment attribute
+    new_comment = (f'Applied drift offset linearly increasing from {start_val} '
+                   f'to {end_val} from {start_str} to {end_str}.')
+    if 'comment' in ds[variable].attrs:
+        ds_out[variable].attrs['comment'] += f' {new_comment}'
+    else:
+        ds_out[variable].attrs['comment'] = new_comment
+
+    return ds_out
 
 
 
