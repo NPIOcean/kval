@@ -192,44 +192,58 @@ def threshold(ds: xr.Dataset, variable: str,
 
 
 
-def linear_drift_offset(
+def linear_drift(
     ds: xr.Dataset,
     variable: str,
     end_val: float,
+    factor: bool = False,
     start_val: float = 0,
     start_date: Optional[str] = None,
-    end_date: Optional[str] = None
-) -> xr.Dataset:
-    """
-    Apply a linearly increasing drift offset to a variable in the dataset.
+    end_date: Optional[str] = None) -> xr.Dataset:
 
-    This function adds a drift that increases linearly over time to a given
-    variable in an xarray Dataset, starting from `start_val` at `start_date`
-    (or the beginning of the dataset) and ending at `end_val` at `end_date` (or
-    the end of the dataset). The drift is applied to the values of the
-    specified variable.
+    """
+    Apply a linearly increasing drift (offset or factor) to a variable in the
+    dataset.
+
+    This function applies a linearly increasing drift over time to a specified
+    variable in an xarray Dataset. The drift can either be added as an offset
+    or applied as a multiplicative factor, depending on the `factor` argument.
+
+    - If `factor` is False (default), the drift is an additive offset that
+      starts at `start_val` and increases to `end_val`.
+    - If `factor` is True, the drift is a multiplicative factor that starts at
+      `start_val` and increases to `end_val`.
+
+    The drift is applied between `start_date` and `end_date` (if provided), or
+    over the entire time range of the dataset.
 
     Args:
         ds (xr.Dataset):
-            Input xarray Dataset.
+            Input xarray Dataset containing the time series data.
         variable (str):
-            Name of the variable in the dataset to apply the drift to.
+            The name of the variable in the dataset to which the drift will be
+            applied.
         end_val (float):
-            The value to which the drift will increase at the end.
+            The value of the drift at the end of the period (either as an
+            offset or factor).
+        factor (bool, optional):
+            If True, the drift is applied as a multiplicative factor.
+            Otherwise, it's an additive offset. Default is False (additive).
         start_val (float, optional):
-         The value at the start of the drift. Default is 0.
+            The starting value of the drift. Default is 0.
         start_date (str, optional):
-            The date at which to start the drift in 'YYYY-MM-DD' format. If
+            The starting date for applying the drift in 'YYYY-MM-DD' format. If
             None, the drift starts at the first time value in the dataset.
             Default is None.
         end_date (str, optional):
-            The date at which to end the drift in 'YYYY-MM-DD' format. If None,
-            the drift ends at the last time value in the dataset. Default is
-            None.
+            The ending date for applying the drift in 'YYYY-MM-DD' format. If
+            None, the drift ends at the last time value in the dataset. Default
+            is None.
 
     Returns:
         xr.Dataset: A new dataset with the drift applied to the specified
         variable.
+
     """
 
     # Convert string dates to numpy datetime64 objects
@@ -238,14 +252,15 @@ def linear_drift_offset(
     if end_date:
         end_date = np.datetime64(end_date)
 
-    # Step 1: Calculate `add_val`, an array of values increasing linearly
-    # from `start_val` at `start_date` (or time series start) to `end_val` at `end_date` (or time series end)
+    # Step 1: Calculate `drift_val`, an array of values increasing linearly
+    # from `start_val` at `start_date` (or time series start) to `end_val` at
+    # `end_date` (or time series end)
     t_end = ds.TIME.values[-1]
     t_start = ds.TIME.values[0]
     ind_start, ind_end = None, None
 
-    # Initialize `add_val` with zeros
-    add_val = np.zeros(ds.sizes['TIME'])
+    # Initialize `drift_val` with zeros
+    drift_val = np.zeros(ds.sizes['TIME'])
 
     # Modify if we have start and end dates
     if start_date:
@@ -253,41 +268,60 @@ def linear_drift_offset(
         t_start = ds.TIME.values[ind_start]
     if end_date:
         ind_end = index.closest_index_time(ds, end_date) + 1
-        t_end = ds.TIME.values[ind_end]
+
+        # Clamp ind_end to the maximum index of TIME
+        ind_end = min(ind_end + 1, ds.sizes['TIME'])
+        t_end = ds.TIME.values[ind_end - 1]  # Get the last valid time value
+
 
     # Set the slice for linear drift
     drift_slice = slice(ind_start, ind_end)
 
-    # Populate the section of `add_val` with linearly drifting values
-    add_val[drift_slice] = (
+    # Populate the section of `drift_val` with linearly drifting values
+    drift_val[drift_slice] = (
         start_val + (ds.TIME.values[drift_slice] - t_start)
         / (t_end - t_start) * (end_val - start_val)
     )
 
     # Handle before and after the drift
     if start_date:
-        add_val[:ind_start] = start_val
+        drift_val[:ind_start] = start_val
     if end_date:
-        add_val[ind_end:] = end_val
+        drift_val[ind_end:] = end_val
 
-    # Step 2: Apply `add_val` to the variable
+    # Step 2: Apply `drift_val` to the variable
     ds_out = ds.copy(deep=True)
-    ds_out[variable].values += add_val
 
-    # Convert time for comments
-    start_str = time.convert_timenum_to_datestring(t_start, ds_out.TIME.units)
-    end_str = time.convert_timenum_to_datestring(t_end, ds_out.TIME.units)
+    # Align drift_val with the shape of the variable using xarray broadcasting
+    variable_data = ds[variable]
+
+    # Create an array that matches the dimensions of the variable but aligns
+    # TIME
+    drift_val_aligned = xr.DataArray(
+        drift_val, coords={ds.sizes['TIME']: ds['TIME']}, dims=['TIME'])
+
+    if factor:
+        ds_out[variable] *= drift_val_aligned
+        drift_type = 'factor'
+    else:
+        ds_out[variable] += drift_val_aligned
+        drift_type = 'offset'
 
     # Add or update comment attribute
-    new_comment = (f'Applied drift offset linearly increasing from {start_val} '
-                   f'to {end_val} from {start_str} to {end_str}.')
-    if 'comment' in ds[variable].attrs:
-        ds_out[variable].attrs['comment'] += f' {new_comment}'
-    else:
-        ds_out[variable].attrs['comment'] = new_comment
+    # (assumes that we have known time units)
+    if 'units' in ds_out.TIME.attrs:
+        start_str = time.convert_timenum_to_datestring(t_start, ds_out.TIME.units)
+        end_str = time.convert_timenum_to_datestring(t_end, ds_out.TIME.units)
+
+        new_comment = (f'Applied drift {drift_type} linearly increasing from {start_val} '
+                    f'to {end_val} from {start_str} to {end_str}.')
+
+        if 'comment' in variable_data.attrs:
+            ds_out[variable].attrs['comment'] += f' {new_comment}'
+        else:
+            ds_out[variable].attrs['comment'] = new_comment
 
     return ds_out
-
 
 
 

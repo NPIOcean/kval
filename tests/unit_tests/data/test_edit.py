@@ -22,7 +22,7 @@ def mock_dataset() -> xr.Dataset:
 
     # Create data for STATION(TIME) and OCEAN(TIME)
     station_data = [f'st{stnum:02.0f}' for stnum in np.arange(1, Nt + 1)]
-    ocean_data = ['Atlantic', 'Arctic', 'Pacific', 'Mediterranean', 'Southern', 
+    ocean_data = ['Atlantic', 'Arctic', 'Pacific', 'Mediterranean', 'Southern',
                  'Baltic', 'Indian', 'Caribbean', 'Weddell', 'Ross']
 
     # Create data for ZONE(PRES)
@@ -53,14 +53,14 @@ def mock_dataset() -> xr.Dataset:
         'units': 'degC',
         'long_name': 'Test Temperature'
     }
-    
+
     return ds
 
 # Test cases using the mock dataset fixture
 def test_threshold_no_thresholds(mock_dataset):
     """Test when no thresholds are applied."""
     ds_new = edit.threshold(mock_dataset, 'TEMP')
-    
+
     assert np.array_equal(ds_new['TEMP'], mock_dataset['TEMP'])
     assert 'valid_min' not in ds_new['TEMP'].attrs
     assert 'valid_max' not in ds_new['TEMP'].attrs
@@ -68,7 +68,7 @@ def test_threshold_no_thresholds(mock_dataset):
 def test_threshold_max_threshold(mock_dataset):
     """Test applying only the maximum threshold."""
     ds_new = edit.threshold(mock_dataset, 'TEMP', max_val=18)
-    
+
     expected = mock_dataset['TEMP'].where(mock_dataset['TEMP'] <= 18)
     assert np.array_equal(ds_new['TEMP'].values, expected.values, equal_nan=True)
     assert ds_new['TEMP'].attrs['valid_max'] == 18
@@ -77,7 +77,7 @@ def test_threshold_max_threshold(mock_dataset):
 def test_threshold_min_threshold(mock_dataset):
     """Test applying only the minimum threshold."""
     ds_new = edit.threshold(mock_dataset, 'TEMP', min_val=10)
-    
+
     expected = mock_dataset['TEMP'].where(mock_dataset['TEMP'] >= 10)
     assert np.array_equal(ds_new['TEMP'].values, expected.values, equal_nan=True)
     assert ds_new['TEMP'].attrs['valid_min'] == 10
@@ -86,7 +86,7 @@ def test_threshold_min_threshold(mock_dataset):
 def test_threshold_min_and_max_threshold(mock_dataset):
     """Test applying both minimum and maximum thresholds."""
     ds_new = edit.threshold(mock_dataset, 'TEMP', max_val=18, min_val=10)
-    
+
     expected = mock_dataset['TEMP'].where((mock_dataset['TEMP'] >= 10) & (mock_dataset['TEMP'] <= 18))
     assert np.array_equal(ds_new['TEMP'].values, expected.values, equal_nan=True)
     assert ds_new['TEMP'].attrs['valid_min'] == 10
@@ -95,9 +95,9 @@ def test_threshold_min_and_max_threshold(mock_dataset):
 def test_threshold_empty_dataset(mock_dataset):
     """Test when the dataset is empty."""
     ds = xr.Dataset({'var': (['TIME', 'PRES'], np.array([[]]))})
-    
+
     ds_new = edit.threshold(ds, 'var', max_val=18, min_val=10)
-    
+
     expected = np.array([[]])
     assert np.array_equal(ds_new['var'].values, expected, equal_nan=True)
     assert ds_new['var'].attrs['valid_min'] == 10
@@ -106,8 +106,8 @@ def test_threshold_empty_dataset(mock_dataset):
 def test_threshold_no_modification_needed(mock_dataset):
     """Test when no modification is needed due to thresholds."""
     ds_new = edit.threshold(mock_dataset, 'TEMP', max_val=40, min_val=-10)
-    
-    assert np.array_equal(ds_new['TEMP'].values, 
+
+    assert np.array_equal(ds_new['TEMP'].values,
                           mock_dataset['TEMP'].values)
 
     assert ds_new['TEMP'].attrs['valid_min'] == -10
@@ -122,7 +122,7 @@ def test_offset_apply_fixed_offset(mock_dataset):
     offset = 5
 
     ds_new = edit.offset(mock_dataset, 'TEMP', offset)
-    
+
     expected = mock_dataset['TEMP'] + offset
     assert np.array_equal(ds_new['TEMP'].values, expected.values, equal_nan=True)
     assert ds_new['TEMP'].attrs['units'] == 'degC'
@@ -131,7 +131,7 @@ def test_offset_apply_fixed_offset(mock_dataset):
 #    assert ds_new['TEMP'].attrs['valid_max'] == mock_dataset['TEMP'].attrs.get('valid_max', 0) + offset
 
 def test_offset_valid_min(mock_dataset):
-    """Test that applying a fixed offset to the dataset 
+    """Test that applying a fixed offset to the dataset
     also offsets valid_min, valid_max."""
 
     offset = 5
@@ -139,14 +139,14 @@ def test_offset_valid_min(mock_dataset):
     mock_dataset.TEMP.attrs['valid_max'] = 40
 
     ds_new = edit.offset(mock_dataset, 'TEMP', offset)
-    
-    assert (ds_new['TEMP'].attrs['valid_min'] 
+
+    assert (ds_new['TEMP'].attrs['valid_min']
             == mock_dataset['TEMP'].attrs.get('valid_min', 0) + offset)
-    assert (ds_new['TEMP'].attrs['valid_max'] 
+    assert (ds_new['TEMP'].attrs['valid_max']
             == mock_dataset['TEMP'].attrs.get('valid_max', 0) + offset)
 
 def test_offset_no_variable(mock_dataset):
-    """Test when applying offset to a non-existent variable 
+    """Test when applying offset to a non-existent variable
     (should raise an error)."""
     offset = 5
     with pytest.raises(ValueError, match=("Variable 'NON_EXISTENT_VAR'"
@@ -158,6 +158,40 @@ def test_offset_zero_offset(mock_dataset):
     """Test when applying an offset that doesn't change the data."""
     offset = 0
     ds_new = edit.offset(mock_dataset, 'TEMP', offset)
-    
+
     assert np.array_equal(ds_new['TEMP'].values, mock_dataset['TEMP'].values, equal_nan=True)
     assert ds_new['TEMP'].attrs == mock_dataset['TEMP'].attrs
+
+
+# Test the linear drift function
+# (Pretty basic right now)
+
+def test_linear_drift_offset(mock_dataset):
+    """Test linear_drift function with default offset."""
+    # Use the mock dataset for testing
+    ds_out = edit.linear_drift(mock_dataset, 'TEMP', end_val=5, start_val=2,)
+
+    # Check the output dataset's variable values
+    expected_values = np.linspace(2, 5, num=len(mock_dataset.TIME))
+    np.testing.assert_almost_equal(ds_out['TEMP'].values[:, 0] - mock_dataset['TEMP'].values[:, 0], expected_values, decimal=5)
+
+
+def test_linear_drift_factor(mock_dataset):
+    """Test linear_drift function with factor option."""
+    # Use the mock dataset for testing
+    ds_out = edit.linear_drift(mock_dataset, 'TEMP', end_val=2, factor=True, start_val=1, )
+
+    # Check the output dataset's variable values
+    expected_values = mock_dataset['TEMP'].values[:, 0] * np.linspace(1, 2, num=len(mock_dataset.TIME))
+    np.testing.assert_almost_equal(ds_out['TEMP'].values[:, 0], expected_values, decimal=5)
+
+    # Check if the comment attribute was added
+
+def test_no_dates(mock_dataset):
+    """Test linear_drift function without start and end dates."""
+    # Use the mock dataset for testing
+    ds_out = edit.linear_drift(mock_dataset, 'TEMP', end_val=3)
+
+    # Check if the drift value is applied over the entire dataset
+    expected_values = np.linspace(0, 3, num=len(mock_dataset.TIME))
+    np.testing.assert_almost_equal(ds_out['TEMP'].values[:, 0], expected_values, decimal=5)
