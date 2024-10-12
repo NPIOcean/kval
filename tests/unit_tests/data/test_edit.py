@@ -194,4 +194,4 @@ def test_no_dates(mock_dataset):
 
     # Check if the drift value is applied over the entire dataset
     expected_values = np.linspace(0, 3, num=len(mock_dataset.TIME))
-    np.testing.assert_almost_equal(ds_out['TEMP'].values[:, 0], expected_values, decimal=5)
+    np.testing.assert_almost_equal(ds_out['TEMP'].values[:, 0]- mock_dataset['TEMP'].values[:, 0], expected_values, decimal=5)

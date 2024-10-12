@@ -969,6 +969,117 @@ def assign_pressure(
     return ds_main
 
 
+# Recalculate sal
+@record_processing(
+    "Applied an offset to {variable} linearly changing from {start_val} to {end_val}.",
+    py_comment="Apply linear drift to {variable}",
+)
+def linear_drift_offset(
+    ds: xr.Dataset,
+    variable: str,
+    end_val: float,
+    start_val: float = 0,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None) -> xr.Dataset:
+    '''
+    (Wrapper for kval.data.edit.linear_drift)
+
+    Apply a linearly increasing drift offset to a variable in the
+    dataset.
+
+    This function applies a linearly increasing drift over time to a specified
+    variable in an xarray Dataset. The drift is added as an additive factor.
+
+    The drift is applied between `start_date` and `end_date` (if provided), or
+    over the entire time range of the dataset.
+
+    Args:
+        ds (xr.Dataset):
+            Input xarray Dataset containing the time series data.
+        variable (str):
+            The name of the variable in the dataset to which the drift will be
+            applied.
+        end_val (float):
+            The value of the drift offset at the end of the period.
+        start_val (float, optional):
+            The starting value of the drift offset. Default is 0.
+        start_date (str, optional):
+            The starting date for applying the drift in 'YYYY-MM-DD' format. If
+            None, the drift starts at the first time value in the dataset.
+            Default is None.
+        end_date (str, optional):
+            The ending date for applying the drift in 'YYYY-MM-DD' format. If
+            None, the drift ends at the last time value in the dataset. Default
+            is None.
+
+    Returns:
+        xr.Dataset: A new dataset with the drift applied to the specified
+        variable.
+        '''
+
+    ds = edit.linear_drift(
+        ds, variable, end_val, start_val=start_val, start_date=start_date,
+        end_date=end_date, factor=False)
+
+    return ds
+
+
+# Recalculate sal
+@record_processing(
+    "Applied an correctional factor to {variable} linearly changing from {start_val} to {end_val}.",
+    py_comment="Apply linear drift to {variable}",
+)
+def linear_drift_factor(
+    ds: xr.Dataset,
+    variable: str,
+    end_val: float,
+    start_val: float = 1,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None) -> xr.Dataset:
+    '''
+    (Wrapper for kval.data.edit.linear_drift)
+
+    Apply a linearly increasing drift factor to a variable in the
+    dataset.
+
+    This function applies a linearly increasing drift over time to a specified
+    variable in an xarray Dataset. The drift is added as a multiplicative
+    factor.
+
+    The drift is applied between `start_date` and `end_date` (if provided), or
+    over the entire time range of the dataset.
+
+    Args:
+        ds (xr.Dataset):
+            Input xarray Dataset containing the time series data.
+        variable (str):
+            The name of the variable in the dataset to which the drift will be
+            applied.
+        end_val (float):
+            The value of the drift factor at the end of the period .
+        start_val (float, optional):
+            The starting value of the drift factor. Default is 1.
+        start_date (str, optional):
+            The starting date for applying the drift in 'YYYY-MM-DD' format. If
+            None, the drift starts at the first time value in the dataset.
+            Default is None.
+        end_date (str, optional):
+            The ending date for applying the drift in 'YYYY-MM-DD' format. If
+            None, the drift ends at the last time value in the dataset. Default
+            is None.
+
+    Returns:
+        xr.Dataset: A new dataset with the drift applied to the specified
+        variable.
+        '''
+
+    ds = edit.linear_drift(
+        ds, variable, end_val, start_val=start_val, start_date=start_date,
+        end_date=end_date, factor=True)
+
+    return ds
+
+
 # Drop variables
 @record_processing("", py_comment="Dropping some variables")
 # Note: Doing PROCESSING.post_processing record keeping within the

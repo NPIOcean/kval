@@ -298,7 +298,7 @@ def linear_drift(
     # Create an array that matches the dimensions of the variable but aligns
     # TIME
     drift_val_aligned = xr.DataArray(
-        drift_val, coords={ds.sizes['TIME']: ds['TIME']}, dims=['TIME'])
+        drift_val, coords={'TIME': ds['TIME']}, dims=['TIME'])
 
     if factor:
         ds_out[variable] *= drift_val_aligned
