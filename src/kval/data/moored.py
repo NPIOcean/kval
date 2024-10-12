@@ -449,6 +449,81 @@ def despike_rolling(
 
     return ds
 
+# Adjust for clock drift
+@record_processing(
+    "",
+    py_comment=(
+        "Adjust for clock drift"
+    ))
+
+def adjust_time_for_drift(
+    ds: xr.Dataset,
+    seconds: Optional[float] = 0,
+    minutes: Optional[float] = 0,
+    hours: Optional[float] = 0,
+    days: Optional[float] = 0) -> xr.Dataset:
+    """
+    Adjust the TIME coordinate of an xarray Dataset for instrument clock drift.
+
+    Clock offset is specified in sec, min, hrs, days.
+
+    *Negative* clock values: Instrument *lags* true -> *adding* offset.
+    *Positive* clock values: Instrument *leads* true -> *subtracting* offset.
+
+    Parameters:
+    ds (xarray.Dataset): Input dataset with a TIME coordinate.
+    seconds (float): Clock drift, seconds.
+    minutes (float): Clock drift, minutes.
+    hours (float): Clock drift, hours.
+    days (float): Clock drift, days.
+
+    Returns:
+    xarray.Dataset: Dataset with adjusted TIME coordinate.
+    """
+    # Convert all drift values to seconds
+    total_drift_seconds = (
+        seconds +
+        (minutes * 60) +
+        (hours * 3600) +
+        (days * 86400)  # 86400 seconds in a day
+    )
+
+    if total_drift_seconds > 0:
+        drift_operation = 'subtracted'
+    elif total_drift_seconds < 0:
+        drift_operation = 'added'
+    elif total_drift_seconds == 0:
+        raise Exception('To adjust for clock drift, a non-zero clock drift'
+                        ' has to be specified')
+
+    # Get the TIME coordinate
+    time = ds.coords['TIME'].values
+
+    drift_adjustments_sec = (
+        np.arange(len(time)) / (len(time)-1))*total_drift_seconds
+
+    # Check if TIME is in numerical format (days since epoch)
+    if 'DAYS SINCE' in ds.TIME.units.upper():
+        adjusted_time = time - drift_adjustments_sec / 86400
+    else:
+        raise Exception('Could not add drift because TIME is non-numerical'
+                        ' or has unknown units (should be "Days since..")')
+
+    # Update the TIME coordinate in the dataset
+    time_attrs = ds['TIME'].attrs
+    time_attrs['comment'] = (
+        f'Adjusted for observed clock drift ({drift_operation} '
+        f'from 0 to {abs(total_drift_seconds)} sec)')
+    ds['TIME'] = ('TIME', adjusted_time, time_attrs)
+
+    if "PROCESSING" in ds:
+        ds.PROCESSING.attrs["post_processing"] += (
+            f"Adjusted for clock offset: {drift_operation}"
+            f" from 0 to {abs(total_drift_seconds)} s assuming linear drift"
+        )
+
+    return ds
+
 
 # Filtering
 @record_processing(

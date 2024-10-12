@@ -3,7 +3,7 @@ import xarray as xr
 import requests
 from pathlib import Path
 import gsw
-from kval.data.moored import load_moored, assign_pressure, drop_variables, calculate_PSAL
+from kval.data.moored import load_moored, assign_pressure, drop_variables, calculate_PSAL, adjust_time_for_drift
 from unittest import mock
 from unittest import mock
 import numpy as np
@@ -273,3 +273,59 @@ def test_calculate_psal():
     # Ensure PSAL has the same shape and type as before
     assert ds_updated["PSAL"].shape == (10, 5)
     assert isinstance(ds_updated["PSAL"].values, np.ndarray)
+
+# Test adjust_time_for_drift
+
+
+@pytest.fixture
+def sample_dataset_drift():
+    """Create a sample xarray Dataset for testing."""
+    time_values = np.arange(0, 10)  # Example time values
+    data = np.random.rand(10)  # Random data for testing
+    ds = xr.Dataset({
+        'data_var': ('TIME', data)
+    })
+    ds.coords['TIME'] = ('TIME', time_values)
+    ds['TIME'].attrs['units'] = 'days since 1970-01-01'
+    return ds
+
+def test_adjust_time_for_positive_drift(sample_dataset_drift):
+    """Test positive clock drift adjustment."""
+    ds = adjust_time_for_drift(sample_dataset_drift, seconds=30)
+    assert ds['TIME'].values[-1] == pytest.approx(sample_dataset_drift['TIME'].values[-1] - (30 / 86400), rel=1e-2)
+    assert ds['TIME'].values[0] == sample_dataset_drift['TIME'].values[0]
+
+def test_adjust_time_for_negative_drift(sample_dataset_drift):
+    """Test negative clock drift adjustment."""
+    ds = adjust_time_for_drift(sample_dataset_drift, seconds=-30)
+    assert ds['TIME'].values[-1] == pytest.approx(sample_dataset_drift['TIME'].values[-1] + (30 / 86400), rel=1e-2)
+    assert ds['TIME'].values[0] == sample_dataset_drift['TIME'].values[0]
+
+def test_adjust_time_for_combined_drift(sample_dataset_drift):
+    """Test combined clock drift adjustment."""
+    ds = adjust_time_for_drift(sample_dataset_drift, minutes=1, seconds=-30)
+    total_adjustment = (60 / 86400) - (30 / 86400)  # 1 minute in seconds + (30 seconds adjustment)
+    assert ds['TIME'].values[-1] == pytest.approx(sample_dataset_drift['TIME'].values[-1] - total_adjustment, rel=1e-2)
+    assert ds['TIME'].values[0] == sample_dataset_drift['TIME'].values[0]
+
+
+def test_zero_drift_raises_exception(sample_dataset_drift):
+    """Test that an exception is raised for zero drift."""
+    with pytest.raises(Exception, match='non-zero clock drift'):
+        adjust_time_for_drift(sample_dataset_drift, seconds=0)
+
+def test_invalid_time_units(sample_dataset_drift):
+    """Test that an exception is raised for non-numerical TIME."""
+    sample_dataset_drift['TIME'].attrs['units'] = ('not a valid unit')
+    with pytest.raises(Exception,
+                       match='To adjust for clock drift, a non-zero clock drift has to be specified'):
+        adjust_time_for_drift(sample_dataset_drift)
+
+def test_empty_dataset():
+    """Test adjustment on an empty dataset."""
+    ds = xr.Dataset()
+    ds.coords['TIME'] = ('TIME', [])
+    ds['TIME'].attrs['units'] = 'days since 1970-01-01'
+
+    adjusted_ds = adjust_time_for_drift(ds, seconds=10)
+    assert adjusted_ds['TIME'].size == 0  # The size should still be zero
