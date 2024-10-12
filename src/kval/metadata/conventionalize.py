@@ -11,6 +11,8 @@ import numpy as np
 import re
 from collections import Counter
 import pandas as pd
+import xarray as xr
+from typing import Optional
 
 
 def add_range_attrs(D, vertical_var=None):
@@ -37,11 +39,12 @@ def add_range_attrs(D, vertical_var=None):
         D.attrs["geospatial_lon_min"] = D.LONGITUDE.min().values
         D.attrs["geospatial_bounds"] = _get_geospatial_bounds_wkt_str(D)
         D.attrs["geospatial_bounds_crs"] = "EPSG:4326"
-    except:
+    except (AttributeError, KeyError, ValueError) as e:
         print(
             "Did not find LATITUDE, LONGITUDE variables "
             '-> Could not set "geospatial" attributes.'
         )
+        print(f"Error: {e}")
 
     # Vertical
     try:
@@ -60,11 +63,12 @@ def add_range_attrs(D, vertical_var=None):
 
             D.attrs["geospatial_vertical_positive"] = "down"
             D.attrs["geospatial_bounds_vertical_crs"] = "EPSG:5831"
-    except:
+    except (AttributeError, KeyError, ValueError) as e:
         print(
             "Did not find vertical variable "
-            '-> Could not set "geospatial_vertical" attributes.'
-        )
+            '-> Could not set "geospatial_vertical" attributes.')
+        print(f"Error: {e}")
+
     # Time
     try:
         if D.TIME.dtype == np.dtype("datetime64[ns]"):
@@ -80,17 +84,20 @@ def add_range_attrs(D, vertical_var=None):
             tdiff_std = np.std(np.diff(D.TIME))
             tdiff_median = np.median(np.diff(D.TIME))
             if tdiff_std / tdiff_median < 1e-5:  # <- Looks like fixed interval
-                D.attrs["time_coverage_resolution"] = (
-                    time.days_to_ISO8601(tdiff_median))
+                D.attrs["time_coverage_resolution"] = time.days_to_ISO8601(
+                    tdiff_median
+                )
             else:  # <- Looks like a variable interval
                 D.attrs["time_coverage_resolution"] = "variable"
 
         D.attrs["time_coverage_duration"] = _get_time_coverage_duration_str(D)
-    except:
+    except (AttributeError, KeyError, ValueError) as e:
         print(
             'Did not find TIME variable (or TIME variable lacks "units" '
             'attribute)\n-> Could not set "time_coverage" attributes.'
         )
+        print(f"Error: {e}")
+
     return D
 
 
@@ -233,28 +240,45 @@ def _get_time_coverage_duration_str(D):
     return duration_str
 
 
-def add_standard_var_attrs(D, ctd_prof=False, override=False):
+def add_standard_var_attrs(
+    D: xr.Dataset, override: bool = False, data_type: Optional[str] = None
+) -> xr.Dataset:
     """
-    Add variable attributes
-    as specified in oceanograpy.data.nc_format.standard_var_attrs
+    Add variable attributes to an xarray Dataset, as specified in
+    kval.metadata._standard_attrs.
 
-    if _std suffix:
-        - Don't use standard_name, valid_min/max
-        - Add "Standard deviation of" to long_name
+    If a variable has a "_std" suffix:
+        - Do not use standard_name, valid_min, or valid_max.
+        - Add "Standard deviation of" to the long_name attribute.
 
-    if number suffix (TEMP1, CNDC2..)
-        - Add attributs from the TEMP variable
-        - Add '(primary)', '(secondary) to long name
+    If a variable has a number suffix (e.g., TEMP1, CNDC2):
+        - Copy attributes from the base variable (e.g., TEMP).
+        - Append "(primary)", "(secondary)", etc., to the long_name attribute.
 
-    Override governs whether to override any variable attributes that
-    are already present (typically not advised..)
+    Parameters:
+    -----------
+    D : xr.Dataset
+        The xarray Dataset to modify.
+    override : bool, optional
+        If True, existing variable attributes will be overwritten. Defaults to
+        False.
+    data_type : str, optional
+        The type of data (e.g., 'ctdprof', 'moored') used to infer additional
+        attributes.
+
+    Returns:
+    --------
+    D : xr.Dataset
+        The modified xarray Dataset with updated variable attributes.
     """
 
     for varnm in list(D.data_vars) + list(D.coords):
 
-        # Check if varnm ends with a number suffix (e.g. PSAL1, TEMP2)
+        # Handling number suffix (e.g. TEMP1, PSAL2)
         try:
-            number = float(varnm[-1])  # Goes to except if not a number
+            number = float(
+                varnm[-1]
+            )  # If not a number, will raise an exception
             core_name = varnm[:-1]
             if number == 1:
                 long_name_add = " (primary sensor)"
@@ -264,129 +288,106 @@ def add_standard_var_attrs(D, ctd_prof=False, override=False):
                 long_name_add = " (tertiary sensor)"
             else:
                 long_name_add = ""
-        except:
+        except ValueError:
             long_name_add = ""
             core_name = varnm
 
-        # Remove suffix to get the "core name", e.g. "CNDC" from "CNDC_CTD"
-        # (this is what we look for when comparing with the attribute
-        # dictionary)
+        # Remove suffix for core name (e.g. "CNDC" from "CNDC_CTD")
         core_name = core_name.split("_")[0]
 
-        # Normal variables
+        # Add standard variable attributes if found in _standard_attrs
         if core_name in _standard_attrs.standard_var_attrs:
             var_attrs_dict = _standard_attrs.standard_var_attrs[
                 core_name
             ].copy()
             for attr, item in var_attrs_dict.items():
-                if override:
+                if override or attr not in D[varnm].attrs:
                     D[varnm].attrs[attr] = item
-                else:
-                    if attr not in D[varnm].attrs:
-                        D[varnm].attrs[attr] = item
 
-                # Append suffix to long name
-                if attr == "long_name":
-                    D[varnm].attrs["long_name"] += long_name_add
+            # Append suffix (e.g., "(primary sensor)") to long_name
+            if "long_name" in D[varnm].attrs:
+                D[varnm].attrs["long_name"] += long_name_add
 
-        # For .btl files: Add "Average" to long_name attribute
-        # Append "standard deviation of" to long_name
-        if (
-            "source_files" in D.attrs
-            and "long_name" in D[varnm].attrs
-            and D.source_files[-3:].upper == "BTL"
-            and ctd_prof
-        ):
-
-            long_name = D[varnm].attrs["long_name"]
-            long_name_nocap = long_name[0].lower() + long_name[1:]
-            if varnm != "NISKIN_NUMBER" and "NISKIN_NUMBER" in D[varnm].dims:
-                D[varnm].attrs["long_name"] = (
-                    "Average "
-                    f"{long_name_nocap} measured by CTD during bottle closing"
-                )
+        # Handle specific case for .btl files
+        if "source_files" in D.attrs and "long_name" in D[varnm].attrs:
+            if D.source_files[-3:].upper() == "BTL" and data_type == "ctdprof":
+                long_name = D[varnm].attrs["long_name"]
+                long_name_nocap = long_name[0].lower() + long_name[1:]
+                if (
+                    varnm != "NISKIN_NUMBER"
+                    and "NISKIN_NUMBER" in D[varnm].dims
+                ):
+                    D[varnm].attrs["long_name"] = (
+                        f"Average {long_name_nocap} measured by CTD "
+                        "during bottle closing")
 
         # Variables with _std suffix
-        if varnm.endswith("_std") and ctd_prof:
+        if varnm.endswith("_std") and data_type == "ctdprof":
             varnm_prefix = varnm.replace("_std", "")
             if varnm_prefix in _standard_attrs.standard_var_attrs:
                 var_attrs_dict = _standard_attrs.standard_var_attrs[
                     varnm_prefix
                 ].copy()
 
-                # Don't want to use standard_name for these
+                # Do not copy specific attributes for _std variables
                 for key in ["standard_name", "valid_min", "valid_max"]:
-                    if key in var_attrs_dict:
-                        var_attrs_dict.pop(key)
+                    var_attrs_dict.pop(key, None)
 
-                # Add the other attributes
+                # Add remaining attributes
                 for attr, item in var_attrs_dict.items():
-                    if override:
+                    if override or attr not in D[varnm].attrs:
                         D[varnm].attrs[attr] = item
-                    else:
-                        if attr not in D[varnm].attrs:
-                            D[varnm].attrs[attr] = item
 
-            # Append "standard deviation of" to long_name
-            if (
-                "source_files" in D.attrs
-                and "long_name" in D[varnm].attrs
-                and D.source_files[-3:].upper == "BTL"
-            ):
+            # Add "Standard deviation of" to long_name
+            if "long_name" in D[varnm].attrs:
                 long_name = D[varnm].attrs["long_name"]
                 long_name_nocap = long_name[0].lower() + long_name[1:]
-                D[varnm].attrs["long_name"] = (
-                    "Standard deviation of " f"{long_name_nocap}"
-                )
+                D[varnm].attrs[
+                    "long_name"
+                ] = f"Standard deviation of {long_name_nocap}"
 
-            # Add ancillary_variable links between std and avg values
+            # Link ancillary variables
             D[varnm].attrs["ancillary_variables"] = varnm_prefix
             D[varnm_prefix].attrs["ancillary_variables"] = varnm
 
-        # Add some variable attributes that should be standard for anything
-        # measured on a CTD
-
-        if ctd_prof:
-            if varnm not in ["NISKIN_NUMBER", "TIME", "TIME_SAMPLE"]:
-
-                if (
-                    override is False
-                    and "coverage_content_type" in D[varnm].attrs
-                ):
-                    pass
-                else:
-                    D[varnm].attrs[
-                        "coverage_content_type"
-                    ] = "physicalMeasurement"
-                if override is not False and "sensor_mount" in D[varnm].attrs:
-                    pass
-                else:
-                    D[varnm].attrs[
-                        "sensor_mount"
-                    ] = "mounted_on_shipborne_profiler"
-            else:
+        # Guess coverage_content_type if not already present
+        if not override and "coverage_content_type" not in D[varnm].attrs:
+            if varnm in ["NISKIN_NUMBER", "TIME", "TIME_SAMPLE"]:
                 D[varnm].attrs["coverage_content_type"] = "coordinate"
+            elif varnm in ["LONGITUDE", "LATITUDE"]:
+                D[varnm].attrs["coverage_content_type"] = (
+                    "referenceInformation")
+            elif varnm == "PROCESSING":
+                D[varnm].attrs["coverage_content_type"] = (
+                    "auxiliaryInformation")
+            else:
+                D[varnm].attrs["coverage_content_type"] = "physicalMeasurement"
 
-            if varnm in ["SCAN", "nbin"]:
-                D[varnm].attrs["coverage_content_type"]
+        # Add sensor_mount attribute if data_type is provided
+        # NOTE: Drop - it is plenty to do this as a single global attribute!
+        if False:
+            if not override and data_type:
+                if data_type == "ctdprof":
+                    D[varnm].attrs["sensor_mount"] = (
+                        "mounted_on_shipborne_profiler")
+                elif data_type == "moored":
+                    D[varnm].attrs["sensor_mount"] = "mounted_on_mooring_line"
 
     return D
 
 
 def add_standard_glob_attrs_org(D, override=False, org="npi"):
     """
-    Adds standard organization, specific global variables for a CTD dataset as specified in
-    kval.data.nc_format._standard_attrs_org.
+    Adds standard organization, specific global variables for a CTD dataset as
+    specified in kval.data.nc_format._standard_attrs_org.
 
-
-    Includes  standard attribute values for things like
-    "institution", "creator_name", etc.
+    Includes  standard attribute values for things like "institution",
+    "creator_name", etc.
 
     'org' is the organiztion (currently only 'npi' available)
 
-
-    override: governs whether to override any global attributes that
-    are already present (typically not advised..)
+    override: governs whether to override any global attributes that are
+    already present (typically not advised..)
     """
 
     org_attrs = _standard_attrs_org.standard_globals_org[org.lower()]
@@ -404,7 +405,7 @@ def add_standard_glob_attrs_org(D, override=False, org="npi"):
 def add_standard_glob_attrs_ctd(D, override=False, org=False):
     """
     Adds standard global variables for a CTD dataset as specified in
-    oceanograpy.data.nc_format.standard_attrs_global_ctd.
+    kval.metadata.standard_attrs_global_ctd.
 
     override: governs whether to override any global attributes that
     are already present (typically not advised..)

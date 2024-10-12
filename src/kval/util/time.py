@@ -38,6 +38,15 @@ def ISO8601_to_datetime(time_str: str, to_UTC: bool = True) -> pd.Timestamp:
     else:
         return iso8601_time
 
+def dt64_to_datenum(dt64: np.datetime64, epoch: str = "1970-01-01") -> float:
+    '''
+    Convert numpy datetime64 to timenum (days since epoch)
+    '''
+    days_since_epoch = (
+        (dt64 - np.datetime64(epoch)) / np.timedelta64(1, 'D'))
+    return days_since_epoch
+
+
 
 def ISO8601_to_datenum(time_str: str, epoch: str = "1970-01-01") -> float:
     """

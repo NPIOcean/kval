@@ -51,6 +51,10 @@ from kval.data.moored_tools._moored_decorator import record_processing
 from kval.util import internals
 from kval.signal import despike, filt
 from kval.metadata import conventionalize
+from kval.metadata.check_conventions import check_file_with_button
+
+# Want to be able to use these functions directly..
+from kval.data.dataset import metadata_to_txt, to_netcdf
 
 if internals.is_notebook():
     from IPython.display import display
@@ -84,6 +88,8 @@ def load_moored(
         instr_type = "RBR"
     elif file.endswith(".cnv"):
         instr_type = "SBE"
+    elif file.endswith(".csv"):
+        instr_type = "SBE_csv"
     else:
         raise ValueError(
             f"Unable to load moored instrument {os.path.basename(file)}.\n"
@@ -95,6 +101,8 @@ def load_moored(
         ds = rbr.read_rsk(file)
     elif instr_type == "SBE":
         ds = sbe.read_cnv(file)
+    elif instr_type == "SBE_csv":
+        ds = sbe.read_csv(file)
 
     # Assign lat/lon if we have specified them
     if lat:
@@ -330,16 +338,19 @@ def chop_deck(
             start_end_str = "start and end"
             indices_str = f"{keep_slice.start}, {keep_slice.stop-1}"
 
-        ds["PROCESSING"].attrs["post_processing"] += (
-            f"Chopped {L0 - L1} samples at the {start_end_str} "
-            "of the time series.\n"
-        )
+        if keep_slice.start is None and keep_slice.stop is None:
+            pass
+        else:
+            ds["PROCESSING"].attrs["post_processing"] += (
+                f"Chopped {L0 - L1} samples at the {start_end_str} "
+                "of the time series.\n"
+            )
 
-        ds["PROCESSING"].attrs["python_script"] += (
-            f"\n\n# Chopping away samples from the {start_end_str}"
-            " of the time series\n"
-            f"ds = data.moored.chop_deck(ds, indices = [{indices_str}])"
-        )
+            ds["PROCESSING"].attrs["python_script"] += (
+                f"\n\n# Chopping away samples from the {start_end_str}"
+                " of the time series\n"
+                f"ds = data.moored.chop_deck(ds, indices = [{indices_str}])"
+            )
 
     return ds
 
@@ -1036,7 +1047,7 @@ def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
         Reorders attributes for consistency.
     """
     ds = conventionalize.remove_numbers_in_var_names(ds)
-    ds = conventionalize.add_standard_var_attrs(ds)
+    ds = conventionalize.add_standard_var_attrs(ds, data_type='moored')
     ds = conventionalize.add_standard_glob_attrs_moor(ds, override=False)
     ds = conventionalize.add_standard_glob_attrs_org(ds)
     ds = conventionalize.add_gmdc_keywords_ctd(ds)
@@ -1074,3 +1085,19 @@ def to_mat(ds, outfile, simplify=False):
     # Also transposing dimensions to PRES, TIME for ease of plotting etc in
     # MATLAB.
     matfile.xr_to_mat(ds_wo_proc.transpose(), outfile, simplify=simplify)
+
+
+def check_metadata(ds: Union[xr.Dataset, str]) -> None:
+    """
+    Use the IOOS compliance checker to check an NetCDF file (CF and ACDD
+    conventions).
+
+    Parameters
+    ----------
+    ds : Union[xr.Dataset, str]
+        The dataset or file path to check. Can be either an xarray Dataset or a
+        file path.
+
+    Displays the compliance check results with a "Close" button.
+    """
+    check_file_with_button(ds)

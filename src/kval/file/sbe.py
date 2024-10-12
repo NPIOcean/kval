@@ -50,6 +50,7 @@ import os
 from typing import Optional
 from itertools import zip_longest
 from matplotlib.dates import num2date
+import warnings
 
 # KEY FUNCTIONS
 
@@ -539,6 +540,126 @@ def read_header(filename: str) -> dict:
             hdict["moored_sensor"] = False
 
         return hdict
+
+
+def read_csv(filename: str) -> xr.Dataset:
+    """
+    Read a Seabird .csv file, often output from SBE56 sensors, and convert it
+    to an xarray Dataset (preserving metadata from the header).
+
+    Parameters:
+    -----------
+    filename : str
+        The path to the .csv file to read.
+
+    Returns:
+    --------
+    xr.Dataset
+        An xarray Dataset containing the data from the .csv file.
+
+    """
+
+    # Loop through the header to:
+    # - Extract useful metadata
+    # - Find the start of the data column headers
+    meta_dict = {
+       'instrument':'N/A','SN':'N/A','cal_date':'N/A',
+       'conv_date':'','source_file':'N/A',}
+    try:
+        with open(filename, "r", encoding="latin-1") as f:
+            lines = f.readlines()
+            for n_line, line in enumerate(lines):
+                # Look for specific metadata
+                if 'Instrument type' in line:
+                    meta_dict['instrument'] = line.split()[-1]
+                if 'Serial Number' in line:
+                    meta_dict['SN'] = line.split()[-1]
+                if 'Conversion Date' in line:
+                    meta_dict['conv_date'] = line.split()[-1]
+                if 'Calibration Date' in line:
+                    meta_dict['cal_date'] = line.split()[-1]
+                if 'Source file' in line:
+                    # Store only the file name (not the whole path)
+                    src_path = line.split()[-1].replace('\\', "/")
+                    meta_dict['source_file'] = os.path.basename(src_path)
+                # Break the loop and store the column index when the header ends
+                if line[0] != '%':
+                    start_line = n_line
+                    break
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"File not found: {filename}") from e
+
+    # If we can't find the info in the header, try looking in the file name
+    if 'SBE056' in filename:
+        if meta_dict['instrument'] == 'N/A':
+            meta_dict['instrument'] = 'SBE56'
+        if meta_dict['SN'] == 'N/A':
+            after_sbe = filename[filename.rfind('SBE056')+6:]
+            match = re.search(r'\d+', after_sbe)
+            sn = str(int(match.group(0)) if match else 'N/A')
+            meta_dict['SN'] = sn
+
+    # Load the columnar data
+    df = pd.read_csv(filename, header=start_line)
+
+    # Convert "Date" and "Time" strings to datetime
+    # (Suppress UserWarning for date parsing)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=UserWarning)
+        df['TIME'] = pd.to_datetime(df['Date'] + ' ' + df['Time'])
+
+
+    # Set datetime to index
+    df.set_index('TIME', inplace=True)
+
+    # Convert Temperature (string) to TEMP (float)
+    df['TEMP'] = df['Temperature'].astype('float')
+
+    # Convert pandas Dataframe to xarray Dataset
+    ds = xr.Dataset.from_dataframe(df)
+
+    # Remove unused variables
+    ds = ds.drop_vars(['Date', 'Time', 'Temperature'])
+
+    # Set TIME metadata
+    ds['TIME'] = time.dt64_to_datenum(ds['TIME'], epoch = '1970-01-01')
+    ds['TIME'].attrs['units'] = 'Days since 1970-01-01'
+
+    # Set TEMP metadata
+    ds['TEMP'].attrs['units'] = 'degree_Celsius'
+    ds['TEMP'].attrs['cal_date'] = meta_dict['cal_date']
+
+    # Make a string for history
+    history_lines = [
+        f"{num2date(ds.TIME.min()).strftime('%Y-%m-%d')} - "
+        f"{num2date(ds.TIME.min()).strftime('%Y-%m-%d')}: Data collection.\n"]
+
+    # Add conversion date line only if it's not empty
+    if meta_dict['conv_date']:
+        history_lines.append(
+            f"{meta_dict['conv_date']}: Data converted from .xml to .cnv "
+            "using SeaBird software.\n"
+        )
+
+    # Add reading date line
+    history_lines.append(
+        f"{pd.Timestamp.now().strftime('%Y-%m-%d')}: Data read from .csv "
+        "file to xarray Dataset using kval.\n"
+    )
+
+    # Assign global attributes
+    ds.attrs.update({
+        'instrument': meta_dict['instrument'],
+        'instrument_serial_number': meta_dict['SN'].replace('0561', ''),
+        'source_files': meta_dict['source_file'],
+        'filename': os.path.basename(filename),
+        'history': ''.join(history_lines)
+    })
+
+    return ds
+
+
+
 
 
 def to_netcdf(

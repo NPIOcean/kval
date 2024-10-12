@@ -605,7 +605,7 @@ def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
             Reorders attributes for consistency.
     """
     ds = conventionalize.remove_numbers_in_var_names(ds)
-    ds = conventionalize.add_standard_var_attrs(ds)
+    ds = conventionalize.add_standard_var_attrs(ds, data_type='ctdprof')
     ds = conventionalize.add_standard_glob_attrs_ctd(ds, override=False)
     ds = conventionalize.add_standard_glob_attrs_org(ds)
     ds = conventionalize.add_gmdc_keywords_ctd(ds)
