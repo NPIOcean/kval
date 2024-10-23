@@ -7,6 +7,7 @@ from kval.data.moored import load_moored, assign_pressure, drop_variables, calcu
 from unittest import mock
 from unittest import mock
 import numpy as np
+import re
 
 # Define the URLs for the files you want to test
 RBR_FILE_URLS = {
@@ -289,6 +290,23 @@ def sample_dataset_drift():
     ds['TIME'].attrs['units'] = 'days since 1970-01-01'
     return ds
 
+@pytest.fixture
+def sample_dataset_drift_bad_time_units():
+    """Create a sample xarray Dataset for testing."""
+    time_values = np.arange(0, 10)  # Example time values
+    data = np.random.rand(10)  # Random data for testing
+    ds = xr.Dataset({
+        'data_var': ('TIME', data)
+    })
+    ds.coords['TIME'] = ('TIME', time_values)
+    ds['TIME'].attrs['units'] = 'not a valid unit'
+    return ds
+
+
+
+
+
+
 def test_adjust_time_for_positive_drift(sample_dataset_drift):
     """Test positive clock drift adjustment."""
     ds = adjust_time_for_drift(sample_dataset_drift, seconds=30)
@@ -309,17 +327,24 @@ def test_adjust_time_for_combined_drift(sample_dataset_drift):
     assert ds['TIME'].values[0] == sample_dataset_drift['TIME'].values[0]
 
 
-def test_zero_drift_raises_exception(sample_dataset_drift):
+def test_zero_drift_prints_warning(sample_dataset_drift):
     """Test that an exception is raised for zero drift."""
-    with pytest.raises(Exception, match='non-zero clock drift'):
+    nz_drift_msg = (
+        'To adjust for clock drift, a non-zero clock drift'
+        ' has to be specified -> Doing nothing')
+
+    with pytest.warns(UserWarning, match=nz_drift_msg):
         adjust_time_for_drift(sample_dataset_drift, seconds=0)
 
-def test_invalid_time_units(sample_dataset_drift):
+def test_invalid_time_units(sample_dataset_drift_bad_time_units):
     """Test that an exception is raised for non-numerical TIME."""
-    sample_dataset_drift['TIME'].attrs['units'] = ('not a valid unit')
     with pytest.raises(Exception,
-                       match='To adjust for clock drift, a non-zero clock drift has to be specified'):
-        adjust_time_for_drift(sample_dataset_drift)
+                       match=re.escape(
+            'Could not add drift because TIME is non-numerical'
+            ' or has unknown units (should be "Days since..")')):
+
+        adjust_time_for_drift(sample_dataset_drift_bad_time_units,
+                              seconds=10)
 
 def test_empty_dataset():
     """Test adjustment on an empty dataset."""

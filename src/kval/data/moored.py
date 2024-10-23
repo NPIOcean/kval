@@ -52,6 +52,7 @@ from kval.util import internals, index, time
 from kval.signal import despike, filt
 from kval.metadata import conventionalize
 from kval.metadata.check_conventions import check_file_with_button
+import warnings
 
 # Want to be able to use these functions directly..
 from kval.data.dataset import metadata_to_txt, to_netcdf
@@ -482,6 +483,7 @@ def adjust_time_for_drift(
     Returns:
     xarray.Dataset: Dataset with adjusted TIME coordinate.
     """
+
     # Convert all drift values to seconds
     total_drift_seconds = (
         seconds +
@@ -495,15 +497,16 @@ def adjust_time_for_drift(
     elif total_drift_seconds < 0:
         drift_operation = 'added'
     elif total_drift_seconds == 0:
-        print('To adjust for clock drift, a non-zero clock drift'
-              ' has to be specified -> Doing nothing')
+
+        warnings.warn('To adjust for clock drift, a non-zero clock drift has'
+                      ' to be specified -> Doing nothing', UserWarning)
         return ds
 
     # Get the TIME coordinate
     time = ds.coords['TIME'].values
-
     drift_adjustments_sec = (
         np.arange(len(time)) / (len(time)-1))*total_drift_seconds
+
 
     # Check if TIME is in numerical format (days since epoch)
     if 'DAYS SINCE' in ds.TIME.units.upper():
