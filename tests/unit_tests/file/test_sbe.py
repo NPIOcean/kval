@@ -12,12 +12,22 @@ def file_list_test_cnvs_single():
     Returns a list of .cnv files from different projects used in subsequent
     tests.
     '''
-    test_data_dir = 'tests/test_data/sbe_files/sbe911plus/'
+    test_data_dir = 'tests/test_data/sbe_files/'
+
+    # Grab some test files from 911 data
     cruises =['atwain_cruise_ctds', 'dml_2020', 'kongsfjorden_ctds',
               'pirata_ctd', 'troll_transect_22_23']
 
     # Grab the first .cnv file for each of these cruises
-    flist_cnv = [glob2.glob(f'{test_data_dir}{cruise}/*.cnv')[0] for cruise in cruises]
+    flist_cnv_profile = [glob2.glob(f'{test_data_dir}sbe911plus/{cruise}/*.cnv')[0] for cruise in cruises]
+
+
+
+    flist_cnv_sbe37 = glob2.glob(test_data_dir + 'sbe37/cnv/*cnv')
+    flist_cnv_sbe56 = glob2.glob(test_data_dir + 'sbe56/*cnv')
+
+
+    flist_cnv = flist_cnv_profile + flist_cnv_sbe37 + flist_cnv_sbe56
 
     return flist_cnv
 

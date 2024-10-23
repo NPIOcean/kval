@@ -345,6 +345,39 @@ def read_header(filename: str) -> dict:
                 if "SBE37" in line or "SBE56" in line or "SBE16" in line:
                     hdict["moored_sensor"] = True
 
+            # Read the instrument type and SN from an alternative header
+            # structure which seems common for SBE56s
+
+            if "StatusData" in line:
+
+                # Define a regex pattern to extract DeviceType and SerialNumber
+                pattern = r"DeviceType='([^']+)'\s+SerialNumber='([^']+)'"
+
+                # Search for the pattern in the line
+                match = re.search(pattern, line)
+
+                if match and "instrument" not in hdict:
+                    hdict["instrument"] = match.group(1)
+                if match and "instrument_serial_number" not in hdict:
+                    serial_no = match.group(2)
+                    # Remove some instrument info that is occasionally included
+                    # in the serial number
+                    for instr_key in ['0561', '037', '016']:
+                        if serial_no.startswith(instr_key):
+                            serial_no = serial_no[len(instr_key):]
+
+                    # Remove leading zeros
+                    serial_no = str(int(serial_no))
+
+                    hdict["instrument_serial_number"] = serial_no
+
+
+
+                # If this is a SBE37 or SBE56, we will assume that
+                # this is a moored sensor.
+                if "SBE37" in line or "SBE56" in line or "SBE16" in line:
+                    hdict["moored_sensor"] = True
+
             # Read the column header info (which variable is in which data
             # column)
             if "# name" in line and not filename.endswith(".btl"):
@@ -1209,7 +1242,7 @@ def _read_sensor_info(source_file, verbose=False):
 
             # When encountering a <sensor> flag:
             # Begin looking for instrument info
-            if "<sensor" in line:
+            if "<sensor" in line.lower():
                 # Set initial flags
                 look_sensor = True
                 sensor_header_line = n_line + 1
@@ -1263,7 +1296,7 @@ def _read_sensor_info(source_file, verbose=False):
             # When encountering a <sensor> flag:
             # Stop looking for instrument info and store
             # in dictionary
-            if "</sensor>" in line:
+            if "</sensor>" in line.lower():
 
                 # Store to dictionary
                 if look_sensor and store_sensor_info:
@@ -2017,12 +2050,39 @@ def _modify_moored(ds, hdict):
         if remove_attr in ds.attrs:
             del ds.attrs[remove_attr]
 
-    # Add instrument serial number (should be same as TEMP)
+    # Add instrument serial number if we have it in the header dict
+    # (otherwise get from TEMP)
+
+    if 'instrument_serial_number' in hdict:
+        ds.attrs["instrument_serial_number"] = (
+            hdict["instrument_serial_number"]
+        )
+    else:
+        # Add instrument serial number (should be same as TEMP)
+        if "TEMP" in ds:
+            if hasattr(ds.TEMP, "sensor_serial_number"):
+                ds.attrs["instrument_serial_number"] = ds.TEMP.attrs[
+                    "sensor_serial_number"
+                ]
+
+    # Add calibration date (get from TEMP)
     if "TEMP" in ds:
-        if hasattr(ds.TEMP, "sensor_serial_number"):
-            ds.attrs["instrument_serial_number"] = ds.TEMP.attrs[
-                "sensor_serial_number"
+        if hasattr(ds.TEMP, "sensor_calibration_date"):
+            ds.attrs["instrument_calibration_date"] = ds.TEMP.attrs[
+                "sensor_calibration_date"
             ]
+
+
+    # Remove sensor_serial_number and from variable attributes
+    for varnm in ds:
+        if 'sensor_serial_number' in ds[varnm].attrs:
+            del ds[varnm].attrs['sensor_serial_number']
+        if 'sensor_calibration_date' in ds[varnm].attrs:
+            del ds[varnm].attrs['sensor_calibration_date']
+
+
+    # Special considerations for weird SBE56 cnvs
+
 
     # Set a sample interval
     if "sample_interval" in hdict:

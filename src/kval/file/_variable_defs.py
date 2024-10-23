@@ -10,13 +10,13 @@ SBE_name_map:
 
 
 var_attrs:
-  List of CF-compliant attributes to append to the variables 
-  ('standard_name', 'units', etc). NOTE: This is done more 
-  properly in the data.ctd module. Should maybe remove from here? 
+  List of CF-compliant attributes to append to the variables
+  ('standard_name', 'units', etc). NOTE: This is done more
+  properly in the data.ctd module. Should maybe remove from here?
 
 sensor_info_dict_SBE:
   Mapping from SBE header instrument info to physical sensor
-  (e.g. 'Temperature, 2 -->':'temp_sensor_2') 
+  (e.g. 'Temperature, 2 -->':'temp_sensor_2')
 '''
 
 # NOte: Full list here:
@@ -24,25 +24,25 @@ sensor_info_dict_SBE:
 #(Seasave_7.26.4-1.pdf=
 
 SBE_name_map = { # Note: replace / with _  !
-    'PRDM': {'name': 'PRES', 'units': 'dbar', 
+    'PRDM': {'name': 'PRES', 'units': 'dbar',
               'sensors':['pres_sensor'],},
-    'T090C': {'name': 'TEMP1', 'units': 'degree_Celsius', 
+    'T090C': {'name': 'TEMP1', 'units': 'degree_Celsius',
               'sensors':['temp_sensor_1']},
-    'T190C': {'name': 'TEMP2', 'units': 'degree_Celsius', 
+    'T190C': {'name': 'TEMP2', 'units': 'degree_Celsius',
               'sensors':['temp_sensor_2']},
-    'TV290C': {'name': 'TEMP1', 'units': 'degree_Celsius', 
+    'TV290C': {'name': 'TEMP1', 'units': 'degree_Celsius',
               'sensors':['temp_sensor_1']},
-    'T068C': {'name': 'TEMP1', 'units': 'degree_Celsius', 
+    'T068C': {'name': 'TEMP1', 'units': 'degree_Celsius',
               'sensors':['temp_sensor_1'],
               'reference_scale':'IPTS-68'},
-    'T168C': {'name': 'TEMP2', 'units': 'degree_Celsius', 
+    'T168C': {'name': 'TEMP2', 'units': 'degree_Celsius',
               'sensors':['temp_sensor_2'],
               'reference_scale':'IPTS-68'},
-    'T4990C': {'name': 'TEMP1', 'units': 'degree_Celsius', 
+    'T4990C': {'name': 'TEMP1', 'units': 'degree_Celsius',
               'sensors':['temp_sensor_1']},
-    'POTEMP090C': {'name': 'PTEMP1', 'units': 'degree_Celsius', 
+    'POTEMP090C': {'name': 'PTEMP1', 'units': 'degree_Celsius',
               'sensors':['temp_sensor_1']},
-    'POTEMP190C': {'name': 'PTEMP2', 'units': 'degree_Celsius', 
+    'POTEMP190C': {'name': 'PTEMP2', 'units': 'degree_Celsius',
               'sensors':['temp_sensor_2']},
     'C0S_M': {'name': 'CNDC1', 'units': 'S m-1',
               'sensors':['cndc_sensor_1']},
@@ -58,35 +58,35 @@ SBE_name_map = { # Note: replace / with _  !
               'sensors':['cndc_sensor_2']},
     'SBEOX0MM_KG': {'name': 'DOXY1_instr', 'units': 'micromole kg-1',
               'sensors':['oxy_sensor_1'],
-              'standard_name': 
+              'standard_name':
               'moles_of_oxygen_per_unit_mass_in_sea_water'},
     'SBEOX1MM_KG': {'name': 'DOXY2_instr', 'units': 'micromole kg-1',
               'sensors':['oxy_sensor_2'],
-              'standard_name': 
+              'standard_name':
               'moles_of_oxygen_per_unit_mass_in_sea_water'},
     'SBOX0MM_KG': {'name': 'DOXY1_instr', 'units': 'micromole kg-1',
               'sensors':['oxy_sensor_1'],
-              'standard_name': 
+              'standard_name':
               'moles_of_oxygen_per_unit_mass_in_sea_water'},
     'SBOX1MM_KG': {'name': 'DOXY2_instr', 'units': 'micromole kg-1',
               'sensors':['oxy_sensor_2'],
-              'standard_name': 
+              'standard_name':
               'moles_of_oxygen_per_unit_mass_in_sea_water'},
     'SBEOX0ML_L': {'name': 'DOXY1_instr', 'units': 'mL l-1',
               'sensors':['oxy_sensor_1'],
-              'standard_name': 
+              'standard_name':
               'volume_fraction_of_oxygen_in_sea_water'},
     'SBEOX1ML_L': {'name': 'DOXY2_instr', 'units': 'mL l-1',
               'sensors':['oxy_sensor_2'],
-              'standard_name': 
+              'standard_name':
               'volume_fraction_of_oxygen_in_sea_water'},
     'SBEOX0MG/L': {'name': 'DOXY1_instr', 'units': 'mg l-1',
               'sensors':['oxy_sensor_1'],
-              'standard_name': 
+              'standard_name':
               'mass_concentration_of_oxygen_in_sea_water'},
     'SBOX1MG/L': {'name': 'DOXY2_instr', 'units': 'mg l-1',
               'sensors':['oxy_sensor_2'],
-              'standard_name': 
+              'standard_name':
               'mass_concentration_of_oxygen_in_sea_water'},
     'SBEOX0V': {'name': 'OXYV1', 'units': 'volt',
               'sensors':['oxy_sensor_1']},
@@ -125,7 +125,7 @@ SBE_name_map = { # Note: replace / with _  !
 
 
     'SVCM': {'name': 'SVEL', 'units': 'm s-1'},
-    'SAL00': {'name': 'PSAL1', 'units': '1', 
+    'SAL00': {'name': 'PSAL1', 'units': '1',
               'sensors':['temp_sensor_1', 'cndc_sensor_1']},
     'SAL11': {'name': 'PSAL2', 'units': '1',
               'sensors':['temp_sensor_2', 'cndc_sensor_2']},
@@ -153,7 +153,7 @@ var_attrs = {
     'PROFILE': {
         'long_name': 'Profile number in dataset (see PROFILE_ID for station/cast)',
     },
-    
+
     'PROFILE_ID': {
         'long_name': 'profile ID ("station_cast")',
         'cf_role': 'profile_id',
@@ -212,6 +212,8 @@ var_attrs = {
 sensor_info_dict_SBE = {
     'Temperature -->':'temp_sensor_1',
     'Temperature, 2 -->':'temp_sensor_2',
+    'Water Temperature':'temp_sensor_1',
+
     'Conductivity -->':'cndc_sensor_1',
     'Conductivity, 2 -->':'cndc_sensor_2',
     'Pressure, Digiquartz with TC -->':'pres_sensor',
@@ -235,7 +237,7 @@ sensor_info_dict_SBE = {
 
 #### RBR
 
-# Dictionary mapping RBR variable names to NPI/OceanSITES 
+# Dictionary mapping RBR variable names to NPI/OceanSITES
 # ones (some of these are undefined or unknown to me)
 RBR_name_map = {
     'conductivity':'CNDC',

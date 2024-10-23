@@ -495,8 +495,9 @@ def adjust_time_for_drift(
     elif total_drift_seconds < 0:
         drift_operation = 'added'
     elif total_drift_seconds == 0:
-        raise Exception('To adjust for clock drift, a non-zero clock drift'
-                        ' has to be specified')
+        print('To adjust for clock drift, a non-zero clock drift'
+              ' has to be specified -> Doing nothing')
+        return ds
 
     # Get the TIME coordinate
     time = ds.coords['TIME'].values
