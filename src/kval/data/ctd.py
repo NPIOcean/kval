@@ -244,17 +244,13 @@ def dataset_from_btl_dir(
     return ds
 
 
-@record_processing(
-    "Imported netCDF file from '{path_to_file}'.",
-    "Loaded netCDF file '{path_to_file}' into dataset.",
-)
 def from_netcdf(path_to_file):
     """
     Import a netCDF file - e.g. one previously generated
     with these tools.
     """
-    d = xr.open_dataset(path_to_file, decode_cf=False)
-    return d
+    ds = xr.open_dataset(path_to_file, decode_cf=False)
+    return ds
 
 
 @record_processing(
