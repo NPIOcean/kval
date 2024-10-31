@@ -41,6 +41,7 @@ import numpy as np
 import os
 import gsw
 import matplotlib.pyplot as plt
+from matplotlib.dates import date2num, num2date
 import matplotlib as mpl
 
 from kval.file import sbe, rbr, matfile
@@ -355,6 +356,107 @@ def chop_deck(
 
     return ds
 
+def chop_by_time(
+    ds: xr.Dataset,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
+    verbose: bool = True,
+) -> xr.Dataset:
+    """
+    Chop away parts of a time series (xarray Dataset) based on an optional
+    start and end time. If neither is provided, no chopping is performed.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The xarray Dataset containing the data to be chopped. It must include
+        a 'TIME' coordinate, which can be either CF-compliant or numerical.
+    start_time : Optional[str], optional
+        The starting time for chopping in the format 'YYYY-MM-DD' or
+        'YYYY-MM-DD HH:MM'. If not provided, the dataset will not be chopped
+        from the start (i.e., retains all earlier data).
+    end_time : Optional[str], optional
+        The ending time for chopping in the format 'YYYY-MM-DD' or
+        'YYYY-MM-DD HH:MM'. If not provided, the dataset will retain all data
+        beyond this point (i.e., not chopped at the end).
+    verbose : bool, optional
+        Whether to print detailed information about the chop process.
+        Defaults to True.
+
+    Returns
+    -------
+    xr.Dataset
+        The chopped xarray Dataset. If no `start_time` or `end_time` is provided,
+        the original dataset is returned.
+
+    Raises
+    ------
+    ValueError
+        If the `start_time` and `end_time` result in an invalid or empty slice.
+        Also raised if the 'TIME' coordinate is missing.
+    """
+
+    # Ensure the 'TIME' coordinate exists
+    if 'TIME' not in ds.coords:
+        raise ValueError(f"Dataset does not contain a 'TIME' coordinate.")
+
+    # Decode CF-compliant time if TIME is numerical
+    if isinstance(ds.TIME.values[0], float):
+        time_units = ds.TIME.units
+        ds = xr.decode_cf(ds)
+    else:
+        time_units = None
+
+    # Handle the time range
+    if start_time is None and end_time is None:
+        if verbose:
+            print("No start or end time specified, returning the original dataset.")
+        return ds
+
+    # Define the slice based on the optional times
+    time_slice = slice(start_time, end_time)
+    ds_chopped = ds.sel(TIME=time_slice)
+
+    # Error handling: check if the chop resulted in an empty dataset
+    if ds_chopped.sizes["TIME"] == 0:
+        raise ValueError(
+            "Invalid time range selection. The resulting dataset has no samples."
+        )
+
+    # Get length before and after chopping
+    L0 = ds.sizes["TIME"]
+    L1 = ds_chopped.sizes["TIME"]
+
+    if verbose:
+        chop_info = (
+            f"Chopped dataset to time range {start_time or 'start'} to "
+            f"{end_time or 'end'}, reducing from {L0} to {L1} samples."
+        )
+        print(chop_info)
+
+    # Record to PROCESSING metadata (if the variable exists)
+    if "PROCESSING" in ds_chopped:
+        ds_chopped["PROCESSING"].attrs["post_processing"] += (
+            f"Chopped dataset to time range {start_time or 'start'}"
+            f" to {end_time or 'end'} ({L0} samples -> {L1} samples).\n"
+        )
+        ds_chopped["PROCESSING"].attrs["python_script"] += (
+            f"\n\n# Chopping dataset by time range\n"
+            f"ds = data.moored.chop_by_time(ds, start_time='{start_time}', "
+            f"end_time='{end_time}')"
+        )
+
+    # If initial TIME was numerical: Convert back to numerical format
+    if time_units:
+        time_attrs = ds_chopped['TIME'].attrs
+        ds_chopped['TIME'] = date2num(ds_chopped['TIME'])
+        ds_chopped['TIME'].attrs = {'units': 'Days since 1970-01-01 00:00:00'} | time_attrs
+        if 'DAYS SINCE 1970-01-01' not in time_units.upper():
+            print(f'NOTE: time units have changed from {time_units} '
+                  f'to {ds_chopped["TIME"].units}')
+
+    return ds_chopped
+
 
 # Despike
 @record_processing(
@@ -448,6 +550,15 @@ def despike_rolling(
             "outliers)."
         )
 
+
+    var_comment = (f"Despiking: Values exceeding the {window_size}-point rolling {filter_type} by more than {n_std} (rolling) standard deviations have been removed.")
+
+    if 'comment' in ds[var_name].attrs:
+        var_comment = ds[var_name].comment + '\n' + var_comment
+
+    ds[var_name].attrs['comment'] = var_comment
+
+
     return ds
 
 
@@ -534,9 +645,9 @@ def adjust_time_for_drift(
 # Filtering
 @record_processing(
     "Ran a {window_size}-point rolling {filter_type} filter "
-    "on the variable {dim}.",
+    "on the variable {var_name}.",
     py_comment=(
-        "Run a {window_size}-point rolling {filter_type} filter " "on {dim}"
+        "Run a {window_size}-point rolling {filter_type} filter " "on {var_name}"
     ),
 )
 def rolling_mean(
@@ -591,6 +702,13 @@ def rolling_mean(
         nan_edges=nan_edges,
     )
 
+    var_comment = (f"A {window_size}-point rolling {filter_type} has been applied.")
+
+    if 'comment' in ds[var_name].attrs:
+        var_comment = ds[var_name].comment + '\n' + var_comment
+
+    ds[var_name].attrs['comment'] = var_comment
+
     return ds
 
 
@@ -599,15 +717,15 @@ def rolling_mean(
 
 # Threshold edit
 @record_processing(
-    "Rejected values of {variable} outside the range ({min_val}, {max_val})",
+    "Rejected values of {var_name} outside the range ({min_val}, {max_val})",
     py_comment=(
-        "Rejecting values of {variable} outside the range "
+        "Rejecting values of {var_name} outside the range "
         "({min_val}, {max_val}):"
     ),
 )
 def threshold(
     ds: xr.Dataset,
-    variable: str,
+    var_name: str,
     min_val: Optional[float] = None,
     max_val: Optional[float] = None,
 ) -> xr.Dataset:
@@ -621,7 +739,7 @@ def threshold(
     ----------
     ds : xr.Dataset
         The input xarray Dataset.
-    variable : str
+    var_name : str
         The name of the variable within the Dataset to be thresholded.
     min_val : Optional[float], default=None
         The minimum allowed value for the variable. Values less than
@@ -642,8 +760,15 @@ def threshold(
     ds_thresholded = threshold(ds, 'TEMP', max_val=3, min_val=-1)
     """
     ds = edit.threshold(
-        ds=ds, variable=variable, max_val=max_val, min_val=min_val
+        ds=ds, variable=var_name, max_val=max_val, min_val=min_val
     )
+
+    var_comment = (f"Values outside the range ({min_val}, {max_val}) have been removed.")
+
+    if 'comment' in ds[var_name].attrs:
+        var_comment = ds[var_name].comment + '\n' + var_comment
+
+    ds[var_name].attrs['comment'] = var_comment
 
     return ds
 

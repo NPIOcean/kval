@@ -338,7 +338,7 @@ def read_header(filename: str) -> dict:
 
             # Read the instrument type (usually the first line)
             if "Data File:" in line:
-                hdict["instrument"] = " ".join(line.split()[1:-2])
+                hdict["instrument_model"] = " ".join(line.split()[1:-2])
 
                 # If this is a SBE37 or SBE56, we will assume that
                 # this is a moored sensor.
@@ -356,8 +356,8 @@ def read_header(filename: str) -> dict:
                 # Search for the pattern in the line
                 match = re.search(pattern, line)
 
-                if match and "instrument" not in hdict:
-                    hdict["instrument"] = match.group(1)
+                if match and "instrument_model" not in hdict:
+                    hdict["instrument_model"] = match.group(1)
                 if match and "instrument_serial_number" not in hdict:
                     serial_no = match.group(2)
                     # Remove some instrument info that is occasionally included
@@ -596,7 +596,7 @@ def read_csv(filename: str) -> xr.Dataset:
     # - Extract useful metadata
     # - Find the start of the data column headers
     meta_dict = {
-       'instrument':'N/A','SN':'N/A','cal_date':'N/A',
+       'instrument_model':'N/A','SN':'N/A','cal_date':'N/A',
        'conv_date':'','source_file':'N/A',}
     try:
         with open(filename, "r", encoding="latin-1") as f:
@@ -604,7 +604,7 @@ def read_csv(filename: str) -> xr.Dataset:
             for n_line, line in enumerate(lines):
                 # Look for specific metadata
                 if 'Instrument type' in line:
-                    meta_dict['instrument'] = line.split()[-1]
+                    meta_dict['instrument_model'] = line.split()[-1]
                 if 'Serial Number' in line:
                     meta_dict['SN'] = line.split()[-1]
                 if 'Conversion Date' in line:
@@ -624,8 +624,8 @@ def read_csv(filename: str) -> xr.Dataset:
 
     # If we can't find the info in the header, try looking in the file name
     if 'SBE056' in filename:
-        if meta_dict['instrument'] == 'N/A':
-            meta_dict['instrument'] = 'SBE56'
+        if meta_dict['instrument_model'] == 'N/A':
+            meta_dict['instrument_model'] = 'SBE56'
         if meta_dict['SN'] == 'N/A':
             after_sbe = filename[filename.rfind('SBE056')+6:]
             match = re.search(r'\d+', after_sbe)
@@ -682,7 +682,7 @@ def read_csv(filename: str) -> xr.Dataset:
 
     # Assign global attributes
     ds.attrs.update({
-        'instrument': meta_dict['instrument'],
+        'instrument_model': meta_dict['instrument_model'],
         'instrument_serial_number': meta_dict['SN'].replace('0561', ''),
         'source_files': meta_dict['source_file'],
         'filename': os.path.basename(filename),
@@ -1570,7 +1570,7 @@ def _add_header_attrs(
     """
     Add the following as attributes if they are available from the header:
 
-        ship, cruise, station, latitude, longitude, instrument
+        ship, cruise, station, latitude, longitude, instrument_model
 
     If the attribute is already assigned, we don't change it
 
@@ -1583,7 +1583,7 @@ def _add_header_attrs(
         "station",
         "latitude",
         "longitude",
-        "instrument",
+        "instrument_model",
     ]:
 
         if key in header_info and key not in ds.attrs:
@@ -2050,8 +2050,6 @@ def _modify_moored(ds, hdict):
         if remove_attr in ds.attrs:
             del ds.attrs[remove_attr]
 
-    # Add instrument serial number if we have it in the header dict
-    # (otherwise get from TEMP)
 
     if 'instrument_serial_number' in hdict:
         ds.attrs["instrument_serial_number"] = (
@@ -2065,20 +2063,25 @@ def _modify_moored(ds, hdict):
                     "sensor_serial_number"
                 ]
 
-    # Add calibration date (get from TEMP)
-    if "TEMP" in ds:
-        if hasattr(ds.TEMP, "sensor_calibration_date"):
-            ds.attrs["instrument_calibration_date"] = ds.TEMP.attrs[
-                "sensor_calibration_date"
-            ]
+    # Add instrument serial number if we have it in the header dict
+    # (otherwise get from TEMP)
+    if False:
 
 
-    # Remove sensor_serial_number and from variable attributes
-    for varnm in ds:
-        if 'sensor_serial_number' in ds[varnm].attrs:
-            del ds[varnm].attrs['sensor_serial_number']
-        if 'sensor_calibration_date' in ds[varnm].attrs:
-            del ds[varnm].attrs['sensor_calibration_date']
+        # Add calibration date (get from TEMP)
+        if "TEMP" in ds:
+            if hasattr(ds.TEMP, "sensor_calibration_date"):
+                ds.attrs["instrument_calibration_date"] = ds.TEMP.attrs[
+                    "sensor_calibration_date"
+                ]
+
+
+        # Remove sensor_serial_number and from variable attributes
+        for varnm in ds:
+            if 'sensor_serial_number' in ds[varnm].attrs:
+                del ds[varnm].attrs['sensor_serial_number']
+            if 'sensor_calibration_date' in ds[varnm].attrs:
+                del ds[varnm].attrs['sensor_calibration_date']
 
 
     # Special considerations for weird SBE56 cnvs

@@ -62,6 +62,9 @@ class hand_remove_points:
         picks = np.array([])
         xlims = self.ax.get_xlim()
         self.ax.set_xlim(xlims)
+        ylims = self.ax.get_ylim()
+        self.ax.set_ylim(ylims)
+
         self.ax.invert_yaxis()
         self.ax.set_ylabel(f'{varnm} [{self.ds[varnm].units}]')
         self.ax.set_xlabel(f'TIME [{self.TIME.units}]')

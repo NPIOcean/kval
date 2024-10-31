@@ -3,6 +3,8 @@
 Collection of Python functions for working with oceanography data processing and analysis.
 
 Maintained by the Oceanography section at the [Norwegian Polar Institute](https://www.npolar.no/en/).
+
+Supperted by the project [HiAOOS](https://hiaoos.eu/).
 ___
 
 Last release,`0.0.2-beta`:

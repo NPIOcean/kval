@@ -104,9 +104,9 @@ def despike_rolling(
     # Optional plotting
     if plot:
         fig, ax = plt.subplots(2, 1, sharex=True)
-        ax[0].plot(ds[dim], ds[var_name], 'k',
+        ax[0].plot(ds[dim], ds[var_name], '.', color = 'tab:red', ms = 2,
                    label=f'Original {var_name} data', alpha=0.6)
-        ax[0].plot(var_mean[dim], var_despiked, 'tab:red',
+        ax[0].plot(var_mean[dim], var_despiked, 'k',
                    label=f'Despiked {var_name} data')
         ax[1].plot(var_mean[dim], np.abs(var_mean - ds[var_name]),
                    label='| Data$-$rolling mean |', lw=1)

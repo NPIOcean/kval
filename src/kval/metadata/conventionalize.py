@@ -584,7 +584,7 @@ def add_missing_glob(D):
 
             any_missing = False
             for var_attr in _attrs_dict_ref_var:
-                if var_attr not in D[varnm].attrs:
+                if var_attr not in D[varnm].attrs:  
                     set_var_attr(D, varnm, var_attr)
                     any_missing = True
 

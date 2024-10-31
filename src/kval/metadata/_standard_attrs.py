@@ -230,6 +230,8 @@ standard_attrs_global_ctd = {
     "standard_name_vocabulary": "CF Standard Name Table v83",
     "iso_topic_category": "oceans",
     "platform": "Water-based Platforms>Vessels",
+    'platform_vocabulary':'GCMD Platform Keywords Version 9.1.5',
+    'sensor_mount':'mounted_on_shipborne_profiler'
 }
 
 standard_attrs_global_moored = {
@@ -241,7 +243,10 @@ standard_attrs_global_moored = {
     "standard_name_vocabulary": "CF Standard Name Table v83",
     "iso_topic_category": "oceans",
     "platform": "Water-based Platforms>Buoys>Moored>MOORINGS",
+    'platform_vocabulary':'GCMD Platform Keywords Version 9.1.5',
     "sensor_mount": "mounted_on_mooring_line",
+    'featureType':'timeSeries',
+
 }
 
 
@@ -341,9 +346,11 @@ global_attrs_ordered = [
     "date_created",
     "processing_level",
     "QC_indicator",
+    "data_set_progress",
     "comment",
     "source",
     "instrument",
+    "instrument_model",
     "instrument_serial_number",
     "instrument_calibration_date",
     "platform",
@@ -353,6 +360,7 @@ global_attrs_ordered = [
     "cruise_name",
     "project",
     "project_number",
+    "related_url",
     "area",
     "location",
     "cruise",

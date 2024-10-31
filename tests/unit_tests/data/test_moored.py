@@ -3,11 +3,11 @@ import xarray as xr
 import requests
 from pathlib import Path
 import gsw
-from kval.data.moored import load_moored, assign_pressure, drop_variables, calculate_PSAL, adjust_time_for_drift
-from unittest import mock
+from kval.data.moored import load_moored, assign_pressure, drop_variables, calculate_PSAL, adjust_time_for_drift, chop_by_time
 from unittest import mock
 import numpy as np
 import re
+import pandas as pd
 
 # Define the URLs for the files you want to test
 RBR_FILE_URLS = {
@@ -354,3 +354,72 @@ def test_empty_dataset():
 
     adjusted_ds = adjust_time_for_drift(ds, seconds=10)
     assert adjusted_ds['TIME'].size == 0  # The size should still be zero
+
+
+
+#### Test chop_by_time
+@pytest.fixture
+def sample_dataset_chopbytime():
+    """Fixture to create a sample xarray Dataset for chop_by_time testing."""
+    time = np.array([
+        '2022-01-01T00:00:00', '2022-01-01T01:00:00', '2022-01-01T02:00:00',
+        '2022-01-01T03:00:00', '2022-01-01T04:00:00'
+    ], dtype='datetime64[ns]')
+    data_var = np.random.rand(5)
+    ds = xr.Dataset(
+        {"data_var": ("TIME", data_var)},
+        coords={"TIME": time}
+    )
+    return ds
+
+def test_chop_by_time_basic(sample_dataset_chopbytime):
+    """Test basic functionality of chop_by_time."""
+    # Define start_time and end_time for chopping
+    start_time = '2022-01-01T01:00:00'
+    end_time = '2022-01-01T03:00:00'
+
+    # Call chop_by_time
+    result = chop_by_time(sample_dataset_chopbytime, start_time=start_time, end_time=end_time)
+
+    # Assert that the dataset was properly cropped
+    expected_times = np.array([
+        '2022-01-01T01:00:00', '2022-01-01T02:00:00', '2022-01-01T03:00:00'
+    ], dtype='datetime64[ns]')
+
+    assert np.array_equal(result.TIME.values, expected_times), "The time range was not cropped correctly."
+    assert result.sizes['TIME'] == 3, "Expected 3 time steps after chopping."
+
+def test_chop_by_time_no_start_time(sample_dataset_chopbytime):
+    """Test chop_by_time with no start_time."""
+    end_time = '2022-01-01T02:00:00'
+
+    # Call chop_by_time with no start_time (removes all data before end_time)
+    result = chop_by_time(sample_dataset_chopbytime, end_time=end_time)
+
+    expected_times = np.array([
+        '2022-01-01T00:00:00', '2022-01-01T01:00:00', '2022-01-01T02:00:00'
+    ], dtype='datetime64[ns]')
+
+    assert np.array_equal(result.TIME.values, expected_times), "The dataset was not chopped correctly when no start_time was provided."
+    assert result.sizes['TIME'] == 3, "Expected 3 time steps after chopping."
+
+
+def test_chop_by_time_no_end_time(sample_dataset_chopbytime):
+    """Test chop_by_time with no end_time."""
+    start_time = '2022-01-01T02:00:00'
+
+    # Call chop_by_time with no end_time (removes all data after start_time)
+    result = chop_by_time(sample_dataset_chopbytime, start_time=start_time)
+
+    expected_times = np.array([
+        '2022-01-01T02:00:00', '2022-01-01T03:00:00', '2022-01-01T04:00:00'
+    ], dtype='datetime64[ns]')
+
+    assert np.array_equal(result.TIME.values, expected_times), "The dataset was not chopped correctly when no end_time was provided."
+    assert result.sizes['TIME'] == 3, "Expected 3 time steps after chopping."
+
+def test_chop_by_time_no_times(sample_dataset_chopbytime):
+    """Test chop_by_time with no start_time and end_time (should return the same dataset)."""
+    result = chop_by_time(sample_dataset_chopbytime)
+
+    assert result.equals(sample_dataset_chopbytime), "The dataset should remain unchanged when no start_time and end_time are provided."
