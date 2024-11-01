@@ -7,12 +7,15 @@ Various functions for making modifications to moored sensor data in xarray forma
 
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.dates import date2num
+from matplotlib.dates import date2num, num2date
 from matplotlib.widgets import RectangleSelector
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 from kval.util import time, internals, index
 from kval.data import edit, moored
+from kval.signal.filt import rolling
+import xarray as xr
+import pandas as pd
 #from kval.data.ship_ctd_tools import _ctd_tools
 
 class hand_remove_points:
@@ -337,3 +340,120 @@ class hand_remove_points:
         return ''
 
 ################################################################################
+
+
+
+def inspect_time_series(ds: xr.Dataset) -> None:
+    """
+    Visualizes time series data interactively with options for applying hourly and daily mean filters.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The xarray Dataset containing the time series data. The dataset must have a 'TIME' dimension.
+
+    Interactive Elements
+    --------------------
+    - Dropdown to select the variable to plot from those with a 'TIME' dimension.
+    - Checkbox to apply an hourly mean over a user-defined window (1 to 24 hours).
+    - Checkbox to apply a daily mean over a user-defined window (1 to 30 days).
+    - Sliders to specify the window size in hours and days for the respective mean calculations.
+
+    Behavior
+    --------
+    - If the "Apply Hourly Mean" option is selected, the data will be resampled to the specified
+      number of hours, and the time step will be centered.
+    - If the "Apply Daily Mean" option is selected, the data will be resampled to the specified
+      number of days, and the time step will be centered.
+    - The original and resampled time series are plotted.
+
+    Example
+    -------
+    >>> ds = xr.Dataset(...)  # Load your dataset
+    >>> inspect_time_series(ds)
+    """
+
+    # Get the list of variables with a TIME dimension
+    time_vars = [var for var in ds.data_vars if 'TIME' in ds[var].dims]
+
+    if isinstance(ds.TIME, float):
+        TIME_date = num2date(ds.TIME)
+        TIME_num = ds.TIME
+    else:
+        TIME_date = ds.TIME
+        TIME_num = date2num(ds.TIME)
+
+    if not time_vars:
+        print("No variables with a TIME dimension found.")
+        return
+
+    # Create widgets
+    var_selector = widgets.Dropdown(
+        options=time_vars, description='Variable:', value=time_vars[0])
+
+    plot_button = widgets.Button(description="Plot", button_style='success')
+
+    # Widgets for hourly mean options
+    hourly_mean_checkbox = widgets.Checkbox(
+        value=False, description='Apply Hourly Mean')
+
+    hours_input = widgets.IntSlider(
+        value=1, min=1, max=24, step=1, description='Window (hours):')
+
+    # Widgets for daily mean options
+    daily_mean_checkbox = widgets.Checkbox(
+        value=False, description='Apply Daily Mean')
+
+    days_input = widgets.IntSlider(
+        value=1, min=1, max=30, step=1, description='Window (days):')
+
+    # Define the plot function
+    def plot_time_series(variable, hourly_apply, hours, daily_apply, days):
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        # Plot original data
+        ds[variable].plot(label=f"{variable} (original)", color='k', alpha = 0.7)
+
+        # Apply hourly mean if checkbox is checked
+        if hourly_apply:
+            try:
+                # Resample by the specified number of hours and center the time window
+                ds_resampled = ds[variable].resample(TIME=f'{hours}h', label='right').mean()
+
+                # Offset the time to center it within the resampled window
+                half_window_offset = pd.Timedelta(hours=hours // 2)
+                ds_resampled['TIME'] = ds_resampled.TIME - half_window_offset
+
+                ax.plot(ds_resampled.TIME, ds_resampled, label=f"{variable} (hourly mean, window={hours} hours)", color='tab:blue')
+
+            except Exception as e:
+                print(f"Error applying hourly mean: {e}")
+
+        # Apply daily mean if checkbox is checked
+        if daily_apply:
+            try:
+                # Resample by the specified number of days and center the time window
+                ds_resampled = ds[variable].resample(TIME=f'{days}D', label='right').mean()
+
+                # Offset the time to center it within the resampled window
+                half_window_offset = pd.Timedelta(days=days // 2)
+                ds_resampled['TIME'] = ds_resampled.TIME - half_window_offset
+
+                ax.plot(ds_resampled.TIME, ds_resampled, label=f"{variable} (daily mean, window={days} days)", color='tab:orange')
+
+            except Exception as e:
+                print(f"Error applying daily mean: {e}")
+
+        plt.legend()
+        plt.title(f"Time Series: {variable}")
+        plt.show()
+
+    # Define interaction
+    widgets.interact(
+        plot_time_series,
+        variable=var_selector,
+        hourly_apply=hourly_mean_checkbox,
+        hours=hours_input,
+        daily_apply=daily_mean_checkbox,
+        days=days_input,
+    )
