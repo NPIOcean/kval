@@ -46,6 +46,7 @@ SBE_name_map = { # Note: replace / with _  !
               'sensors':['temp_sensor_2']},
     'C0S_M': {'name': 'CNDC1', 'units': 'S m-1',
               'sensors':['cndc_sensor_1']},
+
     'C1S_M': {'name': 'CNDC2', 'units': 'S m-1',
               'sensors':['cndc_sensor_2']},
     'C0MS_CM': {'name': 'CNDC1', 'units': 'mS cm-1',
@@ -55,6 +56,10 @@ SBE_name_map = { # Note: replace / with _  !
     'COND0MS_CM': {'name': 'CNDC1', 'units': 'mS cm-1',
               'sensors':['cndc_sensor_1']},
     'COND1MS_CM': {'name': 'CNDC2', 'units': 'mS cm-1',
+              'sensors':['cndc_sensor_2']},
+    'COND0S_M': {'name': 'CNDC1', 'units': 'S m-1',
+              'sensors':['cndc_sensor_1']},
+    'COND1S_M': {'name': 'CNDC2', 'units': 'S m-1',
               'sensors':['cndc_sensor_2']},
     'SBEOX0MM_KG': {'name': 'DOXY1_instr', 'units': 'micromole kg-1',
               'sensors':['oxy_sensor_1'],

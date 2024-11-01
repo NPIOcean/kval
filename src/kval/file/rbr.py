@@ -80,7 +80,7 @@ def read_rsk(file: str, keep_total_pres: bool = False) -> xr.Dataset:
         )
 
         # Add metadata
-        ds_rsk.attrs["instrument"] = rskdata.instrument.model
+        ds_rsk.attrs["instrument_model"] = rskdata.instrument.model
         ds_rsk.attrs["instrument_serial_number"] = rskdata.instrument.serialID
         ds_rsk.attrs["time_coverage_resolution"] = time.seconds_to_ISO8601(
             rskdata.scheduleInfo.samplingperiod()

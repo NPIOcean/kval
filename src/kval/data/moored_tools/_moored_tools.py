@@ -7,6 +7,7 @@ Various functions for making modifications to moored sensor data in xarray forma
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.dates import date2num
 from matplotlib.widgets import RectangleSelector
 import ipywidgets as widgets
 from IPython.display import display, clear_output
@@ -51,7 +52,13 @@ class hand_remove_points:
 
         self.var_data = ds[varnm]
 
-        self.TIME = ds.TIME
+        # Read time (as float - convert if necessary)
+        if isinstance(ds.TIME[0].values, np.datetime64):
+            self.TIME = date2num(ds.TIME.copy())
+            self.TIME.attrs['units'] = 'Days since 1970-01-01'
+        else:
+            self.TIME = ds.TIME.copy()
+
         self.Npres = len(ds.TIME)
 
         self.fig, self.ax = plt.subplots(figsize = (11, 6))
@@ -66,8 +73,15 @@ class hand_remove_points:
         self.ax.set_ylim(ylims)
 
         self.ax.invert_yaxis()
-        self.ax.set_ylabel(f'{varnm} [{self.ds[varnm].units}]')
-        self.ax.set_xlabel(f'TIME [{self.TIME.units}]')
+        if 'units' in self.ds[varnm].attrs:
+            self.ax.set_ylabel(f'{varnm} [{self.ds[varnm].units}]')
+        else:
+            self.ax.set_ylabel(f'{varnm} [no units]')
+        if 'units' in self.TIME.attrs:
+            self.ax.set_xlabel(f'TIME [{self.TIME.units}]')
+        else:
+            self.ax.set_ylabel(f'TIME [no units]')
+
         self.ax.grid()
         #station_time_string = time.convert_timenum_to_datetime(self.ds.TIME.values[TIME_index], ds.TIME.units)
         self.fig.canvas.header_visible = False  # Hide the figure header
@@ -146,9 +160,10 @@ class hand_remove_points:
         """
         ext = self.es.extents
         rectangle = plt.Rectangle((ext[0], ext[2]), ext[1] - ext[0], ext[3] - ext[2])
+
         self.contains_TF_ = rectangle.contains_points(np.vstack([self.TIME,
                                                                  self.var_data]).T)
-
+        print
         self.var_points_selected = np.concatenate([
             self.var_points_selected,
             self.var_data[self.contains_TF_]])

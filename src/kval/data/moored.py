@@ -1150,6 +1150,22 @@ def linear_drift_offset(
         ds, variable, end_val, start_val=start_val, start_date=start_date,
         end_date=end_date, factor=False)
 
+
+    # Record to PSAL metadata field
+    if start_date is None:
+        start_date = 'the first data entry'
+    if end_date is None:
+        end_date = 'the last data entry'
+
+    drift_comment = (f'Adjusted for drift by applying am *offset* linearly '
+                     f'evolving from {start_val} on {start_date} to {end_val}'
+                     ' on {end_date}.')
+
+    if 'comment' in ds[variable].attrs:
+        ds[variable].attrs['comment' ] += '\n' + drift_comment
+    else:
+        ds[variable].attrs['comment' ] = drift_comment
+
     return ds
 
 
@@ -1202,9 +1218,25 @@ def linear_drift_factor(
         variable.
         '''
 
+    # Apply drift
     ds = edit.linear_drift(
         ds, variable, end_val, start_val=start_val, start_date=start_date,
         end_date=end_date, factor=True)
+
+    # Record to PSAL metadata field
+    if start_date is None:
+        start_date = 'the first data entry'
+    if end_date is None:
+        end_date = 'the last data entry'
+
+    drift_comment = (f'Adjusted for drift by applying a *factor*'
+                     f' linearly evolving from {start_val} on'
+                    f' {start_date} to {end_val} on {end_date}.')
+
+    if 'comment' in ds[variable].attrs:
+        ds[variable].attrs['comment' ] += '\n' + drift_comment
+    else:
+        ds[variable].attrs['comment' ] = drift_comment
 
     return ds
 
