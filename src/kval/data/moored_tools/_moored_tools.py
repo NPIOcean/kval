@@ -340,8 +340,11 @@ class hand_remove_points:
         return ''
 
 ################################################################################
-
-
+import xarray as xr
+import ipywidgets as widgets
+import matplotlib.pyplot as plt
+import pandas as pd
+from IPython.display import display
 
 def inspect_time_series(ds: xr.Dataset) -> None:
     """
@@ -351,37 +354,9 @@ def inspect_time_series(ds: xr.Dataset) -> None:
     ----------
     ds : xr.Dataset
         The xarray Dataset containing the time series data. The dataset must have a 'TIME' dimension.
-
-    Interactive Elements
-    --------------------
-    - Dropdown to select the variable to plot from those with a 'TIME' dimension.
-    - Checkbox to apply an hourly mean over a user-defined window (1 to 24 hours).
-    - Checkbox to apply a daily mean over a user-defined window (1 to 30 days).
-    - Sliders to specify the window size in hours and days for the respective mean calculations.
-
-    Behavior
-    --------
-    - If the "Apply Hourly Mean" option is selected, the data will be resampled to the specified
-      number of hours, and the time step will be centered.
-    - If the "Apply Daily Mean" option is selected, the data will be resampled to the specified
-      number of days, and the time step will be centered.
-    - The original and resampled time series are plotted.
-
-    Example
-    -------
-    >>> ds = xr.Dataset(...)  # Load your dataset
-    >>> inspect_time_series(ds)
     """
-
     # Get the list of variables with a TIME dimension
     time_vars = [var for var in ds.data_vars if 'TIME' in ds[var].dims]
-
-    if isinstance(ds.TIME, float):
-        TIME_date = num2date(ds.TIME)
-        TIME_num = ds.TIME
-    else:
-        TIME_date = ds.TIME
-        TIME_num = date2num(ds.TIME)
 
     if not time_vars:
         print("No variables with a TIME dimension found.")
@@ -389,71 +364,114 @@ def inspect_time_series(ds: xr.Dataset) -> None:
 
     # Create widgets
     var_selector = widgets.Dropdown(
-        options=time_vars, description='Variable:', value=time_vars[0])
+        options=time_vars,
+        description='Variable: ',
+        value=time_vars[0],
+        layout=widgets.Layout(width='200px')
+    )
 
-    plot_button = widgets.Button(description="Plot", button_style='success')
+    # Checkbox for displaying grid
+    grid_checkbox = widgets.Checkbox(
+        value=False, description='Grid ',
+        layout=widgets.Layout(width='200px')
+    )
 
     # Widgets for hourly mean options
     hourly_mean_checkbox = widgets.Checkbox(
-        value=False, description='Apply Hourly Mean')
+        value=False, description='Hourly mean'
+    )
 
     hours_input = widgets.IntSlider(
-        value=1, min=1, max=24, step=1, description='Window (hours):')
+        value=1, min=1, max=24, step=1, description='# hours: ',
+        layout=widgets.Layout(width='200px'),
+        readout=False
+    )
+
+    # Update the hourly mean checkbox label based on the slider value
+    def update_hourly_mean_label(change):
+        hourly_mean_checkbox.description = f"{change['new']}-hour mean"
+
+    # Attach the update function to the slider
+    hours_input.observe(update_hourly_mean_label, names='value')
 
     # Widgets for daily mean options
     daily_mean_checkbox = widgets.Checkbox(
-        value=False, description='Apply Daily Mean')
+        value=False, description='Daily mean'
+    )
 
     days_input = widgets.IntSlider(
-        value=1, min=1, max=30, step=1, description='Window (days):')
+        value=1, min=1, max=30, step=1, description='# days:',
+        readout=False,
+        layout=widgets.Layout(width='200px'),
+    )
+
+    # Update the daily mean checkbox label based on the slider value
+    def update_daily_mean_label(change):
+        daily_mean_checkbox.description = f"{change['new']}-day mean"
+
+    # Attach the update function to the slider
+    days_input.observe(update_daily_mean_label, names='value')
+
+    # Layout: Stack the controls horizontally
+    controls = widgets.HBox([
+        widgets.VBox([var_selector, grid_checkbox]),
+        widgets.VBox([hourly_mean_checkbox, hours_input],
+                     layout=widgets.Layout(width='200px')),
+        widgets.VBox([daily_mean_checkbox, days_input])
+    ])  # Align items to the start)
 
     # Define the plot function
-    def plot_time_series(variable, hourly_apply, hours, daily_apply, days):
-        fig, ax = plt.subplots(figsize=(10, 6))
+    def plot_time_series(variable, hourly_apply, hours, daily_apply, days, grid_apply):
+        fig, ax = plt.subplots(figsize=(8, 5))
 
         # Plot original data
-        ds[variable].plot(label=f"{variable} (original)", color='k', alpha = 0.7)
+        ds[variable].plot(ax=ax, label=f"{variable} (original)", color='k', alpha=0.7)
 
         # Apply hourly mean if checkbox is checked
         if hourly_apply:
             try:
-                # Resample by the specified number of hours and center the time window
                 ds_resampled = ds[variable].resample(TIME=f'{hours}h', label='right').mean()
-
-                # Offset the time to center it within the resampled window
-                half_window_offset = pd.Timedelta(hours=hours // 2)
+                half_window_offset = pd.Timedelta(hours=hours / 2)
                 ds_resampled['TIME'] = ds_resampled.TIME - half_window_offset
-
-                ax.plot(ds_resampled.TIME, ds_resampled, label=f"{variable} (hourly mean, window={hours} hours)", color='tab:blue')
-
+                ax.plot(ds_resampled.TIME, ds_resampled, label=(
+                    f"{variable} (hourly mean, window={hours} hours)"),
+                    color='tab:cyan')
             except Exception as e:
                 print(f"Error applying hourly mean: {e}")
 
         # Apply daily mean if checkbox is checked
         if daily_apply:
             try:
-                # Resample by the specified number of days and center the time window
                 ds_resampled = ds[variable].resample(TIME=f'{days}D', label='right').mean()
-
-                # Offset the time to center it within the resampled window
-                half_window_offset = pd.Timedelta(days=days // 2)
+                half_window_offset = pd.Timedelta(days=days / 2)
                 ds_resampled['TIME'] = ds_resampled.TIME - half_window_offset
-
-                ax.plot(ds_resampled.TIME, ds_resampled, label=f"{variable} (daily mean, window={days} days)", color='tab:orange')
-
+                ax.plot(ds_resampled.TIME, ds_resampled, label=(
+                    f"{variable} (daily mean, window={days} days)"),
+                    color='tab:orange')
             except Exception as e:
                 print(f"Error applying daily mean: {e}")
 
-        plt.legend()
-        plt.title(f"Time Series: {variable}")
-        plt.show()
+        # Show grid if checkbox is checked
+        if grid_checkbox.value:
+            ax.grid()
 
-    # Define interaction
-    widgets.interact(
+        ax.legend()
+        ax.set_title(f"Time Series: {variable}")
+        fig.canvas.header_visible = False  # Hide the figure header
+        plt.tight_layout()
+
+        plt.show(block=False)
+    # Define interaction without calling display explicitly
+    interact_plot = widgets.interactive(
         plot_time_series,
         variable=var_selector,
         hourly_apply=hourly_mean_checkbox,
         hours=hours_input,
         daily_apply=daily_mean_checkbox,
         days=days_input,
+        grid_apply=grid_checkbox,
     )
+
+    # Display controls and plot
+    display(widgets.VBox([controls, interact_plot.children[-1]],
+                         layout=widgets.Layout(padding='0px', margin='0px')))
