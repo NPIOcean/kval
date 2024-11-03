@@ -412,12 +412,25 @@ def inspect_time_series(ds: xr.Dataset) -> None:
     # Attach the update function to the slider
     days_input.observe(update_daily_mean_label, names='value')
 
+
+    # Clse button
+    close_button = widgets.Button(description="Close")
+
+    def close_plot(_) -> None:
+        fig = plt.gcf()
+        fig.set_size_inches(0, 0)
+        controls.close()
+        plt.close(fig)
+
+    close_button.on_click(close_plot)
+
     # Layout: Stack the controls horizontally
     controls = widgets.HBox([
         widgets.VBox([var_selector, grid_checkbox]),
         widgets.VBox([hourly_mean_checkbox, hours_input],
                      layout=widgets.Layout(width='200px')),
-        widgets.VBox([daily_mean_checkbox, days_input])
+        widgets.VBox([daily_mean_checkbox, days_input]),
+        close_button
     ])  # Align items to the start)
 
     # Define the plot function
@@ -471,6 +484,7 @@ def inspect_time_series(ds: xr.Dataset) -> None:
         days=days_input,
         grid_apply=grid_checkbox,
     )
+
 
     # Display controls and plot
     display(widgets.VBox([controls, interact_plot.children[-1]],

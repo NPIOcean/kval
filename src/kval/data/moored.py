@@ -1450,3 +1450,28 @@ def check_metadata(ds: Union[xr.Dataset, str]) -> None:
     Displays the compliance check results with a "Close" button.
     """
     check_file_with_button(ds)
+
+
+def plot(ds: xr.Dataset) -> None:
+    '''
+    Visualizes time series data interactively with options for applying
+    hourly and daily mean filters.
+
+    Lets the user display any variable with a TIME dimension.
+
+    Assuming:
+
+        - 1-D time series data with a TIME dimension.
+        - Running a jupyter notebook with the matplotlib widget backend
+
+        (Your mileage may vary otherwise).
+
+    Parameters
+    ----------
+    ds : Union[xr.Dataset, str]
+        The dataset
+
+    Displays the compliance check results with a "Close" button.
+    '''
+
+    _moored_tools.inspect_time_series(ds)
