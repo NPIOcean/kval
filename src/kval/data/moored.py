@@ -42,6 +42,7 @@ import os
 import gsw
 import matplotlib.pyplot as plt
 from matplotlib.dates import date2num, num2date
+from matplotlib.dates import DateFormatter, HourLocator
 import matplotlib as mpl
 
 from kval.file import sbe, rbr, matfile
@@ -844,6 +845,7 @@ def remove_points(
 def hand_remove_points(
     ds: xr.Dataset,
     variable: str,
+    variable_edit: Optional[str] = None,
 ) -> xr.Dataset:
     """
     Interactively remove data points from CTD profiles.
@@ -853,9 +855,9 @@ def hand_remove_points(
     ds : xr.Dataset
         The dataset containing the CTD data.
     variable : str
-        The name of the variable to visualize and edit (e.g., 'TEMP1', 'CHLA').
-    TIME_index : str
-        The name of the station (e.g., '003', '012_01', 'AT290', 'StationA').
+        The name of the variable to visualize (e.g., 'TEMP1', 'CHLA').
+    variable_edit : str
+        The name of the variable to edit (e.g., 'TEMP1', 'CHLA').
 
     Returns
     -------
@@ -872,7 +874,11 @@ def hand_remove_points(
     corresponding buttons for actions.
     """
 
-    hand_remove = _moored_tools.hand_remove_points(ds, variable)
+    if not variable_edit:
+        variable_edit = variable
+
+    hand_remove = _moored_tools.hand_remove_points(
+        ds, variable, varnm_edit=variable_edit)
     ds = hand_remove.ds
 
     return ds
@@ -931,6 +937,73 @@ def calculate_PSAL(
     )
 
     return ds
+
+
+
+
+# Recalculate sal
+@record_processing(
+    "Recalculated PSAL using the GSW-Python module.",
+    py_comment="Recalculating PSAL",
+)
+def calculate_rho(
+    ds: xr.Dataset,
+    cndc_var: str = "CNDC",
+    temp_var: str = "TEMP",
+    pres_var: str = "PRES",
+    psal_var: str = "PSAL",
+) -> xr.Dataset:
+    """Recalculate Density (RHO) from conductivity, temperature,
+    and pressure using the GSW-Python module
+    (https://teos-10.github.io/GSW-Python/).
+
+    This function adds or updates the RHO variable in the dataset with newly computed
+    density value.
+
+    Args:
+        ds (xr.Dataset):
+            The input dataset containing conductivity, temperature, and
+            pressure variables.
+        cndc_var (str):
+            The name of the conductivity variable in the dataset.
+            Defaults to 'CNDC'.
+        temp_var (str):
+            The name of the temperature variable in the dataset.
+            Defaults to 'TEMP'.
+        pres_var (str):
+            The name of the pressure variable in the dataset.
+            Defaults to 'PRES'.
+        psal_var (str):
+            The name of the salinity variable in the dataset.
+            Defaults to 'PSAL'.
+
+    Returns:
+        xr.Dataset: The updated dataset with RHO values.
+
+    """
+
+    # Calculate absolute salinity
+    SA = gsw.SA_from_SP(ds[psal_var], ds[pres_var], ds.LONGITUDE, ds.LATITUDE)
+    # Calculate conservative temperature
+    CT = gsw.CT_from_t(SA, ds[temp_var], ds[pres_var])
+    # Calculate density
+    RHO = gsw.rho(SA, CT, ds[pres_var])
+
+    ds['RHO'] = (ds[psal_var].dims, RHO.values,
+                 {'units': 'kg m-3', 'standard_name':'sea_water_density',
+                  'long_name' : 'In-situ seawater density'})
+
+
+    ds['RHO'].attrs["note"] = (
+        f"Computed from {cndc_var}, {temp_var}, {pres_var} "
+        "using the Python gsw module."
+    )
+
+
+    return ds
+
+
+
 
 
 # Assign pressure from adjacent instruments
@@ -1476,4 +1549,127 @@ def plot(ds: xr.Dataset) -> None:
     Displays the compliance check results with a "Close" button.
     '''
 
-    _moored_tools.inspect_time_series(ds)
+    # Make sure we have datetime TIME
+    ds_cf = xr.decode_cf(ds)
+
+    _moored_tools.inspect_time_series(ds_cf)
+
+
+# Standardize metadata
+@record_processing(
+    "",
+    py_comment=("Recompute PSAL, drop PSAL values where CNDC spikes "
+                "during stable TEMP. ")
+)
+def adjust_PSAL_from_CNDC_TEMP(
+        ds: xr.Dataset,
+        window: int = None,
+        max_diff: float = 0.15,
+        min_periods: int = 1,
+        plot: bool = False) -> xr.Dataset:
+    '''
+    Recompute PSAL from CNDC and TEMP in the dataset, with options to apply a
+    rolling mean to CNDC and TEMP first, and reject samples based on the
+    difference between scaled CNDC and TEMP.
+
+    Args:
+        ds (xr.Dataset):
+            Input dataset containing CNDC, TEMP, and PRES variables.
+        window (int, optional):
+            Rolling mean window size to apply on CNDC and TEMP. If None, no
+            rolling mean is applied. Defaults to None.
+        max_diff (float, optional):
+            Maximum allowed difference between scaled CNDC and TEMP
+            for rejecting PSAL samples. Defaults to 0.15.
+        min_periods (int, optional):
+            Minimum number of observations in the window required to calculate
+            the rolling mean. Defaults to 1.
+        plot (bool, optional):
+            If True, plot the scaled CNDC, TEMP, and PSAL data. Defaults to
+            False.
+
+    Returns:
+        xr.Dataset: A new dataset with updated PSAL values and a comment
+        attribute.
+    '''
+
+    # Rolling mean (applied on CNDC and TEMP for computing PSAL):
+    # Parameters
+    if window:
+        roll_params = {'dim': {'TIME': window},
+                       'center': True,
+                       'min_periods': min_periods}
+        # Apply to CNDC and TEMP
+        CNDC_ = ds.CNDC.rolling(**roll_params).mean()
+        TEMP_ = ds.TEMP.rolling(**roll_params).mean()
+        comment = (
+            f'Computed from CNDC and TEMP using the gsw module '
+            f'after applying a {window}-point running mean to both. ')
+        post_proc_comment = (
+            f'Recomputed PSAL from CNDC and TEMP '
+            f'after applying a {window}-point running mean to both. ')
+    else:
+        CNDC_ = ds.CNDC.copy()
+        TEMP_ = ds.TEMP.copy()
+        comment = ''
+        post_proc_comment = ''
+
+    # Recalculate PSAL
+    PSAL_ = gsw.SP_from_C(CNDC_, TEMP_, ds.PRES)
+
+    # Compute scaled TEMP and CNDC (for comparing the two quantitatively)
+    TEMP_scaled = (TEMP_ - TEMP_.mean()) / np.std(TEMP_ - TEMP_.mean())
+    CNDC_scaled = (CNDC_ - CNDC_.mean()) / np.std(CNDC_ - CNDC_.mean())
+
+    # Flag for PSAL samples to reject
+    reject_sal = np.bool_(np.abs(CNDC_scaled - TEMP_scaled) > max_diff)
+    n_samp = np.sum(reject_sal)
+    comment += (
+        'Samples where SD-normalized scaled temperature and conductivity '
+        f'anomalies diverge by >{max_diff} were rejected.')
+    post_proc_comment = (
+        'Rejected samples where normalized TEMP and CNDC '
+        f'anomalies diverged by >{max_diff} ({n_samp} samples).')
+
+    # Apply flag
+    PSAL_ = PSAL_.where(~reject_sal)
+
+    # Make a copy of the dataset and update with the new PSAL
+    ds1 = ds.copy()
+    ds1.PSAL.values = PSAL_
+    if 'comment' in ds1.PSAL.attrs:
+        ds1.PSAL.attrs['comment'] += f'\n\n{comment}'
+    else:
+        ds1.PSAL.attrs['comment'] = comment
+
+    ds1.PROCESSING.attrs['post_processing'] += post_proc_comment
+
+    print(ds1.PROCESSING.post_processing, post_proc_comment)
+
+    if plot:
+        fig, ax = plt.subplots(3, 1, sharex=True)
+        ax[0].plot(num2date(ds.TIME.values), CNDC_scaled, color='tab:orange',
+                   label='Scaled CNDC')
+        ax[0].plot(ds.TIME, TEMP_scaled, alpha=0.6, lw=1,
+                   label='Scaled TEMP')
+        ax[0].plot(ds.TIME.values[reject_sal], CNDC_scaled.values[reject_sal],
+                   'or', ms=3, label='PSAL rejected')
+
+        ax[1].plot(ds.TIME, np.abs(CNDC_scaled - TEMP_scaled),
+                   label='|Scaled CNDC - Scaled TEMP|')
+        ax[1].plot(ds.TIME.values[reject_sal],
+                   np.abs(CNDC_scaled - TEMP_scaled).values[reject_sal],
+                   'or', ms=3, label='PSAL rejected')
+        ax[1].axhline(max_diff, linestyle=':', color='k', label='max_diff')
+
+        ax[2].plot(ds.TIME, ds.PSAL, 'k', alpha=0.7, label='Original')
+        ax[2].plot(ds.TIME, PSAL_, color='tab:orange', label='Updated')
+        ax[2].set_ylabel('PSAL')
+
+        for axn in ax:
+            leg = axn.legend(fontsize=9)
+            leg.set_zorder(0)
+
+        ax[2].xaxis.set_major_formatter(DateFormatter('%H:%M'))
+
+    return ds1

@@ -34,23 +34,36 @@ class hand_remove_points:
     Note: Use the interactive plot to select points for removal, then click the corresponding buttons for actions.
     """
 
-    def __init__(self, ds, varnm):
+    def __init__(self, ds, varnm, varnm_edit=None):
         """
         Initialize the HandRemovePoints instance.
 
         Parameters:
         - ds (xarray.Dataset): The dataset containing the data.
-        - varnm (str): The name of the variable to visualize and edit.
+        - varnm (str): The name of the variable to visualize .
+        - varnm_edit (str), Optional:
+            The name of the variable to edit.
+            Defaults to `varnm`
         """
+
+
         # Check that we in a notebook and with the ipympl backend..
         # (raise a warning otherwise)
 
         internals.check_interactive()
 
+        if not varnm_edit:
+            varnm_edit = varnm
+
         if varnm not in ds.data_vars:
             raise Exception(f'Invalid variable ("{varnm}")')
 
+        if varnm_edit not in ds.data_vars:
+            raise Exception(f'Invalid variable ("{varnm_edit}")')
+
         self.varnm = varnm
+        self.varnm_edit = varnm_edit
+
         self.ds = ds
 
         self.var_data = ds[varnm]
@@ -110,7 +123,7 @@ class hand_remove_points:
         self.remove_label = 'Selected points to remove'
 
         # Add widget buttons
-        self.button_apply_var = widgets.Button(description=f"Exit and apply to {varnm}")
+        self.button_apply_var = widgets.Button(description=f"Exit and apply to {self.varnm_edit}")
         self.button_apply_var.on_click(self.exit_and_apply_var)
         self.button_apply_var.layout.width = '200px'
 
@@ -277,30 +290,29 @@ class hand_remove_points:
         Parameters:
         - button: The button click event.
         """
-        print('EXIT AND APPLY!')
 
         self.remove_inds = index.indices_to_slices(np.where(self.remove_bool)[0])
 
         self.ds = moored.remove_points(
-            self.ds, self.varnm, self.remove_inds)
+            self.ds, self.varnm_edit, self.remove_inds)
         # If we have a PROCESSING field:
         # Count how many points we removed
         self.points_removed = np.sum(self.remove_bool)
 
         # Add info as a variable attribute
-        if 'manual_editing' in self.ds[self.varnm].attrs.keys():
-            previous_edits = int(self.ds[self.varnm].attrs['manual_editing'].split()[0])
+        if 'manual_editing' in self.ds[self.varnm_edit].attrs.keys():
+            previous_edits = int(self.ds[self.varnm_edit].attrs['manual_editing'].split()[0])
             total_edits = previous_edits + self.points_removed
-            self.ds[self.varnm].attrs['manual_editing'] = (
+            self.ds[self.varnm_edit].attrs['manual_editing'] = (
                f'{total_edits} data points have been removed '
                 'from this variable based on visual inspection.')
         else:
-            self.ds[self.varnm].attrs['manual_editing'] = (
+            self.ds[self.varnm_edit].attrs['manual_editing'] = (
                f'{self.points_removed} data points have been '
                 'removed from this variable based on visual inspection.')
             if self.points_removed == 1:
-                self.ds[self.varnm].attrs['manual_editing']  = (
-                    self.ds[self.varnm].attrs['manual_editing'].replace(
+                self.ds[self.varnm_edit].attrs['manual_editing']  = (
+                    self.ds[self.varnm_edit].attrs['manual_editing'].replace(
                         'points have', 'point has')
                     )
 
@@ -342,11 +354,7 @@ class hand_remove_points:
         return ''
 
 ################################################################################
-import xarray as xr
-import ipywidgets as widgets
-import matplotlib.pyplot as plt
-import pandas as pd
-from IPython.display import display
+
 
 def inspect_time_series(ds: xr.Dataset) -> None:
     """

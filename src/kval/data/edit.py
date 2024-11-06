@@ -86,9 +86,11 @@ def remove_points_timeseries(ds: xr.Dataset, varnm: str,
 
     remove_inds = np.asarray(remove_inds)
 
+
     # Create a boolean array for removal
     remove_bool = np.zeros(len(ds[varnm]), dtype=bool)
-    remove_bool[remove_inds] = True
+    for remove_ind in remove_inds:
+        remove_bool[remove_ind] = True
 
     # Use the `where` method to set the selected points to NaN
     ds[varnm] = ds[varnm].where(~remove_bool)
