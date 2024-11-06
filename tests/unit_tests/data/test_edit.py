@@ -195,3 +195,80 @@ def test_no_dates(mock_dataset):
     # Check if the drift value is applied over the entire dataset
     expected_values = np.linspace(0, 3, num=len(mock_dataset.TIME))
     np.testing.assert_almost_equal(ds_out['TEMP'].values[:, 0]- mock_dataset['TEMP'].values[:, 0], expected_values, decimal=5)
+
+
+
+
+@pytest.fixture
+def sample_dataset_remove_pts():
+    # Create a simple xarray dataset with time series data
+    time = np.arange(10)  # Example time dimension
+    var_data = np.random.random(10)  # Random data for testing
+    ds = xr.Dataset(
+        {
+            'var': (['time'], var_data)
+        },
+        coords={
+            'time': time
+        }
+    )
+    return ds
+
+def test_remove_single_point(sample_dataset_remove_pts):
+    ds = sample_dataset_remove_pts.copy()
+    varnm = 'var'
+
+    # Remove the 3rd point
+    remove_inds = [2]
+    modified_ds = edit.remove_points_timeseries(ds, varnm, remove_inds)
+
+    # Check if the 3rd point is NaN
+    assert np.isnan(modified_ds[varnm].values[2]), "The 3rd point should be NaN."
+    assert not np.isnan(modified_ds[varnm].values[1]), "The 2nd point should not be NaN."
+
+def test_remove_multiple_points(sample_dataset_remove_pts):
+    ds = sample_dataset_remove_pts.copy()
+    varnm = 'var'
+
+    # Remove the 1st and 5th points
+    remove_inds = [0, 4]
+    modified_ds = edit.remove_points_timeseries(ds, varnm, remove_inds)
+
+    # Check if the correct points are NaN
+    assert np.isnan(modified_ds[varnm].values[0]), "The 1st point should be NaN."
+    assert np.isnan(modified_ds[varnm].values[4]), "The 5th point should be NaN."
+    assert not np.isnan(modified_ds[varnm].values[3]), "The 4th point should not be NaN."
+
+def test_remove_with_slice(sample_dataset_remove_pts):
+    ds = sample_dataset_remove_pts.copy()
+    varnm = 'var'
+
+    # Remove points from index 2 to 5
+    remove_inds = slice(2, 6)
+    modified_ds = edit.remove_points_timeseries(ds, varnm, remove_inds)
+
+    # Check if points 2 to 5 are NaN
+    assert np.isnan(modified_ds[varnm].values[2]), "The 2nd point should be NaN."
+    assert np.isnan(modified_ds[varnm].values[5]), "The 5th point should be NaN."
+    assert not np.isnan(modified_ds[varnm].values[6]), "The 6th point should not be NaN."
+
+def test_remove_no_points(sample_dataset_remove_pts):
+    ds = sample_dataset_remove_pts.copy()
+    varnm = 'var'
+
+    # Remove no points
+    remove_inds = []
+    modified_ds = edit.remove_points_timeseries(ds, varnm, remove_inds)
+
+    # Ensure no points were modified (nothing should be NaN)
+    assert not np.any(np.isnan(modified_ds[varnm].values)), "No points should be NaN."
+
+def test_remove_invalid_index(sample_dataset_remove_pts):
+    ds = sample_dataset_remove_pts.copy()
+    varnm = 'var'
+
+    # Attempt to remove an invalid index (out of bounds)
+    remove_inds = [100]  # Invalid index
+
+    with pytest.raises(IndexError):
+        edit.remove_points_timeseries(ds, varnm, remove_inds)

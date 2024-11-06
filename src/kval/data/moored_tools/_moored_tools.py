@@ -75,7 +75,9 @@ class hand_remove_points:
         ylims = self.ax.get_ylim()
         self.ax.set_ylim(ylims)
 
-        self.ax.invert_yaxis()
+        if varnm=='PRES':
+            self.ax.invert_yaxis()
+
         if 'units' in self.ds[varnm].attrs:
             self.ax.set_ylabel(f'{varnm} [{self.ds[varnm].units}]')
         else:
@@ -243,7 +245,7 @@ class hand_remove_points:
             pass
         self.TIME_points_selected = np.array([])
         self.var_points_selected = np.array([])
-        self.TF_indices_selected = np.bool_(len())
+        self.TF_indices_selected = np.bool_(np.zeros(self.Npres))
 
     def start_over_selection(self, button):
         """
@@ -268,7 +270,6 @@ class hand_remove_points:
         except:
             pass
 
-
     def exit_and_apply_var(self, button):
         """
         Handle the exit and apply action.
@@ -276,6 +277,7 @@ class hand_remove_points:
         Parameters:
         - button: The button click event.
         """
+        print('EXIT AND APPLY!')
 
         self.remove_inds = index.indices_to_slices(np.where(self.remove_bool)[0])
 

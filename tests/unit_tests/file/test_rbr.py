@@ -91,7 +91,7 @@ def test_read(file_name):
     assert ds_rsk['TIME'].attrs['axis'] == 'T', "TIME axis attribute is incorrect"
 
     # Check for presence of metadata
-    assert 'instrument' in ds_rsk.attrs, "Instrument metadata not found"
+    assert 'instrument_model' in ds_rsk.attrs, "Instrument model metadata not found"
     assert 'instrument_serial_number' in ds_rsk.attrs, "Instrument serial number metadata not found"
     assert 'time_coverage_resolution' in ds_rsk.attrs, "Time coverage resolution metadata not found"
 

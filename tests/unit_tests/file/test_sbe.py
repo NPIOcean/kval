@@ -90,7 +90,7 @@ def test_read_csv_valid_file():
 
         # Check the attributes of the dataset
         # Replace with expected values based on the specific CSV file being read
-        assert ds.attrs['instrument'] == 'SBE56', f"Failed for {filename}"
+        assert ds.attrs['instrument_model'] == 'SBE56', f"Failed for {filename}"
         assert ds.attrs['filename'] == os.path.basename(filename), f"Failed for {filename}"
         assert ds['TEMP'].attrs['units'] == 'degree_Celsius', f"Failed for {filename}"
 

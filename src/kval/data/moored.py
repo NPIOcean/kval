@@ -92,19 +92,21 @@ def load_moored(
         instr_type = "SBE"
     elif file.endswith(".csv"):
         instr_type = "SBE_csv"
+    elif file.endswith(".asc"):
+        instr_type = "SBE_asc"
     else:
         raise ValueError(
             f"Unable to load moored instrument {os.path.basename(file)}.\n"
-            "Supported files are .cnv (SBE) and .rsk (RBR)."
+            "Supported files are .cnv (SBE) and .rsk (RBR) - will also try to"
+            " read .csv and .asc as SBE files."
         )
 
     # Load data
     if instr_type == "RBR":
         ds = rbr.read_rsk(file)
-    elif instr_type == "SBE":
+    elif instr_type in ("SBE", "SBE_csv", "SBE_asc"):
         ds = sbe.read_cnv(file)
-    elif instr_type == "SBE_csv":
-        ds = sbe.read_csv(file)
+
 
     # Assign lat/lon if we have specified them
     if lat:

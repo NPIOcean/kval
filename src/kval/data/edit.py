@@ -53,9 +53,8 @@ def remove_points_profile(ds: xr.Dataset, varnm: str, TIME_index: int,
     return ds
 
 
-
 def remove_points_timeseries(ds: xr.Dataset, varnm: str,
-                          remove_inds, time_var = 'TIME') -> xr.Dataset:
+                             remove_inds, time_var='TIME') -> xr.Dataset:
     """
     Remove specified points from a time series in the dataset by setting them to NaN.
 
@@ -64,7 +63,7 @@ def remove_points_timeseries(ds: xr.Dataset, varnm: str,
       The dataset containing the variable to modify.
     - varnm: str
       The name of the variable to modify.
-    - remove_inds: list or array-like or slice
+    - remove_inds: list, array-like, or slice
       Indices of points to remove (set to NaN).
 
     Returns:
@@ -72,20 +71,27 @@ def remove_points_timeseries(ds: xr.Dataset, varnm: str,
       The dataset with specified points removed (set to NaN).
     """
 
+
+    # Handle case where no points are to be removed
+    if not remove_inds:
+        return ds
+
     # We want remove_inds to be an iterable (array)
-    if isinstance(remove_inds, slice) or isinstance(remove_inds, int):
+    if isinstance(remove_inds, slice):
+        # Convert slice to a range of indices
+        remove_inds = np.arange(remove_inds.start, remove_inds.stop)
+    elif isinstance(remove_inds, int):
+        # If it's a single integer, turn it into a list
         remove_inds = [remove_inds]
-        remove_inds = np.arange(remove_inds.start, remove_inds.stop,)
+
     remove_inds = np.asarray(remove_inds)
 
     # Create a boolean array for removal
     remove_bool = np.zeros(len(ds[varnm]), dtype=bool)
-    for remove_ind in remove_inds:
-        remove_bool[remove_ind] = True
+    remove_bool[remove_inds] = True
 
     # Use the `where` method to set the selected points to NaN
-    ds[varnm].values[:] = np.where(
-        ~remove_bool, ds[varnm].values[:], ds[varnm].values[:]*np.nan)
+    ds[varnm] = ds[varnm].where(~remove_bool)
 
     return ds
 
