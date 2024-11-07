@@ -363,15 +363,10 @@ def add_standard_var_attrs(
             else:
                 D[varnm].attrs["coverage_content_type"] = "physicalMeasurement"
 
-        # Add sensor_mount attribute if data_type is provided
-        # NOTE: Drop - it is plenty to do this as a single global attribute!
-        if False:
-            if not override and data_type:
-                if data_type == "ctdprof":
-                    D[varnm].attrs["sensor_mount"] = (
-                        "mounted_on_shipborne_profiler")
-                elif data_type == "moored":
-                    D[varnm].attrs["sensor_mount"] = "mounted_on_mooring_line"
+        # Remove _FillValue from the PROCESSING variable
+        if varnm == 'PROCESSING':
+            if '_FillValue' in D.PROCESSING.attrs:
+                del D.PROCESSING.attrs['_FillValue']
 
     return D
 
@@ -584,7 +579,7 @@ def add_missing_glob(D):
 
             any_missing = False
             for var_attr in _attrs_dict_ref_var:
-                if var_attr not in D[varnm].attrs:  
+                if var_attr not in D[varnm].attrs:
                     set_var_attr(D, varnm, var_attr)
                     any_missing = True
 
