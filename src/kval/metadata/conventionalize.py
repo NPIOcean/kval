@@ -435,7 +435,7 @@ def add_standard_glob_attrs_moor(D, override=False, org=None):
     return D
 
 
-def add_gmdc_keywords_ctd(D, reset=True):
+def add_gmdc_keywords_ctd(D, reset=True, moored = False):
     """
     Adds standard GMDC variables a la
     "OCEANS>OCEAN TEMPERATURE>WATER TEMPERATURE"
@@ -443,7 +443,10 @@ def add_gmdc_keywords_ctd(D, reset=True):
     _standard_attrs.gmdc_keyword_dict_ctd
     """
 
-    gmdc_dict = _standard_attrs.gmdc_keyword_dict_ctd
+    if moored:
+        gmdc_dict = _standard_attrs.gmdc_keyword_dict_moored
+    else:
+        gmdc_dict = _standard_attrs.gmdc_keyword_dict_ctd
     keywords = []
 
     for varnm in D.keys():

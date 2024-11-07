@@ -120,7 +120,6 @@ def add_processing_history_var_moored(
         attrs={
             'long_name': 'Empty variable whose attributes describe processing '
                          'history of the dataset.',
-            'comment': ''
         }
     )
 
@@ -131,23 +130,16 @@ def add_processing_history_var_moored(
             raise ValueError('Invalid `source_file` (should be a string).')
 
         ds['PROCESSING'].attrs['source_file'] = source_file_string
-        ds['PROCESSING'].attrs['comment'] += (
-            '# source_files #: Data from which data were loaded.\n'
-        )
+
+
 
     if post_processing:
         ds['PROCESSING'].attrs['post_processing'] = ''
-        ds['PROCESSING'].attrs['comment'] += (
-            '# post_processing #: Description of post-processing starting'
-            ' with `source_file`.\n'
-        )
+
+
 
     if py_script:
         ds['PROCESSING'].attrs['python_script'] = ''
-        ds['PROCESSING'].attrs['comment'] += (
-            '# python_script #: Python script for reproducing '
-            'post-processing from `source_file`.\n'
-        )
 
     return ds
 

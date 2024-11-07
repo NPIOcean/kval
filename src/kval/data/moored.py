@@ -1483,7 +1483,7 @@ def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
     ds = conventionalize.add_standard_var_attrs(ds, data_type='moored')
     ds = conventionalize.add_standard_glob_attrs_moor(ds, override=False)
     ds = conventionalize.add_standard_glob_attrs_org(ds)
-    ds = conventionalize.add_gmdc_keywords_ctd(ds)
+    ds = conventionalize.add_gmdc_keywords_ctd(ds, moored = True)
     ds = conventionalize.add_range_attrs(ds)
     ds = conventionalize.reorder_attrs(ds)
 
