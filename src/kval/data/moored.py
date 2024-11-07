@@ -45,6 +45,8 @@ from matplotlib.dates import date2num, num2date
 from matplotlib.dates import DateFormatter, HourLocator
 import matplotlib as mpl
 
+from scipy import signal
+
 from kval.file import sbe, rbr, matfile
 from kval.data import dataset, edit
 from kval.data.moored_tools import _moored_tools
@@ -928,6 +930,13 @@ def calculate_PSAL(
         change (e.g., if a different temperature sensor is used), the PSAL
         metadata attributes should be updated accordingly.
     """
+
+    CNDC_ = ds[cndc_var]
+    if 'units' in CNDC_.attrs:
+        if CNDC_.units == 'S m-1':
+            CNDC_.values /= 10
+
+
     PSAL = gsw.SP_from_C(ds[cndc_var], ds[temp_var], ds[pres_var])
     ds[psal_var][:] = PSAL
 
@@ -944,7 +953,7 @@ def calculate_PSAL(
 # Recalculate sal
 @record_processing(
     "Recalculated PSAL using the GSW-Python module.",
-    py_comment="Recalculating PSAL",
+    py_comment="Calculating RHO",
 )
 def calculate_rho(
     ds: xr.Dataset,
@@ -957,8 +966,8 @@ def calculate_rho(
     and pressure using the GSW-Python module
     (https://teos-10.github.io/GSW-Python/).
 
-    This function adds or updates the RHO variable in the dataset with newly computed
-    density value.
+    This function adds or updates the RHO variable in the dataset with newly
+    computed density value.
 
     Args:
         ds (xr.Dataset):
@@ -1593,6 +1602,12 @@ def adjust_PSAL_from_CNDC_TEMP(
         attribute.
     '''
 
+    CNDC_mS_cm = ds.CNDC.copy()
+
+    if 'units' in CNDC_mS_cm.attrs:
+        if CNDC_mS_cm.units == 'S m-1':
+            CNDC_mS_cm.values *= 10
+
     # Rolling mean (applied on CNDC and TEMP for computing PSAL):
     # Parameters
     if window:
@@ -1600,7 +1615,7 @@ def adjust_PSAL_from_CNDC_TEMP(
                        'center': True,
                        'min_periods': min_periods}
         # Apply to CNDC and TEMP
-        CNDC_ = ds.CNDC.rolling(**roll_params).mean()
+        CNDC_ = CNDC_mS_cm.rolling(**roll_params).mean()
         TEMP_ = ds.TEMP.rolling(**roll_params).mean()
         comment = (
             f'Computed from CNDC and TEMP using the gsw module '
@@ -1609,7 +1624,7 @@ def adjust_PSAL_from_CNDC_TEMP(
             f'Recomputed PSAL from CNDC and TEMP '
             f'after applying a {window}-point running mean to both. ')
     else:
-        CNDC_ = ds.CNDC.copy()
+        CNDC_ = CNDC_mS_cm.copy()
         TEMP_ = ds.TEMP.copy()
         comment = ''
         post_proc_comment = ''
@@ -1620,6 +1635,10 @@ def adjust_PSAL_from_CNDC_TEMP(
     # Compute scaled TEMP and CNDC (for comparing the two quantitatively)
     TEMP_scaled = (TEMP_ - TEMP_.mean()) / np.std(TEMP_ - TEMP_.mean())
     CNDC_scaled = (CNDC_ - CNDC_.mean()) / np.std(CNDC_ - CNDC_.mean())
+
+    # Detrend
+    TEMP_scaled = xr.apply_ufunc(signal.detrend, TEMP_scaled)
+    CNDC_scaled = xr.apply_ufunc(signal.detrend, CNDC_scaled)
 
     # Flag for PSAL samples to reject
     reject_sal = np.bool_(np.abs(CNDC_scaled - TEMP_scaled) > max_diff)
@@ -1644,7 +1663,6 @@ def adjust_PSAL_from_CNDC_TEMP(
 
     ds1.PROCESSING.attrs['post_processing'] += post_proc_comment
 
-    print(ds1.PROCESSING.post_processing, post_proc_comment)
 
     if plot:
         fig, ax = plt.subplots(3, 1, sharex=True)
@@ -1673,3 +1691,41 @@ def adjust_PSAL_from_CNDC_TEMP(
         ax[2].xaxis.set_major_formatter(DateFormatter('%H:%M'))
 
     return ds1
+
+
+def get_median_depth(ds: xr.Dataset, lat: float = None, decimals: int = 1) -> float:
+    """
+    Calculate the median depth from an xarray dataset based on the pressure record.
+
+    Args:
+        ds (xr.Dataset): Input dataset containing a pressure (PRES) variable.
+        lat (float, optional): Latitude in degrees. If not provided, the function attempts to extract
+                               it from the dataset's LATITUDE variable. Defaults to None.
+        decimals (int, optional): Number of decimal places to round the depth. Defaults to 1.
+
+    Returns:
+        float: The median depth in meters, rounded to the specified number of decimal places.
+
+    Raises:
+        ValueError: If latitude is not provided and cannot be extracted from the dataset.
+        KeyError: If the dataset does not contain a 'PRES' variable.
+    """
+
+    # Ensure the dataset contains the 'PRES' variable
+    if 'PRES' not in ds:
+        raise KeyError("The dataset must contain a 'PRES' variable (pressure in decibars).")
+
+    # Attempt to get latitude from the dataset if not provided
+    if lat is None:
+        try:
+            lat = ds.LATITUDE.values.item()
+        except AttributeError:
+            raise ValueError("No latitude provided and no 'LATITUDE' variable found in the dataset.")
+
+    # Calculate the median pressure, ignoring NaN values
+    median_pres = np.nanmedian(ds.PRES)
+
+    # Convert the median pressure to depth using the gsw.z_from_p function
+    median_depth = np.round(-gsw.z_from_p(median_pres, lat), decimals)
+
+    return median_depth
