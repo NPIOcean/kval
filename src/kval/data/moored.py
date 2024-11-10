@@ -141,12 +141,6 @@ def load_moored(
             ds.PROCESSING.attrs["SBE_processing"] = ds.SBE_processing
             del ds.attrs["SBE_processing"]
 
-            # Adde exlanation of `SBE_processing` to the `comment` attribute
-            ds.PROCESSING.attrs["comment"] += (
-                "# SBE_processing #:\nSummary of the post-processing applied "
-                "within SeaBird software to produce the .cnv file."
-            )
-
         # Add python scipt snipped to reproduce this operation
         ds.PROCESSING.attrs[
             "python_script"

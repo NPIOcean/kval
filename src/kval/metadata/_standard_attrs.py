@@ -200,6 +200,7 @@ standard_var_attrs = {
         "valid_min": -2.0,
         "valid_max": 2.0,
     },
+
     "TIME": {
         "standard_name": "time",
         "units": "days since 1970-01-01",
@@ -230,8 +231,8 @@ standard_attrs_global_ctd = {
     "standard_name_vocabulary": "CF Standard Name Table v83",
     "iso_topic_category": "oceans",
     "platform": "Water-based Platforms>Vessels",
-    'platform_vocabulary':'GCMD Platform Keywords Version 9.1.5',
-    'sensor_mount':'mounted_on_shipborne_profiler'
+    'platform_vocabulary': 'GCMD Platform Keywords Version 9.1.5',
+    'sensor_mount': 'mounted_on_shipborne_profiler'
 }
 
 standard_attrs_global_moored = {
@@ -257,9 +258,12 @@ gmdc_keyword_dict_ctd = {
     "PSAL": "OCEANS>SALINITY/DENSITY>OCEAN SALINITY>OCEAN SALINITY PROFILES",
     "CHLA": "OCEANS>OCEAN OPTICS>CHLOROPHYLL>CHLOROPHYLL CONCENTRATION",
     "DOXY": "OCEANS>OCEAN CHEMISTRY>OXYGEN",
-    "CDOM": "OCEANS>OCEAN CHEMISTRY>ORGANIC MATTER>COLORED DISSOLVED ORGANIC MATTER",
+    "CDOM": ("OCEANS>OCEAN CHEMISTRY>ORGANIC MATTER>"
+             "COLORED DISSOLVED ORGANIC MATTER"),
     "ATTN": "OCEANS>OCEAN OPTICS>ATTENUATION/TRANSMISSION",
     "SVEL": "OCEANS>OCEAN ACOUSTICS>ACOUSTIC VELOCITY",
+
+
 }
 
 
@@ -270,12 +274,18 @@ gmdc_keyword_dict_moored = {
     "PSAL": "OCEANS>SALINITY/DENSITY>SALINITY",
     "CHLA": "OCEANS>OCEAN OPTICS>CHLOROPHYLL",
     "DOXY": "OCEANS>OCEAN CHEMISTRY>OXYGEN",
-    "CDOM": "OCEANS>OCEAN CHEMISTRY>ORGANIC MATTER>COLORED DISSOLVED ORGANIC MATTER",
+    "CDOM": ("OCEANS>OCEAN CHEMISTRY>ORGANIC MATTER>"
+             "COLORED DISSOLVED ORGANIC MATTER"),
     "ATTN": "OCEANS>OCEAN OPTICS>ATTENUATION/TRANSMISSION",
     "SVEL": "OCEANS>OCEAN ACOUSTICS>ACOUSTIC VELOCITY",
     "UCUR": "OCEANS>OCEAN CIRCULATION>OCEAN CURRENTS",
     "VCUR": "OCEANS>OCEAN CIRCULATION>OCEAN CURRENTS",
     "WCUR": "OCEANS>OCEAN CIRCULATION>OCEAN CURRENTS",
+    "SEA_ICE_DRAFT": "CRYOSPHERE>SEA ICE>ICE DRAFT",
+    "SEA_ICE_FRACTION": (
+        "CRYOSPHERE>SEA ICE>SEA ICE CONCENTRATION>ICE FRACTION"),
+    "UICE": "CRYOSPHERE>SEA ICE>SEA ICE MOTION",
+    "VICE": "CRYOSPHERE>SEA ICE>SEA ICE MOTION",
 }
 
 

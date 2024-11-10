@@ -158,7 +158,7 @@ def read_rsk(file: str, keep_total_pres: bool = False) -> xr.Dataset:
         )
         ds_rsk.attrs["history"] += (
             f"{now_date}: Data read from .rsk file to xarray Dataset"
-            " using pyRSKtools+kval.\n"
+            " using pyRSKtools+kval."
         )
 
         ds_rsk.attrs["source_files"] = os.path.basename(
