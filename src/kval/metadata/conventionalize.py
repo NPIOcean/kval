@@ -60,9 +60,9 @@ def add_range_attrs(D, vertical_var=None):
             D.attrs["geospatial_vertical_min"] = D[vertical_var].min().values
             D.attrs["geospatial_vertical_max"] = D[vertical_var].max().values
             D.attrs["geospatial_vertical_units"] = D[vertical_var].units
-
             D.attrs["geospatial_vertical_positive"] = "down"
             D.attrs["geospatial_bounds_vertical_crs"] = "EPSG:5831"
+
     except (AttributeError, KeyError, ValueError) as e:
         print(
             "Did not find vertical variable "

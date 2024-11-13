@@ -244,10 +244,9 @@ standard_attrs_global_moored = {
     "standard_name_vocabulary": "CF Standard Name Table v83",
     "iso_topic_category": "oceans",
     "platform": "Water-based Platforms>Buoys>Moored>MOORINGS",
-    'platform_vocabulary':'GCMD Platform Keywords Version 9.1.5',
+    'platform_vocabulary': 'GCMD Platform Keywords Version 9.1.5',
     "sensor_mount": "mounted_on_mooring_line",
-    'featureType':'timeSeries',
-
+    'featureType': 'timeSeries',
 }
 
 
@@ -262,8 +261,6 @@ gmdc_keyword_dict_ctd = {
              "COLORED DISSOLVED ORGANIC MATTER"),
     "ATTN": "OCEANS>OCEAN OPTICS>ATTENUATION/TRANSMISSION",
     "SVEL": "OCEANS>OCEAN ACOUSTICS>ACOUSTIC VELOCITY",
-
-
 }
 
 

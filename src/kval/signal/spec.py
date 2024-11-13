@@ -44,7 +44,7 @@ def apply_window(y, window='none', axis = 0):
 
 
 
-def detrend(y, axis = 0):
+def detrend_series(y, axis = 0):
     '''
     scipy.signal.detrend that works for complex values.
     '''
@@ -68,8 +68,8 @@ def detrend(y, axis = 0):
 
 
 
-def wfft(y, t,  n , ov = 0.66, axis = 0, window = 'bman', ndt_ret =
-    False, tint_ret = False):
+def wfft(y, t,  n , ov = 0.66, axis = 0, window = 'bman',
+            ndt_ret = False, tint_ret = False, detrend = True):
     '''
     Windowed fft.
     y: Data field
@@ -145,9 +145,17 @@ def wfft(y, t,  n , ov = 0.66, axis = 0, window = 'bman', ndt_ret =
         t_sl = slice(int(nn*dn), int(nn*dn)+wl)
         tint = tint + [[t[t_sl.start], t[t_sl.stop-1]]]
         sl[axis] = t_sl
-        fft_nn = np.sqrt(w)*fft.fftshift(fft.fft(apply_window(detrend(y[sl[0]], \
-                 axis = axis) ,window = window, axis = axis), \
-                 axis = axis), axes = (axis,))
+
+        y_in = y[sl[0]] ### !!!
+        if detrend:
+            y_in = detrend_series(y_in, axis = axis)
+
+        fft_nn = (np.sqrt(w)
+                  *fft.fftshift(fft.fft(
+                      apply_window(y_in,
+                      window = window, axis = axis), \
+                      axis = axis), axes = (axis,)))
+
         FFT = FFT + [fft_nn]
         T = T + [np.mean(t[t_sl])]
 
@@ -165,7 +173,7 @@ def wfft(y, t,  n , ov = 0.66, axis = 0, window = 'bman', ndt_ret =
 
 
 
-def psd(y, t, n, ov = 0.66, axis = 0, window = 'bman'):
+def psd(y, t, n, ov = 0.66, axis = 0, window = 'bman', detrend = True):
     ''''
     PSD estimate of 1d or 2d array. Optional block averaging.
 
@@ -179,17 +187,18 @@ def psd(y, t, n, ov = 0.66, axis = 0, window = 'bman'):
     L = len(t)
     dt = t[1]-t[0]
     FFT, ft, T, ndt = wfft(y, t, n, axis = axis, ndt_ret = True,
-                           ov = ov, window = window)
+                           ov = ov, window = window, detrend = detrend)
     FFT = FFT * dt
     sl_list = [slice(None)] * y.ndim
 
     if np.iscomplex(y).any():
         s_ = (FFT*np.conj(FFT))/ndt
     else:
-        rhslice = slice(int(len(ft)/2), None)
+
+
+        rhslice = slice(int(len(ft)//2+1), None)
         sl_list[axis] = rhslice
         s_ = (2*(FFT*np.conj(FFT))/ndt)
-        print(rhslice)
         ft = ft[rhslice]
 
     s = np.ma.mean(s_.real, axis = 0)[rhslice]
