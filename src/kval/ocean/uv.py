@@ -44,7 +44,7 @@ def rotate_uv(
     angle_rad = np.radians(angle) if in_degrees else angle
 
     # Perform the rotation
-    uvc_rot = (u + 1j * v) * np.exp(1j * angle_rad)
+    uvc_rot = (u + 1j * v) * np.exp(-1j * angle_rad)
 
     # Extract the real and imaginary parts
     u_rot, v_rot = uvc_rot.real, uvc_rot.imag
@@ -114,7 +114,7 @@ def principal_angle(
     )
 
     if return_std:
-        # Rotate the vector by the principal angle
+        # Rotate the vector clockwiseby the principal angle
         uvc_rotated = (u + 1j * v) * np.exp(-1j * principal_angle_rad)
 
         # Compute standard deviations along the major and minor axes
