@@ -17,7 +17,7 @@ def rotate_uv(
     u: np.ndarray, v: np.ndarray, angle: float, in_degrees: bool = False
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Rotates the vector (u, v) clockwise by the specified angle.
+    Rotates the vector (u, v) CLOCKWISE by the specified angle.
 
     Parameters:
     ----------

@@ -285,6 +285,63 @@ def read_btl(
     return ds
 
 
+
+def read_csv(filename: str) -> xr.Dataset:
+    '''
+    Occasionally receive data from SBE56 as simple .csv files. Reading these.
+    '''
+    # Initialize variables for metadata
+    metadata = {
+    }
+
+    # Read the file and extract header information
+    with open(filename, 'r') as file:
+        header_lines = []
+        for line in file:
+            if line.startswith('%'):
+                header_lines.append(line.strip())
+                # Extract relevant information from the header
+                if 'Instrument type' in line:
+                    metadata["instrument_model"] = line.split('=')[-1].strip()
+                elif 'Serial Number' in line:
+                    sn_full = line.split('=')[-1].strip()
+                    sn_short = sn_full.replace('0561', '').replace('0371', '')
+                    metadata["instrument_serial_number"] = sn_short
+                elif 'Source file' in line:
+                    src_file = line.split('=')[-1].strip().replace('\\', '/')
+                    src_file_base = path.basename(src_file)
+                    metadata["source_file"] = src_file_base
+                elif 'Calibration Date' in line:
+                    metadata["calibration_date"] = line.split('=')[-1].strip()
+            else:
+                break  # Stop reading once the header ends
+
+    # Parse the CSV data into a pandas DataFrame, skipping the header lines
+    df = pd.read_csv(filename, comment='%')
+
+    # Combine Date and Time columns into a single "timestamp" column
+    df['timestamp'] = pd.to_datetime(df['Date'] + ' ' + df['Time'])
+    df['TIME'] = time.dt64_to_datenum(df['timestamp'], epoch = '1970-01-01')
+
+    # Drop the original Date and Time columns (optional)
+    df.drop(columns=['Date', 'Time', 'timestamp'], inplace=True)
+
+    # Set the timestamp as the index
+    df.set_index('TIME', inplace=True)
+
+    # Convert to xarray
+    ds = xr.Dataset(df)
+    # Set time units
+    ds['TIME'].attrs['units'] = 'Days since 1970-01-01'
+    # Set standard names
+    ds.rename_vars({'Temperature': 'TEMP'})
+
+    # Set global attributes
+    for key, item in metadata.items():
+        ds.attrs[key] = item
+
+
+
 def read_header(filename: str) -> dict:
     """
     Reads a SBE .cnv (or .hdr, .btl) file and returns a dictionary with various

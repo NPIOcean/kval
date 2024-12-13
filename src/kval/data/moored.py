@@ -107,9 +107,10 @@ def load_moored(
     # Load data
     if instr_type == "RBR":
         ds = rbr.read_rsk(file)
-    elif instr_type in ("SBE", "SBE_csv", "SBE_asc"):
+    elif instr_type in ("SBE", "SBE_asc"):
         ds = sbe.read_cnv(file)
-
+    elif instr_type in ("SBE_csv"):
+        ds = sbe.read_csv(file)
 
     # Assign lat/lon if we have specified them
     if lat:
@@ -124,7 +125,8 @@ def load_moored(
             ds,
         )
         # Add a source_file attribute (and remove from the global attrs)
-        ds.PROCESSING.attrs["source_file"] = ds.source_files
+        if 'source_file' in ds.attrs:
+            ds.PROCESSING.attrs["source_file"] = ds.source_files
 
         # Remove some unwanted global atributes
         for attr_name in [
@@ -882,8 +884,8 @@ def hand_remove_points(
 
 # Recalculate sal
 @record_processing(
-    "Recalculated PSAL using the GSW-Python module.",
-    py_comment="Recalculating PSAL",
+    "(Re)calculated PSAL using the GSW-Python module.",
+    py_comment="(Re)calculating PSAL",
 )
 def calculate_PSAL(
     ds: xr.Dataset,
@@ -892,7 +894,7 @@ def calculate_PSAL(
     pres_var: str = "PRES",
     psal_var: str = "PSAL",
 ) -> xr.Dataset:
-    """Recalculate Practical Salinity (PSAL) from conductivity, temperature,
+    """(Re)calculate Practical Salinity (PSAL) from conductivity, temperature,
     and pressure using the GSW-Python module
     (https://teos-10.github.io/GSW-Python/).
 
@@ -928,11 +930,20 @@ def calculate_PSAL(
     CNDC_ = ds[cndc_var]
     if 'units' in CNDC_.attrs:
         if CNDC_.units == 'S m-1':
-            CNDC_.values /= 10
+            CNDC_.values *= 10
 
 
     PSAL = gsw.SP_from_C(ds[cndc_var], ds[temp_var], ds[pres_var])
-    ds[psal_var][:] = PSAL
+
+    if psal_var in ds:
+        ds[psal_var][:] = PSAL
+    else:
+        ds[psal_var] = (ds.CNDC.dims, PSAL.data,
+                        {'units': '1',
+                         'calibration_date': (
+                             f'{ds.TEMP.calibration_date} (TEMP), '
+                             f'{ds.CNDC.calibration_date} (CNDC)')})
+
 
     ds[psal_var].attrs["note"] = (
         f"Computed from {cndc_var}, {temp_var}, {pres_var} "
