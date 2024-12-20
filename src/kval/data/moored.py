@@ -1019,6 +1019,67 @@ def calculate_rho(
 
 
 
+# Recalculate sal
+@record_processing(
+    "Calculated sigma0 using the GSW-Python module.",
+    py_comment="Calculating RHO",
+)
+def calculate_sig0(
+    ds: xr.Dataset,
+    cndc_var: str = "CNDC",
+    temp_var: str = "TEMP",
+    pres_var: str = "PRES",
+    psal_var: str = "PSAL",
+) -> xr.Dataset:
+    """Recalculate potential deinsity anomaly (SIG0) from
+    conductivity, temperature, and pressure using the GSW-Python module
+    (https://teos-10.github.io/GSW-Python/).
+
+    This function adds or updates the SIG0 variable in the dataset with newly
+    computed density value.
+
+    Args:
+        ds (xr.Dataset):
+            The input dataset containing conductivity, temperature, and
+            pressure variables.
+        cndc_var (str):
+            The name of the conductivity variable in the dataset.
+            Defaults to 'CNDC'.
+        temp_var (str):
+            The name of the temperature variable in the dataset.
+            Defaults to 'TEMP'.
+        pres_var (str):
+            The name of the pressure variable in the dataset.
+            Defaults to 'PRES'.
+        psal_var (str):
+            The name of the salinity variable in the dataset.
+            Defaults to 'PSAL'.
+
+    Returns:
+        xr.Dataset: The updated dataset with SIG0 values.
+
+    """
+
+    # Calculate absolute salinity
+    SA = gsw.SA_from_SP(ds[psal_var], ds[pres_var], ds.LONGITUDE, ds.LATITUDE)
+    # Calculate conservative temperature
+    CT = gsw.CT_from_t(SA, ds[temp_var], ds[pres_var])
+    # Calculate sigma 0
+    SIG0 = gsw.sigma0(SA, CT)
+
+    ds['SIG0'] = (ds[psal_var].dims, SIG0.values,
+                 {'units': 'kg m-3', 'standard_name': 'sea_water_sigma_theta',
+                  'long_name': ('Potential density of water '
+                                'minus 1000 kg m-3.')})
+
+    ds['SIG0'].attrs["note"] = (
+        f"Computed from {cndc_var}, {temp_var}, {pres_var} "
+        "using the Python gsw module."
+    )
+    return ds
+
+
+
 
 # Assign pressure from adjacent instruments
 def assign_pressure(

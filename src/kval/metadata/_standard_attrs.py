@@ -362,6 +362,7 @@ global_attrs_ordered = [
     "instrument_calibration_date",
     "platform",
     "site_code",
+    "site_doi",
     "sensor_mount",
     "institution",
     "cruise_name",

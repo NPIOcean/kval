@@ -253,11 +253,12 @@ def from_netcdf(path_to_file):
     return ds
 
 
-@record_processing(
-    "Converted dataset to MATLAB .mat file '{outfile}'. Simplify: {simplify}.",
-    "Converted dataset to MATLAB .mat file '{outfile}' with "
-    "simplify={simplify}.",
-)
+# No need to document this!
+#@record_processing(
+#    "Converted dataset to MATLAB .mat file '{outfile}'. Simplify: {simplify}.",
+#    "Converted dataset to MATLAB .mat file '{outfile}' with "
+#    "simplify={simplify}.",
+#)
 def to_mat(ds, outfile, simplify=False):
     """
     Convert the CTD data (xarray.Dataset) to a MATLAB .mat file.
@@ -280,7 +281,10 @@ def to_mat(ds, outfile, simplify=False):
     >>> ctd.xr_to_mat(ds, 'output_matfile', simplify=True)
     """
     # Drop the empty PROCESSING variable (doesn't work well with MATLAB)
-    ds_wo_proc = drop_variables(ds, drop_vars="PROCESSING")
+    if "PROCESSING" in ds:
+        ds_wo_proc = drop_variables(ds, drop_vars="PROCESSING")
+    else:
+        ds_wo_proc = ds
 
     # Also transposing dimensions to PRES, TIME for ease of plotting etc
     # in MATLAB.
