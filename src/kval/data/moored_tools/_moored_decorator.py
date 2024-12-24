@@ -67,13 +67,13 @@ def record_processing(description_template, py_comment=None):
 
             if py_comment:
                 ds["PROCESSING"].attrs["python_script"] += (
-                    f"\n\n# {py_comment.format(**bound_args.arguments)}"
+                    f"\n# {py_comment.format(**bound_args.arguments)}"
                     f"\n{function_call}"
                 )
             else:
                 ds["PROCESSING"].attrs[
                     "python_script"
-                ] += f"\n\n{function_call}"
+                ] += f"\n{function_call}"
             return ds
 
         return wrapper

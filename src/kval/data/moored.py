@@ -637,7 +637,7 @@ def adjust_time_for_drift(
     if "PROCESSING" in ds:
         ds.PROCESSING.attrs["post_processing"] += (
             f"Adjusted for clock offset: {drift_operation}"
-            f" from 0 to {abs(total_drift_seconds)} s assuming linear drift"
+            f" from 0 to {abs(total_drift_seconds)} s assuming linear drift."
         )
 
     return ds
@@ -927,13 +927,14 @@ def calculate_PSAL(
         metadata attributes should be updated accordingly.
     """
 
-    CNDC_ = ds[cndc_var]
+    CNDC_ = ds[cndc_var].copy()
     if 'units' in CNDC_.attrs:
         if CNDC_.units == 'S m-1':
+            print('Detected S m-1 unit - applying an x10 factor to CNDC.')
             CNDC_.values *= 10
 
 
-    PSAL = gsw.SP_from_C(ds[cndc_var], ds[temp_var], ds[pres_var])
+    PSAL = gsw.SP_from_C(CNDC_, ds[temp_var], ds[pres_var])
 
     if psal_var in ds:
         ds[psal_var][:] = PSAL
@@ -1031,7 +1032,7 @@ def calculate_sig0(
     pres_var: str = "PRES",
     psal_var: str = "PSAL",
 ) -> xr.Dataset:
-    """Recalculate potential deinsity anomaly (SIG0) from
+    """Recalculate potential density anomaly (SIG0) from
     conductivity, temperature, and pressure using the GSW-Python module
     (https://teos-10.github.io/GSW-Python/).
 

@@ -357,7 +357,7 @@ def add_standard_var_attrs(
             elif varnm in ["LONGITUDE", "LATITUDE"]:
                 D[varnm].attrs["coverage_content_type"] = (
                     "referenceInformation")
-            elif varnm == "PROCESSING":
+            elif varnm in ["PROCESSING", "INSTRUMENT"]:
                 D[varnm].attrs["coverage_content_type"] = (
                     "auxiliaryInformation")
             else:

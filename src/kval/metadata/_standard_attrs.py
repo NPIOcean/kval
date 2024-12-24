@@ -411,10 +411,12 @@ global_attrs_ordered = [
     "standard_name_vocabulary",
     "instrument_vocabulary",
     "keywords_vocabulary",
+    "platform_vocabulary",
     "iso_topic_category",
     "Conventions",
     "data_set_language",
     "naming_authority",
+    "references",
     "acknowledgment",
 ]
 
