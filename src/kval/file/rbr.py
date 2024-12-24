@@ -79,12 +79,28 @@ def read_rsk(file: str, keep_total_pres: bool = False) -> xr.Dataset:
             []
         )
 
-        # Add metadata
+        # Add instrument metadata
         ds_rsk.attrs["instrument_model"] = rskdata.instrument.model
         ds_rsk.attrs["instrument_serial_number"] = rskdata.instrument.serialID
+
+        # Sampling scheme and time coverage resolution
+        # (Stored a bit strangely in the rskdata object. Times often in ms.)
+        if type(rskdata.scheduleInfo) == pyrsktools.datatypes.ContinuousInfo:
+            time_res_seconds = rskdata.scheduleInfo.samplingPeriod / 1000
+            sampling_str = (f'Continuous sampling - one measurement every'
+                            f' {time_res_seconds/60} min')
+        if type(rskdata.scheduleInfo) == pyrsktools.datatypes.AverageInfo:
+            time_res_seconds = rskdata.scheduleInfo.repetitionPeriod / 1000
+            sampling_str = (
+                f'One average of {rskdata.scheduleInfo.samplingCount} samples '
+                f'collected at {rskdata.scheduleInfo.samplingPeriod/1000} sec '
+                f'intervals stored for every {time_res_seconds/60} min.')
+
         ds_rsk.attrs["time_coverage_resolution"] = time.seconds_to_ISO8601(
-            rskdata.scheduleInfo.samplingperiod()
+            time_res_seconds
         )
+        ds_rsk.attrs["sampling_details"] = sampling_str
+
 
         # Add calibration dates:
         cal_dates = _build_cal_dates(rskdata)

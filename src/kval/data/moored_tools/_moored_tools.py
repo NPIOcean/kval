@@ -71,7 +71,8 @@ class hand_remove_points:
         # Read time (as float - convert if necessary)
         if isinstance(ds.TIME[0].values, np.datetime64):
             self.TIME = date2num(ds.TIME.copy())
-            self.TIME.attrs['units'] = 'Days since 1970-01-01'
+            #self.TIME.attrs['units'] = 'Days since 1970-01-01'
+            time_units = 'Days since 1970-01-01'
         else:
             self.TIME = ds.TIME.copy()
 
@@ -95,10 +96,15 @@ class hand_remove_points:
             self.ax.set_ylabel(f'{varnm} [{self.ds[varnm].units}]')
         else:
             self.ax.set_ylabel(f'{varnm} [no units]')
-        if 'units' in self.TIME.attrs:
-            self.ax.set_xlabel(f'TIME [{self.TIME.units}]')
-        else:
-            self.ax.set_ylabel(f'TIME [no units]')
+        if hasattr(self.TIME, 'units'):
+            if 'units' in self.TIME.attrs:
+                self.ax.set_xlabel(f'TIME [{self.TIME.units}]')
+
+            else:
+                try:
+                    self.ax.set_xlabel(f'TIME [{time_units}]')
+                except:
+                    self.ax.set_xlabel(f'TIME [no units]')
 
         self.ax.grid()
         #station_time_string = time.convert_timenum_to_datetime(self.ds.TIME.values[TIME_index], ds.TIME.units)
