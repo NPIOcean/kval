@@ -106,7 +106,7 @@ def read_rsk(file: str, keep_total_pres: bool = False) -> xr.Dataset:
         cal_dates = _build_cal_dates(rskdata)
         for varnm, cdate in cal_dates.items():
             if varnm in ds_rsk:
-                ds_rsk[varnm].attrs["calibration_date"] = cdate
+                ds_rsk[varnm].attrs["sensor_calibration_date"] = cdate
 
         # Add some variable-custom metadata
         if "sea_pressure" in ds_rsk:
@@ -116,14 +116,14 @@ def read_rsk(file: str, keep_total_pres: bool = False) -> xr.Dataset:
             ] = p_atm
             # Calibration data of pressure sensor
             ds_rsk["sea_pressure"].attrs[
-                "calibration_date"
-            ] = ds_rsk.pressure.calibration_date
+                "sensor_calibration_date"
+            ] = ds_rsk.pressure.sensor_calibration_date
 
         if "salinity" in ds_rsk:
             # Calibration data of T/C sensors
-            ds_rsk["salinity"].attrs["calibration_date"] = (
-                f"{ds_rsk.temperature.calibration_date} (TEMP), "
-                f"{ds_rsk.conductivity.calibration_date} (CNDC),"
+            ds_rsk["salinity"].attrs["sensor_calibration_date"] = (
+                f"{ds_rsk.temperature.sensor_calibration_date} (TEMP), "
+                f"{ds_rsk.conductivity.sensor_calibration_date} (CNDC),"
             )
 
         # Drop the total pressure if we have sea pressure
@@ -177,7 +177,7 @@ def read_rsk(file: str, keep_total_pres: bool = False) -> xr.Dataset:
             " using pyRSKtools+kval."
         )
 
-        ds_rsk.attrs["source_files"] = os.path.basename(
+        ds_rsk.attrs["source_file"] = os.path.basename(
             rskdata.filename
         )
 
