@@ -223,6 +223,11 @@ def read_cnv(
     if _is_moored:
         ds = _modify_moored(ds, header_info)
 
+    # For SBE56s with a slightly unusual format: custom
+    # paring of calibtaion date etc
+    if 'sbe56' in ds.instrument_model.lower():
+       ds = _add_meta_info_sbe56_cnv(ds, source_file)
+
     # Record the start of post-processing as the now time stamp
     now_str = pd.Timestamp.now().strftime("%Y-%m-%d")
     ds.attrs["history"] += f"\n{now_str}: Post-processing."
@@ -683,7 +688,7 @@ def read_csv(filename: str) -> xr.Dataset:
     ds.attrs.update({
         'instrument_model': meta_dict['instrument_model'],
         'instrument_serial_number': meta_dict['SN'].replace('0561', ''),
-        'source_files': meta_dict['source_file'],
+        'source_file': meta_dict['source_file'],
         'filename': os.path.basename(filename),
         'history': ''.join(history_lines)
     })
@@ -906,7 +911,7 @@ def _read_SBE_proc_steps(ds, header_info):
 
     Also:
     - Adds a *SBE_processing_date* global variable (is this useful?)
-    - Adds a *source_files* variable with the names of the .hex, .xmlcon,
+    - Adds a *source_file* variable with the names of the .hex, .xmlcon,
       and .cnv files
     - Appends SBE processing history line to the *history* attribute.
     """
@@ -1213,7 +1218,7 @@ def _read_SBE_proc_steps(ds, header_info):
     ds.attrs["SBE_processing"] = "\n".join(sbe_proc_str)
     ds.attrs["SBE_processing_date"] = proc_date_ISO8601
     ds.attrs["history"] += f"\n{history_str}"
-    ds.attrs["source_files"] = (
+    ds.attrs["source_file"] = (
         f'{src_files_raw} -> {header_info["source_file"].upper()}'
     )
 
@@ -1333,6 +1338,60 @@ def _read_sensor_info(source_file, verbose=False):
 
     return sensor_dict
 
+
+
+def _add_meta_info_sbe56_cnv(ds, source_file, verbose=False):
+    """
+
+    Parsing sensor info from an alternative SBE56 format.
+    Look through the header for information
+        - Instrument type (redundant in most cases)
+        - Serial numbers
+        - Calibration dates
+        - Source file
+    """
+
+    meta_dict = {}
+
+    with open(source_file, "r", encoding="latin-1") as f:
+        lines = f.readlines()
+        for n_line, line in enumerate(lines):
+            # Look for specific metadata
+            if 'StatusData' in line and 'DeviceType' in line:
+                # Regular expression to extract the device type
+                match = re.search(r"DeviceType='([^']+)'", line)
+                if match:
+                        devicetype = match.group(1)
+                        meta_dict['instrument_model'] = devicetype
+            if 'StatusData' in line and 'SerialNumber' in line:
+                # Regular expression to extract the serial number
+                match = re.search(r"SerialNumber='([^']+)'", line)
+                if match:
+                    SN = match.group(1).replace('0561', '')
+                    meta_dict['instrument_serial_number'] = SN
+            if 'CalDate' in line:
+                # Regular expression to extract the serial number
+                match = re.search(r"<CalDate>([\d\-]+)</CalDate>", line)
+                if match:
+                    cal_date = match.group(1)
+                    meta_dict['sensor_calibration_date'] = cal_date
+            if 'Source file' in line:
+                # Store only the file name (not the whole path)
+                src_path = line.split()[-1].replace('\\', "/")
+                meta_dict['source_file'] = os.path.basename(src_path)
+            # Break the loop and store the column index when the header ends
+            if '*END*' in line:
+                break
+
+    # Add parsed values as attributes
+    for key, item in meta_dict.items():
+        if key.startswith('instrument'):
+            ds.attrs[key] = item
+        if key =='sensor_calibration_date':
+            if item !='N/A':
+                ds.TEMP.attrs[key] = item
+
+    return ds
 
 # INTERNAL FUNCTIONS: MODIFY THE DATASET
 
@@ -1718,6 +1777,7 @@ def _update_variables(ds, source_file):
        formatted files.
     """
 
+    # Try reading sensor infor using the conventional format first
     sensor_info = _read_sensor_info(source_file)
 
     for old_name in ds.keys():
@@ -1773,6 +1833,7 @@ def _update_variables(ds, source_file):
                         sensor_SNs += ["N/A"]
                         sensor_caldates += ["N/A"]
 
+
                 ds[new_name].attrs["sensor_serial_number"] = ", ".join(
                     sensor_SNs
                 )
@@ -1781,7 +1842,12 @@ def _update_variables(ds, source_file):
                     sensor_caldates
                 )
 
-    ds.attrs['filename'] = os.path.basename(source_file)
+                for key in "sensor_serial_number", "sensor_calibration_date":
+                    if ds[new_name].attrs[key] == 'N/A':
+                        del ds[new_name].attrs[key]
+
+    ds.attrs['source_file'] = os.path.basename(source_file)
+
 
     return ds
 
@@ -2074,16 +2140,12 @@ def _modify_moored(ds, hdict):
                     "sensor_calibration_date"
                 ]
 
-
         # Remove sensor_serial_number and from variable attributes
         for varnm in ds:
             if 'sensor_serial_number' in ds[varnm].attrs:
                 del ds[varnm].attrs['sensor_serial_number']
             if 'sensor_calibration_date' in ds[varnm].attrs:
                 del ds[varnm].attrs['sensor_calibration_date']
-
-
-    # Special considerations for weird SBE56 cnvs
 
 
     # Set a sample interval

@@ -126,11 +126,11 @@ def load_moored(
         )
         # Add a source_file attribute (and remove from the global attrs)
         if 'source_file' in ds.attrs:
-            ds.PROCESSING.attrs["source_file"] = ds.source_files
+            ds.PROCESSING.attrs["source_file"] = ds.source_file
 
         # Remove some unwanted global atributes
         for attr_name in [
-            "source_files",
+            "source_file",
             "filename",
             "SBE_flags_applied",
             "SBE_processing_date",
@@ -609,7 +609,6 @@ def adjust_time_for_drift(
     elif total_drift_seconds < 0:
         drift_operation = 'added'
     elif total_drift_seconds == 0:
-
         warnings.warn('To adjust for clock drift, a non-zero clock drift has'
                       ' to be specified -> Doing nothing', UserWarning)
         return ds
@@ -1093,6 +1092,7 @@ def assign_pressure(
     auto_accept: bool = False,
     plot: bool = True,
     lat: float = None,
+    return_fig: bool = False,
 ) -> xr.Dataset:
     """
     Estimate and assign sea pressure to an instrument without a pressure record
@@ -1130,12 +1130,19 @@ def assign_pressure(
     lat : float, optional
         Latitude for converting depth to pressure. If not provided, it will be
         inferred from `ds_main`.
-
+    return_fig : bool, optional
+        Return the figure object with the plot
     Returns
     -------
     xarray.Dataset
         Updated dataset `ds_main` with an added 'PRES' variable containing the
         estimated pressures [dbar].
+
+    (if return_fig is True);
+    (xarray.Dataset, matplotlib.figure.Figure)
+        Tuple containing
+            1. Updated dataset
+            2. Matplotlib figure showing the adjustment
 
     Raises
     ------
@@ -1152,6 +1159,14 @@ def assign_pressure(
             raise Exception(
                 "Could not find latitude for depth->pressure calculation. "
                 "Specify `lat` in `assign_pressure`."
+            )
+
+    # return_fig=True not allowed if plot=False
+    if return_fig and not plot:
+
+        raise Exception(
+            "Cannot return the figure (`return_fig = True`) if we are  "
+            "not creating a plot (`plot = False`).."
             )
 
     # Convert nominal depth to nominal pressure
@@ -1230,8 +1245,11 @@ def assign_pressure(
             plt.close(fig)
         if accept.lower() not in ["y", "yes"]:
             print("No -> `Not` assigning pressure to the dataset.")
-            return ds_main
 
+            if return_fig:
+                return ds_main, fig
+            else:
+                return ds_main
     # Assign interpolated pressure to main dataset
     ds_main["PRES"] = (
         ("TIME"),
@@ -1246,7 +1264,10 @@ def assign_pressure(
         },
     )
 
-    return ds_main
+    if return_fig:
+        return ds_main, fig
+    else:
+        return ds_main
 
 
 # Recalculate sal
