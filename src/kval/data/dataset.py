@@ -32,7 +32,7 @@ def add_now_as_date_created(ds: xr.Dataset) -> xr.Dataset:
 
 def add_processing_history_var_ctd(
     ds: xr.Dataset,
-    source_files: Union[str, List[str], np.ndarray] = None,
+    source_file: Union[str, List[str], np.ndarray] = None,
     post_processing: bool = True,
     py_script: bool = True
 ) -> xr.Dataset:
@@ -41,7 +41,7 @@ def add_processing_history_var_ctd(
 
     Parameters:
     - ds: The xarray.Dataset to which the variable will be added.
-    - source_files: A single file or list of files from which data were loaded.
+    - source_file: A single file or list of files from which data were loaded.
     - post_processing: If True, include post-processing information.
     - py_script: If True, include the Python script used for processing.
 
@@ -64,24 +64,24 @@ def add_processing_history_var_ctd(
             'SeaBird software before post-processing in Python.\n'
         )
 
-    if source_files is not None:
-        if isinstance(source_files, str):
-            source_file_string = os.path.basename(source_files)
-        elif isinstance(source_files, (list, np.ndarray)):
+    if source_file is not None:
+        if isinstance(source_file, str):
+            source_file_string = os.path.basename(source_file)
+        elif isinstance(source_file, (list, np.ndarray)):
             file_names = sorted(
-                [os.path.basename(path) for path in np.sort(source_files)]
+                [os.path.basename(path) for path in np.sort(source_file)]
             )
             source_file_string = ', '.join(file_names)
-        ds['PROCESSING'].attrs['source_files'] = source_file_string
+        ds['PROCESSING'].attrs['source_file'] = source_file_string
         ds['PROCESSING'].attrs['comment'] = (
-            '# source_files #: List of files produced by SBE processing.\n'
+            '# source_file #: List of files produced by SBE processing.\n'
         )
 
     if post_processing:
         ds['PROCESSING'].attrs['post_processing'] = ''
         ds['PROCESSING'].attrs['comment'] += (
             '# post_processing #:\nDescription of post-processing starting with '
-            '`source_files`.\n(Note: Indexing in the PRES dimension starts at 0 - '
+            '`source_file`.\n(Note: Indexing in the PRES dimension starts at 0 - '
             'for MATLAB add 1 to the index).\n'
         )
 
@@ -89,7 +89,7 @@ def add_processing_history_var_ctd(
         ds['PROCESSING'].attrs['python_script'] = ''
         ds['PROCESSING'].attrs['comment'] += (
             '# python_script #: Python script for reproducing post-processing '
-            'from `source_files`.\n'
+            'from `source_file`.\n'
         )
 
     return ds

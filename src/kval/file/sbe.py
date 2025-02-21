@@ -152,7 +152,7 @@ def read_cnv(
     ds = _remove_duplicate_variables(ds)
 
     # Update variable names (e.g. t090C -> TEMP1)
-    ds = _update_variables(ds, source_file)
+    ds = _update_variables(ds, source_file, _is_moored)
 
     # Assign lat/lon/statin if specified in the function call
     ds = _assign_specified_lat_lon_station(ds, lat, lon, station)
@@ -176,7 +176,7 @@ def read_cnv(
 
     # Parse the SBE processing steps to a human-readble string
     try:
-        ds = _read_SBE_proc_steps(ds, header_info)
+        ds = _read_SBE_proc_steps(ds, header_info, _is_moored)
     except Exception as err:
         ds.attrs["SBE_processing"] = (
             f"Unable to parse from file.\n(Error: {err})."
@@ -551,9 +551,10 @@ def read_header(filename: str) -> dict:
             else:
                 seen.add(item)
         if duplicate_columns_in_cnv:
-            print("NOTE: Duplicate columns found in cnv! "
-                  "(inspect your .cnv files..)"
-                  )
+#            print("NOTE: Duplicate columns found in cnv! "
+#                  "(inspect your .cnv files..)"
+#                  )
+            pass
 
         # Remove the first ('</Sensors>') and last ('*END*') lines from the SBE
         # history string.
@@ -664,7 +665,7 @@ def read_csv(filename: str) -> xr.Dataset:
 
     # Set TEMP metadata
     ds['TEMP'].attrs['units'] = 'degree_Celsius'
-    ds['TEMP'].attrs['cal_date'] = meta_dict['cal_date']
+    ds['TEMP'].attrs['sensor_calibration_date'] = meta_dict['cal_date']
 
     # Make a string for history
     history_lines = [
@@ -900,11 +901,15 @@ def _read_btl_column_data_xr(source_file, header_info, verbose=False):
     return ds
 
 
-def _read_SBE_proc_steps(ds, header_info):
+def _read_SBE_proc_steps(ds, header_info, _is_moored=False):
     """
     Parse the information about SBE processing steps from the cnv header into
     a more easily readable format and storing the information as the global
     variable *SBE_processing*.
+
+    _is_moored is a boolean indicating whether this is a moored instrument
+    (SBE37, SBE56 etc) - in this case we do not print a warning when we can't
+    access the processing history (usually not appliccable.)
 
     NOTE: This is a long and clunky function. This is mainly because the input
     format is clunky.
@@ -918,10 +923,11 @@ def _read_SBE_proc_steps(ds, header_info):
     SBElines = header_info["SBEproc_hist"]
 
     if SBElines is None:
-        print(
-            "NOTE: Unable to read SBE processing history, probably due to "
-            "non-standard header format. "
-        )
+        if not _is_moored:
+            print(
+                "NOTE: Unable to read SBE processing history, probably due to "
+                "non-standard header format. "
+            )
         return ds
 
     ct = 1  # Step counter, SBE steps
@@ -1367,7 +1373,9 @@ def _add_meta_info_sbe56_cnv(ds, source_file, verbose=False):
                 # Regular expression to extract the serial number
                 match = re.search(r"SerialNumber='([^']+)'", line)
                 if match:
-                    SN = match.group(1).replace('0561', '')
+                    # Replacing redundant "056X" at the start
+                    SN = (match.group(1)
+                          .replace('0561', '').replace('0560', ''))
                     meta_dict['instrument_serial_number'] = SN
             if 'CalDate' in line:
                 # Regular expression to extract the serial number
@@ -1763,7 +1771,7 @@ def _remove_surface_soak(
     return ds
 
 
-def _update_variables(ds, source_file):
+def _update_variables(ds, source_file, _is_moored=False):
     """
     Take a Dataset and
     - Update the header names from SBE names (e.g. 't090C')
@@ -1771,6 +1779,9 @@ def _update_variables(ds, source_file):
     - Assign the appropriate units and standard_name as attributes.
     - Assign sensor serial number(s) and/or calibration date(s)
       where available.
+
+    `_is_moored` is a boolead indicating whether this is a moored sensor
+    (SBE37, SBE56 etc).
 
     What to look for is specified in _variable_defs.py
     -> Will update dictionaries in there as we encounter differently
@@ -1825,13 +1836,16 @@ def _update_variables(ds, source_file):
                         sensor_caldates += [sensor_info[sensor]["cal_date"]]
 
                     except:
-                        print(
-                            f"*NOTE*: Failed to find sensor {sensor}"
-                            f" associated with variable {old_name_cap}.\n"
-                            f"(file: {source_file})"
-                        )
-                        sensor_SNs += ["N/A"]
-                        sensor_caldates += ["N/A"]
+                        if _is_moored:
+                            pass
+                        else:
+                            print(
+                                f"*NOTE*: Failed to find sensor {sensor}"
+                                f" associated with variable {old_name_cap}.\n"
+                                f"(file: {source_file})"
+                            )
+                            sensor_SNs += ["N/A"]
+                            sensor_caldates += ["N/A"]
 
 
                 ds[new_name].attrs["sensor_serial_number"] = ", ".join(

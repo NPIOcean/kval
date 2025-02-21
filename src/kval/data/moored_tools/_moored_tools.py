@@ -50,7 +50,7 @@ class hand_remove_points:
         # Check that we in a notebook and with the ipympl backend..
         # (raise a warning otherwise)
 
-        internals.check_interactive()
+       # internals.check_interactive()
 
         if not varnm_edit:
             varnm_edit = varnm

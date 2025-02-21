@@ -221,12 +221,15 @@ sensor_info_dict_SBE = {
 
     'Conductivity -->':'cndc_sensor_1',
     'Conductivity, 2 -->':'cndc_sensor_2',
+
     'Pressure, Digiquartz with TC -->':'pres_sensor',
     'Count, Pressure, Strain Gauge -->':'pres_sensor',
     'Oxygen, SBE 43 -->':'oxy_sensor_1',
     'Oxygen, SBE 43, 2 -->':'oxy_sensor_2',
     'sbeox0V: Oxygen raw, SBE 43 -->':'oxy_sensor_1',
     'sbeox1V: Oxygen raw, SBE 43, 2 -->':'oxy_sensor_1',
+    'Fluorometer, WET Labs WETstar -->':'chla_sensor_1',
+    'Fluorometer, WET Labs WETstar, 2 -->':'chla_sensor_2',
     'Fluorometer, WET Labs ECO-AFL/FL -->':'chla_sensor_1',
     'Fluorometer, WET Labs ECO-AFL/FL, 2 -->':'chla_sensor_2',
     'Transmissometer, WET Labs C-Star -->':'attn_sensor_1',

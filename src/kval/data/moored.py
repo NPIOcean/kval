@@ -1,7 +1,7 @@
 """
 KVAL.DATA.MOORED
 
-Loadin and processing data from fixed instruments.
+Loading and processing data from fixed instruments.
 
 Currently works for SBE and RBR CTD sensors - may want to broaden functionality
 for other moored sensors.
@@ -892,6 +892,7 @@ def calculate_PSAL(
     temp_var: str = "TEMP",
     pres_var: str = "PRES",
     psal_var: str = "PSAL",
+    retain_nans: bool = True,
 ) -> xr.Dataset:
     """(Re)calculate Practical Salinity (PSAL) from conductivity, temperature,
     and pressure using the GSW-Python module
@@ -916,6 +917,10 @@ def calculate_PSAL(
         psal_var (str):
             The name of the salinity variable in the dataset.
             Defaults to 'PSAL'.
+        retain_nans (bool):
+            If there is already a PSAL field: Retain the Nan values from
+            old to new PSAL field.
+            Defaults to True.
 
     Returns:
         xr.Dataset: The updated dataset with recalculated PSAL values.
@@ -933,16 +938,21 @@ def calculate_PSAL(
             CNDC_.values *= 10
 
 
+    # Calculate PSAL
     PSAL = gsw.SP_from_C(CNDC_, ds[temp_var], ds[pres_var])
+
+    # Retain NaNs if applicable
+    if retain_nans and psal_var in ds:
+        PSAL = PSAL.where(~np.isnan(ds[psal_var]), np.nan)
 
     if psal_var in ds:
         ds[psal_var][:] = PSAL
     else:
         ds[psal_var] = (ds.CNDC.dims, PSAL.data,
                         {'units': '1',
-                         'calibration_date': (
-                             f'{ds.TEMP.calibration_date} (TEMP), '
-                             f'{ds.CNDC.calibration_date} (CNDC)')})
+                         'sensor_calibration_date': (
+                             f'{ds.TEMP.sensor_calibration_date} (TEMP), '
+                             f'{ds.CNDC.sensor_calibration_date} (CNDC)')})
 
 
     ds[psal_var].attrs["note"] = (
@@ -1524,10 +1534,11 @@ def drop_vars_pick(ds: xr.Dataset) -> xr.Dataset:
 
 
 # Standardize metadata
-@record_processing(
-    "Applied automatic standardization of metadata.",
-    py_comment="Applying standard metadata (global+variable attributes):",
-)
+# (note necessary to record?)
+#@record_processing(
+#    "Applied automatic standardization of metadata.",
+#    py_comment="Applying standard metadata (global+variable attributes):",
+#)
 def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
     """
     Various modifications to the metadata to standardize the dataset for

@@ -103,7 +103,7 @@ def ctds_from_cnv_dir(
     # Add PROCESSING variable
     if processing_variable:
         ds = dataset.add_processing_history_var_ctd(
-            ds, source_files=np.sort(cnv_files)
+            ds, source_file=np.sort(cnv_files)
         )
         ds.attrs["history"] = ds.history.replace(
             '"SBE_processing"', '"PROCESSING.SBE_processing"'
@@ -114,7 +114,7 @@ def ctds_from_cnv_dir(
             "python_script"
         ] += f"""from kval import data
 
-# Path to directory containing *source_files* (MUST BE SET BY THE USER!)
+# Path to directory containing *source_file* (MUST BE SET BY THE USER!)
 cnv_dir = "./"
 
 # Load all .cnv files and join together into a single xarray Dataset:
@@ -171,7 +171,7 @@ def ctds_from_cnv_list(
     # Add PROCESSING variable
     if processing_variable:
         ds = dataset.add_processing_history_var_ctd(
-            ds, source_files=np.sort(cnv_list)
+            ds, source_file=np.sort(cnv_list)
         )
         ds.attrs["history"] = ds.history.replace(
             '"SBE_processing"', '"PROCESSING.SBE_processing"'
@@ -181,7 +181,7 @@ def ctds_from_cnv_list(
         ds.PROCESSING.attrs["python_script"] += (
             "from kval import data\n"
             "cnv_list = [{files}] # A list of strings specifying paths to all"
-            " files in *source_files*.\n\n"
+            " files in *source_file*.\n\n"
             "# Load all .cnv files and join together into a single xarray"
             " Dataset:\n"
             "ds = data.ctd.ctds_from_cnv_list(cnv_list,\n"

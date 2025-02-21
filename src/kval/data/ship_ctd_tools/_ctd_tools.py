@@ -93,6 +93,7 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
         ns_binned = []
         for n_input in tqdm(ns_input, desc = prog_bar_msg_2):
             ns_binned += [bin_to_pressure(n_input, bins_dbar)]
+            print('BIIINNNINNGG')
     else:
         print('NOTE: It seems the input data already binned ->'
               ' using preexisting binning.')
@@ -254,7 +255,7 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     N['CRUISE'].attrs = {'long_name':'Cruise ID',}
 
     # Generalize (insert "e.g.") in attributes with specific file names
-    N.attrs['source_files'] = f"E.g. {N.attrs['source_files']}"
+    N.attrs['source_file'] = f"E.g. {N.attrs['source_file']}"
     SBEproc_file_ind = N.SBE_processing.rfind('Raw data read from ')+19
     N.attrs['SBE_processing'] = (N.SBE_processing[:SBEproc_file_ind]
                 + 'e.g. ' + N.SBE_processing[SBEproc_file_ind:])
@@ -445,7 +446,7 @@ def join_cruise_btl(datasets, verbose = True,
     N['CRUISE'].attrs = {'long_name':'Cruise ID',}
 
     # Generalize (insert "e.g.") in attributes with specific file names
-    N.attrs['source_files'] = f"E.g. {N.attrs['source_files']}"
+    N.attrs['source_file'] = f"E.g. {N.attrs['source_file']}"
     SBEproc_file_ind = N.SBE_processing.rfind('Raw data read from ')+19
     N.attrs['SBE_processing'] = (N.SBE_processing[:SBEproc_file_ind]
                 + 'e.g. ' + N.SBE_processing[SBEproc_file_ind:])
