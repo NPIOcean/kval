@@ -670,7 +670,7 @@ def read_csv(filename: str) -> xr.Dataset:
     # Make a string for history
     history_lines = [
         f"{num2date(ds.TIME.min()).strftime('%Y-%m-%d')} - "
-        f"{num2date(ds.TIME.min()).strftime('%Y-%m-%d')}: Data collection.\n"]
+        f"{num2date(ds.TIME.max()).strftime('%Y-%m-%d')}: Data collection.\n"]
 
     # Add conversion date line only if it's not empty
     if meta_dict['conv_date']:
@@ -1395,14 +1395,20 @@ def _add_meta_info_sbe56_cnv(ds, source_file, verbose=False):
     for key, item in meta_dict.items():
         if key.startswith('instrument'):
             ds.attrs[key] = item
-        if key =='sensor_calibration_date':
-            if item !='N/A':
+        if key == 'sensor_calibration_date':
+            if item != 'N/A':
                 ds.TEMP.attrs[key] = item
+
+    # Add the global attribute `instrument_serial_number` as variable attribute
+    # `sensor_serial_number` in `TEMP` for consistency.
+    # (May cause some redundancy - not too worried)
+    if 'instrument_serial_number' in ds.attrs:
+        ds.TEMP.attrs['sensor_serial_number'] = ds.instrument_serial_number
 
     return ds
 
-# INTERNAL FUNCTIONS: MODIFY THE DATASET
 
+# INTERNAL FUNCTIONS: MODIFY THE DATASET
 
 def _remove_duplicate_variables(ds):
     """

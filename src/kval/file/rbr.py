@@ -166,7 +166,7 @@ def read_rsk(file: str, keep_total_pres: bool = False) -> xr.Dataset:
 
         # Add a history attribute with some basic info
         first_date = num2date(ds_rsk.TIME.min()).strftime("%Y-%m-%d")
-        last_date = num2date(ds_rsk.TIME.min()).strftime("%Y-%m-%d")
+        last_date = num2date(ds_rsk.TIME.max()).strftime("%Y-%m-%d")
         now_date = pd.Timestamp.now().strftime("%Y-%m-%d")
 
         ds_rsk.attrs["history"] = (
