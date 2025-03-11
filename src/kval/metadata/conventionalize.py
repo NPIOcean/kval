@@ -56,9 +56,8 @@ def add_range_attrs(D, vertical_var=None):
                         vertical_var = varnm
 
         if vertical_var is not None:
-
-            D.attrs["geospatial_vertical_min"] = np.round(D[vertical_var].min().values, 2)
-            D.attrs["geospatial_vertical_max"] = np.round(D[vertical_var].max().values, 2)
+            D.attrs["geospatial_vertical_min"] = np.round(D[vertical_var].values.min(), 2)
+            D.attrs["geospatial_vertical_max"] = np.round(D[vertical_var].values.max(), 2)
             D.attrs["geospatial_vertical_units"] = D[vertical_var].units
             D.attrs["geospatial_vertical_positive"] = "down"
             D.attrs["geospatial_bounds_vertical_crs"] = "EPSG:5831"

@@ -13,6 +13,32 @@ from kval.metadata import check_conventions, conventionalize
 from kval.util import time
 from typing import Union, List
 
+#### ADD VARIABLES
+
+
+def add_latlon(ds, lon, lat, suppress_latlon_warning=False):
+    """
+    Adds 0-d LATITUDE and LONGITUDE variables to a dataset.
+
+    """
+
+    ds['LATITUDE'] = ((), (lat), {
+            "standard_name": "latitude",
+            "units": "degree_north",
+            "long_name": "latitude",
+        },)
+
+    ds['LONGITUDE'] = ((), (lon), {
+            "standard_name": "longitude",
+            "units": "degree_east",
+            "long_name": "longitude",
+        },)
+
+    return ds
+
+
+
+
 #### MODIFY METADATA
 
 def add_now_as_date_created(ds: xr.Dataset) -> xr.Dataset:
@@ -186,7 +212,8 @@ def to_netcdf(
         if 'Creation of this netcdf file' in ds.attrs['history']:
             history_lines = ds.attrs['history'].split('\n')
             updated_history = [
-                line for line in history_lines if "Creation of this netcdf file" not in line
+                line for line in history_lines
+                if "Creation of this netcdf file" not in line
             ]
             ds.attrs['history'] = '\n'.join(updated_history)
 

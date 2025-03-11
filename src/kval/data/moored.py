@@ -938,8 +938,10 @@ def calculate_PSAL(
             CNDC_.values *= 10
 
 
+
     # Calculate PSAL
-    PSAL = gsw.SP_from_C(CNDC_, ds[temp_var], ds[pres_var])
+    PSAL = gsw.SP_from_C(
+        CNDC_.values, ds[temp_var].values, ds[pres_var].values)
 
     # Retain NaNs if applicable
     if retain_nans and psal_var in ds:
@@ -949,11 +951,12 @@ def calculate_PSAL(
         ds[psal_var][:] = PSAL
     else:
         ds[psal_var] = (ds.CNDC.dims, PSAL.data,
-                        {'units': '1',
-                         'sensor_calibration_date': (
-                             f'{ds.TEMP.sensor_calibration_date} (TEMP), '
-                             f'{ds.CNDC.sensor_calibration_date} (CNDC)')})
-
+                        {'units': '1',})
+        if ('sensor_calibration_date' in ds.TEMP.attrs
+           and 'sensor_calibration_date' in ds.CNDC.attrs):
+            ds.PSAL.attrs['sensor_calibration_date'] = (
+                f'{ds.TEMP.sensor_calibration_date} (TEMP), '
+                f'{ds.CNDC.sensor_calibration_date} (CNDC)')
 
     ds[psal_var].attrs["note"] = (
         f"Computed from {cndc_var}, {temp_var}, {pres_var} "
@@ -965,9 +968,77 @@ def calculate_PSAL(
 
 
 
+
+
 # Recalculate sal
 @record_processing(
-    "Recalculated PSAL using the GSW-Python module.",
+    "Calculated TEOS-10 variables SA, CT using the GSW-Python module.",
+    py_comment="Calculating SA, CT",
+)
+def calculate_SA_CT(
+    ds: xr.Dataset,
+    cndc_var: str = "CNDC",
+    temp_var: str = "TEMP",
+    pres_var: str = "PRES",
+    psal_var: str = "PSAL",
+) -> xr.Dataset:
+    """Recalculate absolute salinity (SA) and coneservative temperature (CT)
+    from conductivity, temperature, and pressure using the GSW-Python module
+    (https://teos-10.github.io/GSW-Python/).
+
+    This function adds or updates the SA and CT variables in the dataset with
+    newly computed values.
+
+    Args:
+        ds (xr.Dataset):
+            The input dataset containing conductivity, temperature, and
+            pressure variables.
+        cndc_var (str):
+            The name of the conductivity variable in the dataset.
+            Defaults to 'CNDC'.
+        temp_var (str):
+            The name of the temperature variable in the dataset.
+            Defaults to 'TEMP'.
+        pres_var (str):
+            The name of the pressure variable in the dataset.
+            Defaults to 'PRES'.
+        psal_var (str):
+            The name of the salinity variable in the dataset.
+            Defaults to 'PSAL'.
+
+    Returns:
+        xr.Dataset: The updated dataset with SA, CT values.
+
+    """
+
+    # Calculate absolute salinity
+    SA = gsw.SA_from_SP(ds[psal_var], ds[pres_var], ds.LONGITUDE, ds.LATITUDE)
+    # Calculate conservative temperature
+    CT = gsw.CT_from_t(SA, ds[temp_var], ds[pres_var])
+
+    ds['SA'] = (ds[psal_var].dims, SA.values,
+                {'units': 'g kg-1',
+                 'standard_name': 'sea_water_absolute_salinity',
+                 'long_name': 'Absolute Salinity'})
+
+    ds['CT'] = (ds[psal_var].dims, CT.values,
+                {'units': 'degree_C',
+                 'standard_name':'sea_water_conservative_temperature',
+                 'long_name': 'Conservative Temperature'})
+
+    for varname in ['CT', 'SA']:
+        ds[varname].attrs["note"] = (
+            f"Computed from {cndc_var}, {temp_var}, {pres_var} "
+            "using the Python gsw module."
+        )
+
+    return ds
+
+
+
+# Recalculate sal
+@record_processing(
+    "Calculated RHO using the GSW-Python module.",
     py_comment="Calculating RHO",
 )
 def calculate_rho(
