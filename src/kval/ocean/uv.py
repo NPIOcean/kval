@@ -14,7 +14,8 @@ import numpy as np
 
 
 def rotate_uv(
-    u: np.ndarray, v: np.ndarray, angle: float, in_degrees: bool = False
+    u: np.ndarray, v: np.ndarray, angle: float, in_degrees: bool = False,
+    decimals: int = 12,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Rotates the vector (u, v) CLOCKWISE by the specified angle.
@@ -32,6 +33,8 @@ def rotate_uv(
     in_degrees : bool, optional
         If True, the `angle` is interpreted as being in degrees. If False
         (default), the `angle` is in radians.
+    decimals:
+        To avoid numeriucal noise, round to this level of precision.
 
     Returns:
     -------
@@ -47,7 +50,9 @@ def rotate_uv(
     uvc_rot = (u + 1j * v) * np.exp(-1j * angle_rad)
 
     # Extract the real and imaginary parts
-    u_rot, v_rot = uvc_rot.real, uvc_rot.imag
+    # Round away numerical noise)
+    u_rot = np.round(uvc_rot.real, decimals)
+    v_rot = np.round(uvc_rot.imag, decimals)
 
     return u_rot, v_rot
 

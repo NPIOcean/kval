@@ -945,8 +945,8 @@ def calculate_PSAL(
 
     # Retain NaNs if applicable
     if retain_nans and psal_var in ds:
-        PSAL = PSAL.where(~np.isnan(ds[psal_var]), np.nan)
-
+       # PSAL = PSAL.where(~np.isnan(ds[psal_var]), np.nan)
+        PSAL = np.where(np.isnan(ds[psal_var]), np.nan, PSAL)
     if psal_var in ds:
         ds[psal_var][:] = PSAL
     else:
