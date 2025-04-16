@@ -5,12 +5,14 @@ from kval.util.magdec import (
     get_declination, get_declination_point, choose_wmm_model)
 
 
-# Known values for testing (replace these with actual known values)
+# Known values for testing
 known_values = [
     # (latitude, longitude, time, expected_declination,)
     (-70, -130, datetime(2024, 8, 24), 56.037),
-   # (80.0, 30.2, datetime(2020, 8, 24), 21.792),
-   # (20, -80.0, datetime(2022, 1, 29), -6.337),
+    (80.0, 30.2, datetime(2020, 8, 24), 21.792),
+    (20, -80.0, datetime(2022, 1, 29), -6.337),
+    (0, 0, datetime(2026, 4, 16), -3.86),
+
 ]
 @pytest.mark.parametrize("latitude, longitude, time, expected_declination",
                         known_values)
@@ -20,8 +22,8 @@ known_values = [
 
 def test_get_declination_point(latitude, longitude, time, expected_declination,):
     """Test get_declination_point with known values."""
-
     declination = get_declination_point(latitude, longitude, time)
+
     assert isinstance(declination, float)
     assert -180 <= declination <= 180
     assert pytest.approx(declination, rel=1e-3) == expected_declination
