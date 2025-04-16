@@ -9,7 +9,11 @@ ___
 
 Last release,`0.3.0`:
 
-[![DOI](UPDATE)](UPDATE)
+
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15229098.svg)](https://doi.org/10.5281/zenodo.15229098)
+
+
 
 - This version is used to work out pypi and conda distribution.
 - An updated version with improved documentation and a code overhaul is planned for Spring 2025.
