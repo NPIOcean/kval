@@ -31,7 +31,7 @@ dependencies = [
   "mplcursors>=0.5.3",
   "xlrd>=2.0.1",
   "pyrsktools>=1.1.1",
-  "pygeomag>=1.0.2",
+  "pygeomag>=1.1.0",
 ]
 
 classifiers = [

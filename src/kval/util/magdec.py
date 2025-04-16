@@ -111,6 +111,7 @@ def get_declination_point(
       the model range (e.g 2010-2015 for WMM2010). Be careful!
     """
 
+
     # Convert time to decimal year if necessary
     decimal_year = time.time_to_decimal_year(date)
 
@@ -125,7 +126,7 @@ def get_declination_point(
         elif model == '2015':
             wmm_coefficients_file = 'wmm/WMM_2015.COF'
         elif model == '2020':
-            wmm_coefficients_file = 'wmm/WMM.COF'
+            wmm_coefficients_file = 'wmm/WMM_2020.COF'
         else:
             raise ValueError(
                 f'Invalid option model={model} for choice of World Magnetic '
@@ -168,11 +169,13 @@ def choose_wmm_model(decimal_year: float) -> str:
     elif 2015 <= decimal_year < 2020:
         wmm_coefficients_file = 'wmm/WMM_2015.COF'
     elif 2020 <= decimal_year < 2025:
-        wmm_coefficients_file = 'wmm/WMM.COF'
+        wmm_coefficients_file = 'wmm/WMM_2020.COF'
+    elif 2025 <= decimal_year < 2030:
+        wmm_coefficients_file = 'wmm/WMM_2025.COF'
     else:
         raise ValueError(
             f'Year {decimal_year:.0f} is out of range. The World Magnetic '
-            'Model only covers 2010-2025. Please obtain declination values '
+            'Model only covers 2010-2030. Please obtain declination values '
             'elsewhere.'
         )
 
