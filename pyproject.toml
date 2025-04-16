@@ -1,7 +1,7 @@
 [project]
 name = "kval"
 description = "Tools for oceanographic data processing and analysis in Python"
-version = "0.2.0-beta"
+version = "0.3.0"
 readme = "README.md"
 
 authors = [
@@ -10,6 +10,7 @@ authors = [
 
 maintainers = [
   { name = "Norwegian Polar Institute, Oceanography section", email = "" },
+  { name = "Øyvind Foss, NPI", email = "oyvind.foss@npolar.no" },
 ]
 
 requires-python = ">=3.9"
@@ -44,6 +45,8 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Topic :: Scientific/Engineering :: Oceanography",
 ]
+
+license = { file = "LICENSE, LICENSE-APACHE" }
 
 [project.optional-dependencies]
 compliance = [

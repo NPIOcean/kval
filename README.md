@@ -7,13 +7,14 @@ Maintained by the Oceanography section at the [Norwegian Polar Institute](https:
 Supported by the project [HiAOOS](https://hiaoos.eu/).
 ___
 
-Last release,`0.0.2-beta`:
+Last release,`0.3.0`:
 
-[![DOI](https://zenodo.org/badge/711439231.svg)](https://zenodo.org/doi/10.5281/zenodo.10360162)
+[![DOI](UPDATE)](UPDATE)
 
-___
+- This version is used to work out pypi and conda distribution.
+- An updated version with improved documentation and a code overhaul is planned for Spring 2025.
 
-*Note:* This library was until recently called `oceanograpy`
+__
 
 *In active development.*
 
@@ -28,7 +29,7 @@ ____
 - `data`: Data post-processing and QC (e.g. CTD post-processing)
 - `metadata`: Handling and standardizing metadata according to CF conventions
 - `plots*`: Various tools to help make nice (matplotlib) figures
-- `map`: Tools for making maps
+- `maps`: Tools for making maps
 - `geo`: Geographical calculations (coordinate transformations, point-to-point distances etc)
 - `ocean`: Oceanography-specific tools (e.g. (`*`) vertical modes, turner angles, wkb scaling, geostrophical calculations)
 - `calc`: Various useful functions for numerical calculations.
@@ -92,7 +93,11 @@ ____
 <details>
 <summary><strong>RELEASE NOTES</strong></summary>
 
-- *0.1.0 (in development)*:
+
+
+
+
+- **0.3.0** *(CURRENT, released 16 April 2025)*:
     - Refactoring of large parts of the code for structure, clarity and efficiency.
     - ~~Complete reproducability and self-documentation in the CTD processing functionality.~~
     - Adding mooring processing functionality
@@ -100,12 +105,19 @@ ____
         - Functionality for basic processing source file -> CF-NetCDF
     - ~~Test suite (comprehensive but not entirely complete)~~
     - ~~Decluttering the repo bringing it down from its currently bloated state.~~
-    - Reasonably useful documentation wit hnotebook examples (readthedocs).
-    - Possibly: release to PyPi and conda-forge.
+    - Started useful documentation with somenotebook examples (need a lot of work).
+    - Released to PyPi and conda-forge.
+    - Many other improvements and additions.
 
-- *Changes tabled but* not *planned included in 0.1.0*
 
-    - Removal of NPI-specific content.
+- **0.4.0** *(PLANNED for spring 2025)*
+
+- Complete (useful) documentation with good notebook examples of core functionality.
+- Expanded test suite for good coverage of basic functionality plus
+- *Possibly*:
+    - Parsing data from inductive loggers.
+    - Breaking out NPI-specific stuff (if there really is that much of it) to a sepåarate libraru, ´naust´.
+
 
 - *0.0.2*:
     - Name change from `oceanograpy` to `kval`.
@@ -115,6 +127,9 @@ ____
 - *0.0.1:*
     - Initial release.
     - Functionality tailored for CTD processing.
+
+
+
 
 </details>
 
