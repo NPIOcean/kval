@@ -7,10 +7,14 @@ Maintained by the Oceanography section at the [Norwegian Polar Institute](https:
 Supported by the project [HiAOOS](https://hiaoos.eu/).
 ___
 
+
+#### [Documentation page](https://kval.readthedocs.io/) *(in development)*
+
+___
+
 About the latest release, `0.3.1`:
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15260487.svg)](https://doi.org/10.5281/zenodo.15260487)
-
 
 
 - This version is used to work out pypi and conda distribution.

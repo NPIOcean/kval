@@ -47,3 +47,4 @@ html_logo = "https://raw.githubusercontent.com/npiocean/kval/master/graphics/kva
 
 html_theme = 'alabaster'
 html_static_path = ['_static']
+html_title = "kval docs"
