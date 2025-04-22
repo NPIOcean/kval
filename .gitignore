@@ -3,9 +3,10 @@
 *.pyc
 *.rsk
 development/
-
+dist/
 kval_local_files
 tests/test_data/rbr_files
+conda_recipe/
 
 #### Defaults:
 

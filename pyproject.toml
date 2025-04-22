@@ -33,6 +33,7 @@ dependencies = [
   "xlrd>=2.0.1",
   "pyrsktools>=1.1.1",
   "pygeomag>=1.1.0",
+  "compliance-checker>=5.1.0",
 ]
 
 classifiers = [
@@ -46,11 +47,10 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Oceanography",
 ]
 
-license = { file = "LICENSE, LICENSE-APACHE" }
+license = "MIT"
 
 [project.optional-dependencies]
 compliance = [
-  "compliance-checker>=5.1.0",
 ]
 
 dev = [
