@@ -1,4 +1,9 @@
 sphinx>=5.0.0
 myst-parser>=0.18.0
 nbsphinx
+sphinx-copybutton
+sphinx-ext-autodoc
+sphinx-ext-coverage
+sphinx-ext-napoleon
+sphinx-ext-mathjax
 git+https://github.com/npiocean/kval.git#egg=kval
