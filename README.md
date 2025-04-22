@@ -1,4 +1,4 @@
-![image](graphics/kval_banner.png)
+![image](https://raw.githubusercontent.com/npiocean/kval/master/graphics/kval_banner.png)
 
 Collection of Python functions for working with oceanography data processing and analysis.
 
@@ -7,7 +7,7 @@ Maintained by the Oceanography section at the [Norwegian Polar Institute](https:
 Supported by the project [HiAOOS](https://hiaoos.eu/).
 ___
 
-About the latest release,`0.3.1`:
+About the latest release, `0.3.1`:
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15260487.svg)](https://doi.org/10.5281/zenodo.15260487)
 
@@ -37,7 +37,7 @@ Pip:
 
     pip install kval
 
-[^tag]: We aim to distribute this on the [conda-forge](channel) eventually. Since some dependent packages are not available there, we are using the [anaconda.org NPIOcean channel](https://anaconda.org/npiocean) for now.
+[^tag]: We aim to distribute this on [conda-forge](https://conda-forge.org/) eventually. Since some dependent packages are not available there, we are using the [anaconda.org NPIOcean channel](https://anaconda.org/npiocean) for now.
 
 ____
 <details>
