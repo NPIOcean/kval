@@ -7,11 +7,12 @@ Maintained by the Oceanography section at the [Norwegian Polar Institute](https:
 Supported by the project [HiAOOS](https://hiaoos.eu/).
 ___
 
-Last release,`0.3.0`:
+Last release,`0.3.1`:
 
 
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15229098.svg)](https://doi.org/10.5281/zenodo.15229098)
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15260487.svg)](https://doi.org/10.5281/zenodo.15260487)
 
 
 
@@ -21,6 +22,23 @@ Last release,`0.3.0`:
 __
 
 *In active development.*
+
+__
+
+### Installation
+
+
+
+Conda[^tag]:
+
+    conda install -c npiocean -c conda-forge kval
+
+
+Pip:
+
+    pip install kval
+
+[^tag]: We aim to distribute this on the [conda-forge](channel) eventually. Since some dependent packages are not available there, we are using the [anaconda.org NPIOcean channel](https://anaconda.org/npiocean) for now.
 
 ____
 <details>
