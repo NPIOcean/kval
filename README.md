@@ -7,10 +7,7 @@ Maintained by the Oceanography section at the [Norwegian Polar Institute](https:
 Supported by the project [HiAOOS](https://hiaoos.eu/).
 ___
 
-Last release,`0.3.1`:
-
-
-
+About the latest release,`0.3.1`:
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15260487.svg)](https://doi.org/10.5281/zenodo.15260487)
 
@@ -19,11 +16,13 @@ Last release,`0.3.1`:
 - This version is used to work out pypi and conda distribution.
 - An updated version with improved documentation and a code overhaul is planned for Spring 2025.
 
-__
+___
+
 
 *In active development.*
 
-__
+___
+
 
 ### Installation
 
