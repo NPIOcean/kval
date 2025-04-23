@@ -12,7 +12,8 @@ ___
 
 About the latest release, `0.3.2`:
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15260487.svg)](https://doi.org/10.5281/zenodo.15260487)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15268696.svg)](https://doi.org/10.5281/zenodo.15268696)
+
 
 
 - This version adds basic documentation.
