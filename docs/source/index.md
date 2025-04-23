@@ -6,13 +6,8 @@
 
 
 
-___
-
-
-
 ```{toctree}
 :maxdepth: 2
-:caption: Contents:
 
 usage/using_kval
 examples/examples

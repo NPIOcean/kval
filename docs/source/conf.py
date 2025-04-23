@@ -25,7 +25,6 @@ extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.coverage',
               'sphinx_copybutton',
               'sphinx.ext.napoleon',
-             # 'myst_parser',
               'sphinx.ext.mathjax',
               'myst_nb']  # For LaTeX support]
 

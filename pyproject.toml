@@ -1,11 +1,13 @@
 [project]
 name = "kval"
-description = "Tools for oceanographic data processing and analysis in Python"
-version = "0.3.1"
+description = "Processing and analysis of ocean data in Python"
+version = "0.3.2"
 readme = "README.md"
 
 authors = [
   { name = "Øyvind Foss", email = "oyvind.foss@npolar.no" },
+  { name = "Tore Hattermann", email = "tore.hattermann@npolar.no" },
+
 ]
 
 maintainers = [
