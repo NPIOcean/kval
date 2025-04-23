@@ -1,0 +1,14 @@
+name: kval_docs_env
+channels:
+  - npiocean
+  - conda-forge
+dependencies:
+  - python=3.12
+  - kval
+  - sphinx
+  - myst-nb
+  - jupyter
+  - ipykernel
+  - pip
+  - pip:
+      - -r docs/requirements.txt
