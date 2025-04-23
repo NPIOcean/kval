@@ -1,5 +1,6 @@
 sphinx>=5.0.0
 myst-parser>=0.18.0
+myst-nb>=1.2.0
 nbsphinx
 sphinx-copybutton
 
