@@ -12,9 +12,10 @@ build:
 sphinx:
   configuration: docs/source/conf.py
 
-python:
-  install:
-    - requirements: docs/requirements.txt
-  conda:
-    environment: docs/kval_docs_env.yml  # Specify your conda environment
-    activate: true
+#python:
+#  install:
+#    - requirements: docs/requirements.txt
+
+conda:
+  environment: docs/kval_docs_env.yml  # Specify your conda environment
+  activate: true

@@ -5,10 +5,9 @@ channels:
 dependencies:
   - python=3.12
   - kval
-  - sphinx
-  - myst-nb
+  - sphinx>=5.0.0
+  - myst-parser>=0.18.0
+  - myst-nb>=1.2.0
   - jupyter
   - ipykernel
-  - pip
-  - pip:
-      - -r docs/requirements.txt
+  - sphinx-copybutton
