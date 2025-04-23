@@ -14,7 +14,7 @@ ___
 :maxdepth: 2
 :caption: Contents:
 
-other/install
+usage/using_kval
 examples/examples
 other/about
 

@@ -1,6 +1,5 @@
 
-
-# Install
+# Installation
 
 
 Conda [^tag]:
