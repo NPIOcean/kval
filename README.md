@@ -20,7 +20,7 @@ About the latest release, `0.3.2`:
 - An updated version with improved documentation and a code overhaul is planned for Spring 2025.
 
 
-*`kval` is in active development.*
+`kval` is in active development.
 
 ___
 
