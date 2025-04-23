@@ -16,5 +16,5 @@ python:
   install:
     - requirements: docs/requirements.txt
   conda:
-    environment: docs/environment.yml  # Specify your conda environment
+    environment: docs/kval_docs_env.yml  # Specify your conda environment
     activate: true
