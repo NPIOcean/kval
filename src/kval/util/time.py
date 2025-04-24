@@ -136,7 +136,7 @@ def matlab_time_to_datetime(
     Convert Matlab datenum into Python datetime.
     """
     if isinstance(matlab_time, (int, float)):
-        days = matlab_time % 1
+        days = np.float64(matlab_time % 1)
         return (
             datetime.fromordinal(int(matlab_time))
             + timedelta(days=days)
@@ -145,7 +145,7 @@ def matlab_time_to_datetime(
     elif isinstance(matlab_time, (list, tuple, np.ndarray)):
         result = []
         for time in matlab_time:
-            days = time % 1
+            days = np.float64(time % 1)
             result.append(
                 datetime.fromordinal(int(time))
                 + timedelta(days=days)
