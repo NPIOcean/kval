@@ -972,7 +972,8 @@ def hand_remove_points(
     variable : str
         The name of the variable to visualize and edit (e.g., 'TEMP1', 'CHLA').
     TIME_index : str
-        The name of the station (e.g., '003', '012_01', 'AT290', 'StationA').
+        The index of the station/profile number, i.e. index along the TIME
+        dimension (starting at 0).
 
     Returns
     -------
@@ -981,7 +982,7 @@ def hand_remove_points(
 
     Examples
     --------
-    >>> ds = hand_remove_points(ds, 'TEMP1', 'StationA')
+    >>> ds = hand_remove_points(ds, 'TEMP1', 11)
 
     Notes
     -----
