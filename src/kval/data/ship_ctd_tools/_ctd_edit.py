@@ -38,7 +38,6 @@ class hand_remove_points:
         - varnm (str): The name of the variable to visualize and edit.
         - station (str): The name of the station.
         """
-
         internals.check_interactive()
 
         if varnm not in d.data_vars:
@@ -47,9 +46,7 @@ class hand_remove_points:
         self.TIME_index = TIME_index
 
         self.varnm = varnm
-        self.d = d
-
-
+        self.d = d.copy(deep=True)
 
         self.var_data = d.isel(TIME=TIME_index)[varnm]
         if 'STATION' in d.keys():
