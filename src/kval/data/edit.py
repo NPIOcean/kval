@@ -198,6 +198,37 @@ def threshold(ds: xr.Dataset, variable: str,
     return ds_new
 
 
+def replace(ds: xr.Dataset,
+            var_source: str,
+            var_target: str,
+            use_values=False,
+            **indexers) -> xr.Dataset:
+    """
+    Replace values in var_target with values from var_source over specified indices or values.
+
+    Parameters:
+        ds (xr.Dataset): The xarray Dataset.
+        var_source (str): Variable to take values from.
+        var_target (str): Variable to modify.
+        use_values (bool): If True, treat indexers as coordinate values (use .sel), else as positions (use .loc).
+        **indexers: Dimension-specific selectors (e.g., TIME=3 or TIME='2022-01-01').
+
+    Returns:
+        xr.Dataset: A new dataset with updated values.
+    """
+    ds_new = ds.copy(deep=True)
+
+    dims = ds[var_target].dims
+    full_indexers = {dim: indexers.get(dim, slice(None)) for dim in dims}
+
+    if use_values:
+        ds_new[var_target].sel(full_indexers)[:] = ds[var_source].sel(full_indexers)
+    else:
+        ds_new[var_target].isel(full_indexers)[:] = ds[var_source].isel(full_indexers)
+
+    return ds_new
+
+
 
 
 def linear_drift(
