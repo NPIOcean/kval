@@ -198,26 +198,39 @@ def threshold(ds: xr.Dataset, variable: str,
     return ds_new
 
 
-def replace(ds: xr.Dataset,
-            var_source: str,
-            var_target: str,
-            use_values=False,
-            **indexers) -> xr.Dataset:
+
+def replace(
+    ds: xr.Dataset,
+    var_target: str,
+    var_source: str,
+    use_values: bool = False,
+    flag_value: int = None,
+    var_flag: str = None,
+    **indexers
+) -> xr.Dataset:
     """
-    Replace values in var_target with values from var_source over specified indices or values.
+    Replace values in var_target with values from var_source over specified indices or coordinate values.
+    Optionally flags the modified values in a third variable.
 
     Parameters:
         ds (xr.Dataset): The xarray Dataset.
         var_source (str): Variable to take values from.
         var_target (str): Variable to modify.
-        use_values (bool): If True, treat indexers as coordinate values (use .sel), else as positions (use .loc).
+        use_values (bool): If True, treat indexers as coordinate values (use .sel), else as positions (use .isel).
+        flag_value (int, optional): Value to assign in the flag variable where replacement occurs.
+        var_flag (str, optional): Name of the flag variable to update. Flagging is only performed if this exists in `ds`.
+
         **indexers: Dimension-specific selectors (e.g., TIME=3 or TIME='2022-01-01').
 
     Returns:
-        xr.Dataset: A new dataset with updated values.
+        xr.Dataset: A new dataset with updated values (and optionally updated flag variable).
     """
-    ds_new = ds.copy(deep=True)
+    # Check that source and target variables exist
+    for var in [var_source, var_target]:
+        if var not in ds:
+            raise ValueError(f"Variable '{var}' not found in dataset.")
 
+    ds_new = ds.copy(deep=True)
     dims = ds[var_target].dims
     full_indexers = {dim: indexers.get(dim, slice(None)) for dim in dims}
 
@@ -226,7 +239,18 @@ def replace(ds: xr.Dataset,
     else:
         ds_new[var_target].isel(full_indexers)[:] = ds[var_source].isel(full_indexers)
 
+    # Optional flagging
+    if flag_value is not None and var_flag is not None:
+        if var_flag in ds_new:
+            if use_values:
+                ds_new[var_flag].sel(full_indexers)[:] = flag_value
+            else:
+                ds_new[var_flag].isel(full_indexers)[:] = flag_value
+        else:
+            print(f"Warning: var_flag '{var_flag}' not found in dataset. Flagging skipped.")
+
     return ds_new
+
 
 
 
