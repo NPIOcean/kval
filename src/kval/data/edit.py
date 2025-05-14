@@ -198,14 +198,14 @@ def threshold(ds: xr.Dataset, variable: str,
     return ds_new
 
 
-
 def replace(
     ds: xr.Dataset,
     var_target: str,
     var_source: str,
-    use_values: bool = False,
+    use_values: bool | dict = False,
     flag_value: int = None,
     var_flag: str = None,
+    sel_method: str | dict = None,
     **indexers
 ) -> xr.Dataset:
     """
@@ -214,12 +214,17 @@ def replace(
 
     Parameters:
         ds (xr.Dataset): The xarray Dataset.
-        var_source (str): Variable to take values from.
         var_target (str): Variable to modify.
-        use_values (bool): If True, treat indexers as coordinate values (use .sel), else as positions (use .isel).
+        var_source (str): Variable to take values from.
+        use_values (bool or dict):
+            If bool, applies to all dimensions (True = use .sel, False = use .isel).
+            If dict, specify per-dimension whether to use values (e.g., {'TIME': True, 'DEPTH': False}).
         flag_value (int, optional): Value to assign in the flag variable where replacement occurs.
-        var_flag (str, optional): Name of the flag variable to update. Flagging is only performed if this exists in `ds`.
-
+        var_flag (str, optional):
+            Name of the flag variable to update. Flagging is only performed if this exists in `ds`.
+        sel_method (str or dict, optional):
+            Selection method for .sel (e.g., 'nearest', 'pad'), globally all
+            dimensions with use_values=True.
         **indexers: Dimension-specific selectors (e.g., TIME=3 or TIME='2022-01-01').
 
     Returns:
@@ -232,25 +237,66 @@ def replace(
 
     ds_new = ds.copy(deep=True)
     dims = ds[var_target].dims
-    full_indexers = {dim: indexers.get(dim, slice(None)) for dim in dims}
 
-    if use_values:
-        ds_new[var_target].sel(full_indexers)[:] = ds[var_source].sel(full_indexers)
+    # Normalize use_values to a dict per-dimension
+    if isinstance(use_values, bool):
+        use_values_dict = {dim: use_values for dim in dims}
+    elif isinstance(use_values, dict):
+        use_values_dict = {dim: use_values.get(dim, False) for dim in dims}
     else:
-        ds_new[var_target].isel(full_indexers)[:] = ds[var_source].isel(full_indexers)
+        raise TypeError("use_values must be a bool or a dict of bools per dimension.")
+
+    # Prepare sel and isel indexers
+    sel_indexers = {}
+    isel_indexers = {}
+    for dim in dims:
+        val = indexers.get(dim, slice(None))
+
+        # Convert types
+        if isinstance(val, xr.core.dataarray.DataArray):
+            val = val.values
+        if isinstance(val, np.ndarray):
+            val = list(val)
+        if isinstance(val, int):
+            val = [val]
+        if isinstance(val, list):
+            val = [int(v) if isinstance(v, np.integer) else v for v in val]
+
+        # Assign to appropriate indexer type
+        if use_values_dict.get(dim, False):
+            sel_indexers[dim] = val
+        else:
+            isel_indexers[dim] = val
+
+    # Select source data from original dataset
+    source_data = ds[var_source]
+
+    if sel_indexers:
+        source_data = source_data.sel(**sel_indexers, method=sel_method)
+    if isel_indexers:
+        source_data = source_data.isel(**isel_indexers)
+
+    # Build indexer for .loc
+    # Need to treat the single- and multiple-index cases differently
+    # (type issue)
+    loc_index = {}
+    for coord_key in source_data.coords:
+        if source_data[coord_key].data.ndim == 0:
+            loc_index[coord_key] = source_data[coord_key].data.item()
+        else:
+            loc_index[coord_key] = list(source_data[coord_key].data)
+
+    ds_new[var_target].loc[loc_index] = source_data
 
     # Optional flagging
     if flag_value is not None and var_flag is not None:
         if var_flag in ds_new:
-            if use_values:
-                ds_new[var_flag].sel(full_indexers)[:] = flag_value
-            else:
-                ds_new[var_flag].isel(full_indexers)[:] = flag_value
+            ds_new[var_flag].loc[loc_index] = flag_value
         else:
-            print(f"Warning: var_flag '{var_flag}' not found in dataset. Flagging skipped.")
+            print(f"Warning: var_flag '{var_flag}' not found in dataset. "
+                  "Flagging skipped.")
 
     return ds_new
-
 
 
 

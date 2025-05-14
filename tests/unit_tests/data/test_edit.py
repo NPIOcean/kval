@@ -272,3 +272,128 @@ def test_remove_invalid_index(sample_dataset_remove_pts):
 
     with pytest.raises(IndexError):
         edit.remove_points_timeseries(ds, varnm, remove_inds)
+
+
+
+
+# -------------------------
+# Fixtures for replace tests
+# -------------------------
+def _create_1d_dataset():
+    return xr.Dataset(
+        coords={'TIME': np.arange(100) + 1000},
+        data_vars={
+            'TEMP1': ('TIME', np.random.rand(100)),
+            'TEMP2': ('TIME', np.random.rand(100) + 1),
+            'flag': ('TIME', np.zeros(100, dtype=int))
+        }
+    )
+
+@pytest.fixture
+def ds_1d():
+    np.random.seed(0)
+    return _create_1d_dataset()
+
+
+def _create_2d_dataset():
+    return xr.Dataset(
+        coords={
+            'TIME': np.arange(100) + 1000,
+            'DEPTH': [300, 400, 500]
+        },
+        data_vars={
+            'TEMP1': (('TIME', 'DEPTH'), np.random.rand(100, 3)),
+            'TEMP2': (('TIME', 'DEPTH'), np.random.rand(100, 3) + 1),
+            'flag':  (('TIME', 'DEPTH'), np.zeros((100, 3), dtype=int))
+        }
+    )
+
+@pytest.fixture
+def ds_2d():
+    np.random.seed(1)
+    return _create_2d_dataset()
+
+# -------------------------
+# Tests for the replace function
+# -------------------------
+def test_replace_1d_sel(ds_1d):
+    """Test replace for 1D dataset using .sel"""
+    ds = ds_1d
+    time_sel = ds.TIME.values[10]
+    ds_new = edit.replace(
+        ds, 'TEMP1', 'TEMP2',
+        use_values=True, flag_value=5, var_flag='flag',
+        TIME=time_sel
+    )
+    expected = ds['TEMP2'].sel(TIME=time_sel)
+    assert ds_new['TEMP1'].sel(TIME=time_sel).item() == pytest.approx(expected.item())
+    assert ds_new['flag'].sel(TIME=time_sel).item() == 5
+
+def test_replace_1d_isel(ds_1d):
+    """Test replace for 1D dataset using .isel"""
+    ds = ds_1d
+    idx = 20
+    ds_new = edit.replace(
+        ds,
+        var_target='TEMP1',
+        var_source='TEMP2',
+        use_values=False,
+        flag_value=3,
+        var_flag='flag',
+        TIME=idx
+    )
+    assert ds_new['TEMP1'].isel(TIME=idx).item() == pytest.approx(ds['TEMP2'].isel(TIME=idx).item())
+    assert ds_new['flag'].isel(TIME=idx).item() == 3
+
+
+def test_replace_2d_mixed(ds_2d):
+    """Test replace for 2D dataset with mixed use_values dict"""
+    ds = ds_2d
+    time_sel = ds.TIME.values[5]
+    depth_idx = 1
+    ds_new = edit.replace(
+        ds,
+        var_target='TEMP1',
+        var_source='TEMP2',
+        use_values={'TIME': True, 'DEPTH': False},
+        flag_value=7,
+        var_flag='flag',
+        TIME=time_sel,
+        DEPTH=depth_idx,
+        sel_method='nearest'
+    )
+    assert ds_new['TEMP1'].sel(TIME=time_sel).isel(DEPTH=depth_idx).item() == pytest.approx(
+        ds['TEMP2'].sel(TIME=time_sel, method='nearest').isel(DEPTH=depth_idx).item())
+    assert ds_new['flag'].sel(TIME=time_sel, method='nearest').isel(DEPTH=depth_idx).item() == 7
+
+def test_replace_2d_sel_method_global(ds_2d):
+    """Test replace with sel_method applied globally across all sel dimensions"""
+    ds = ds_2d
+    time_sel = ds.TIME.values[3] + 0.4  # fractional to trigger nearest
+    depth_sel = ds.DEPTH.values[1] + 1  # will resolve to nearest=400
+    ds_new = edit.replace(
+        ds,
+        var_target='TEMP1',
+        var_source='TEMP2',
+        use_values=True,
+        flag_value=9,
+        var_flag='flag',
+        sel_method='nearest',
+        TIME=time_sel,
+        DEPTH=depth_sel,
+    )
+    expected = ds['TEMP2'].sel(TIME=time_sel, DEPTH=depth_sel, method='nearest')
+    result = ds_new['TEMP1'].sel(TIME=time_sel, DEPTH=depth_sel, method='nearest')
+    assert result.item() == pytest.approx(expected.item())
+    assert ds_new['flag'].sel(TIME=time_sel, DEPTH=depth_sel, method='nearest').item() == 9
+
+
+def test_replace_errors(ds_1d):
+    """Test replace errors for missing variables or invalid use_values"""
+    ds = ds_1d
+    with pytest.raises(ValueError):
+        edit.replace(ds, var_target='NO', var_source='TEMP2')
+    with pytest.raises(ValueError):
+        edit.replace(ds, var_target='TEMP1', var_source='NO')
+    with pytest.raises(TypeError):
+        edit.replace(ds, var_target='TEMP1', var_source='TEMP2', use_values='bad')
