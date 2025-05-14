@@ -50,6 +50,9 @@ def make_multiline_literals(obj):
     else:
         return obj
 
+
+
+
 def export_metadata(ds, filename):
     meta = {
         "global_attributes": ds.attrs.copy(),
@@ -62,11 +65,32 @@ def export_metadata(ds, filename):
     with open(filename, 'w') as f:
         yaml.dump(meta, f, sort_keys=False, Dumper=LiteralDumper)
 
+
+
 # Load metadata from YAML and update Dataset
-def import_metadata(ds, filename):
+def import_metadata(ds, filename, replace_existing=True):
+    """
+    Import metadata from a YAML file into an xarray Dataset.
+
+    Parameters:
+    - ds: xarray.Dataset — the dataset to update.
+    - filename: str — path to YAML file.
+    - replace_existing: bool — whether to override existing attributes.
+    """
     with open(filename) as f:
         meta = yaml.safe_load(f)
-    ds.attrs.update(meta.get("global_attributes", {}))
+
+    # Update global attributes
+    for key, val in meta.get("global_attributes", {}).items():
+        if replace_existing or key not in ds.attrs:
+            ds.attrs[key] = val
+
+    # Update variable attributes
     for var, attrs in meta.get("variables", {}).items():
-        ds[var].attrs.update(attrs)
+        if var not in ds:
+            continue  # skip variables not in dataset
+        for key, val in attrs.items():
+            if replace_existing or key not in ds[var].attrs:
+                ds[var].attrs[key] = val
+
     return ds
