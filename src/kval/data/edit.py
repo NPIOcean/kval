@@ -198,6 +198,107 @@ def threshold(ds: xr.Dataset, variable: str,
     return ds_new
 
 
+def replace(
+    ds: xr.Dataset,
+    var_target: str,
+    var_source: str,
+    use_values: bool | dict = False,
+    flag_value: int = None,
+    var_flag: str = None,
+    sel_method: str | dict = None,
+    **indexers
+) -> xr.Dataset:
+    """
+    Replace values in var_target with values from var_source over specified indices or coordinate values.
+    Optionally flags the modified values in a third variable.
+
+    Parameters:
+        ds (xr.Dataset): The xarray Dataset.
+        var_target (str): Variable to modify.
+        var_source (str): Variable to take values from.
+        use_values (bool or dict):
+            If bool, applies to all dimensions (True = use .sel, False = use .isel).
+            If dict, specify per-dimension whether to use values (e.g., {'TIME': True, 'DEPTH': False}).
+        flag_value (int, optional): Value to assign in the flag variable where replacement occurs.
+        var_flag (str, optional):
+            Name of the flag variable to update. Flagging is only performed if this exists in `ds`.
+        sel_method (str or dict, optional):
+            Selection method for .sel (e.g., 'nearest', 'pad'), globally all
+            dimensions with use_values=True.
+        **indexers: Dimension-specific selectors (e.g., TIME=3 or TIME='2022-01-01').
+
+    Returns:
+        xr.Dataset: A new dataset with updated values (and optionally updated flag variable).
+    """
+    # Check that source and target variables exist
+    for var in [var_source, var_target]:
+        if var not in ds:
+            raise ValueError(f"Variable '{var}' not found in dataset.")
+
+    ds_new = ds.copy(deep=True)
+    dims = ds[var_target].dims
+
+    # Normalize use_values to a dict per-dimension
+    if isinstance(use_values, bool):
+        use_values_dict = {dim: use_values for dim in dims}
+    elif isinstance(use_values, dict):
+        use_values_dict = {dim: use_values.get(dim, False) for dim in dims}
+    else:
+        raise TypeError("use_values must be a bool or a dict of bools per dimension.")
+
+    # Prepare sel and isel indexers
+    sel_indexers = {}
+    isel_indexers = {}
+    for dim in dims:
+        val = indexers.get(dim, slice(None))
+
+        # Convert types
+        if isinstance(val, xr.core.dataarray.DataArray):
+            val = val.values
+        if isinstance(val, np.ndarray):
+            val = list(val)
+        if isinstance(val, int):
+            val = [val]
+        if isinstance(val, list):
+            val = [int(v) if isinstance(v, np.integer) else v for v in val]
+
+        # Assign to appropriate indexer type
+        if use_values_dict.get(dim, False):
+            sel_indexers[dim] = val
+        else:
+            isel_indexers[dim] = val
+
+    # Select source data from original dataset
+    source_data = ds[var_source]
+
+    if sel_indexers:
+        source_data = source_data.sel(**sel_indexers, method=sel_method)
+    if isel_indexers:
+        source_data = source_data.isel(**isel_indexers)
+
+    # Build indexer for .loc
+    # Need to treat the single- and multiple-index cases differently
+    # (type issue)
+    loc_index = {}
+    for coord_key in source_data.coords:
+        if source_data[coord_key].data.ndim == 0:
+            loc_index[coord_key] = source_data[coord_key].data.item()
+        else:
+            loc_index[coord_key] = list(source_data[coord_key].data)
+
+    ds_new[var_target].loc[loc_index] = source_data
+
+    # Optional flagging
+    if flag_value is not None and var_flag is not None:
+        if var_flag in ds_new:
+            ds_new[var_flag].loc[loc_index] = flag_value
+        else:
+            print(f"Warning: var_flag '{var_flag}' not found in dataset. "
+                  "Flagging skipped.")
+
+    return ds_new
+
+
 
 
 def linear_drift(
