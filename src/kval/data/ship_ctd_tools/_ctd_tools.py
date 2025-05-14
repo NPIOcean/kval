@@ -93,7 +93,6 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
         ns_binned = []
         for n_input in tqdm(ns_input, desc = prog_bar_msg_2):
             ns_binned += [bin_to_pressure(n_input, bins_dbar)]
-            print('BIIINNNINNGG')
     else:
         print('NOTE: It seems the input data already binned ->'
               ' using preexisting binning.')
@@ -546,6 +545,9 @@ def bin_to_pressure(ds, dp = 1):
 
     ds_binned.attrs['binned'] = f'{dp} dbar'
 
+    # Remove any bins with no data (PRES will be NaN)
+    ds_binned = ds_binned.dropna(dim='PRES', subset=['PRES'])
+
     # Set xarray option "keep_attrs" back to whatever it was
     xr.set_options(keep_attrs=_keep_attr_value)
 
@@ -591,7 +593,8 @@ def _btl_files_from_path(path):
 
 def _datasets_from_cnvlist(cnv_list,
                            station_from_filename = False,
-                           verbose = True, start_time_NMEA = False):
+                           verbose = True, start_time_NMEA = False,
+                           profile = "downcast",):
     '''
     Get a list of profile xr.Datasets from a list of .cnv files.
     '''
@@ -600,6 +603,7 @@ def _datasets_from_cnvlist(cnv_list,
         try:
             dataset_list += [sbe.read_cnv(fn, time_dim=True,
                             station_from_filename = station_from_filename,
+                            profile=profile,
                             suppress_time_warning=not verbose,
                             suppress_latlon_warning=not verbose,
                             start_time_NMEA = start_time_NMEA)]

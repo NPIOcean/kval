@@ -6,6 +6,8 @@ development/
 dist/
 kval_local_files
 tests/test_data/rbr_files
+tests/test_data/sbe_files/sbe911plus/fs22_unbinned
+
 conda_recipe/
 docs/build/
 

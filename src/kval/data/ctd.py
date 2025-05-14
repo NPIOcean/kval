@@ -61,6 +61,7 @@ def ctds_from_cnv_dir(
     station_from_filename: bool = False,
     verbose: bool = False,
     start_time_NMEA=False,
+    profile="downcast",
     processing_variable=True,
 ) -> xr.Dataset:
     """
@@ -76,6 +77,10 @@ def ctds_from_cnv_dir(
       If True: get start_time attribute from the "NMEA UTC (Time)"
       header line. Default (False) is to grab it from the "start_time" line.
       (That seems to occasionally cause problems).
+    - profile : str, optional
+            Specify the profile type (only relevant for unbinned input data).
+            Options are ['upcast', 'downcast', 'none'].
+
 
     Returns:
     - ds (xarray.Dataset): Joined CTD dataset.
@@ -93,6 +98,7 @@ def ctds_from_cnv_dir(
 
     profile_datasets = tools._datasets_from_cnvlist(
         cnv_files,
+        profile=profile,
         station_from_filename=station_from_filename,
         verbose=verbose,
         start_time_NMEA=start_time_NMEA,
@@ -138,6 +144,7 @@ ds = data.ctd.ctds_from_cnv_dir(
 def ctds_from_cnv_list(
     cnv_list: list,
     station_from_filename: bool = False,
+    profile="downcast",
     time_warnings: bool = True,
     verbose: bool = True,
     start_time_NMEA=False,
@@ -156,6 +163,9 @@ def ctds_from_cnv_list(
       the "NMEA UTC (Time)" header line. Default is to grab it from the
       "start_time" line.
     - processing_variable (bool): Whether to add a processing history variable.
+    - profile : str, optional
+            Specify the profile type (only relevant for unbinned input data).
+            Options are ['upcast', 'downcast', 'none'].
 
     Returns:
     - ds (xarray.Dataset): Joined CTD dataset.
@@ -163,6 +173,7 @@ def ctds_from_cnv_list(
     profile_datasets = tools._datasets_from_cnvlist(
         cnv_list,
         verbose=verbose,
+        profile=profile,
         start_time_NMEA=start_time_NMEA,
         station_from_filename=station_from_filename,
     )
