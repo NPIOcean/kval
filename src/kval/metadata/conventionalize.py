@@ -14,6 +14,7 @@ import pandas as pd
 import xarray as xr
 from typing import Optional
 
+
 def nans_to_fill_value(ds, fill_value=-9999.0):
     '''
     Replace NaNs in any (non-coodinate) variables with a fill value,
@@ -30,7 +31,7 @@ def nans_to_fill_value(ds, fill_value=-9999.0):
     return ds
 
 
-def add_range_attrs(D, vertical_var=None):
+def add_range_attrs(ds, vertical_var=None):
     """
     Add some global attributes based on the data.
 
@@ -48,12 +49,12 @@ def add_range_attrs(D, vertical_var=None):
 
     # Lateral
     try:
-        D.attrs["geospatial_lat_max"] = D.LATITUDE.max().values
-        D.attrs["geospatial_lon_max"] = D.LONGITUDE.max().values
-        D.attrs["geospatial_lat_min"] = D.LATITUDE.min().values
-        D.attrs["geospatial_lon_min"] = D.LONGITUDE.min().values
-        D.attrs["geospatial_bounds"] = _get_geospatial_bounds_wkt_str(D)
-        D.attrs["geospatial_bounds_crs"] = "EPSG:4326"
+        ds.attrs["geospatial_lat_max"] = ds.LATITUDE.max().values
+        ds.attrs["geospatial_lon_max"] = ds.LONGITUDE.max().values
+        ds.attrs["geospatial_lat_min"] = ds.LATITUDE.min().values
+        ds.attrs["geospatial_lon_min"] = ds.LONGITUDE.min().values
+        ds.attrs["geospatial_bounds"] = _get_geospatial_bounds_wkt_str(ds)
+        ds.attrs["geospatial_bounds_crs"] = "EPSG:4326"
     except (AttributeError, KeyError, ValueError) as e:
         print(
             "Did not find LATITUDE, LONGITUDE variables "
@@ -65,17 +66,19 @@ def add_range_attrs(D, vertical_var=None):
     try:
         # If not specified: look for a variable with attribute *axis='Z'*
         if vertical_var is None:
-            for varnm in list(D.keys()) + list(D.coords.keys()):
-                if "axis" in D[varnm].attrs:
-                    if D[varnm].attrs["axis"].upper() == "Z":
+            for varnm in list(ds.keys()) + list(ds.coords.keys()):
+                if "axis" in ds[varnm].attrs:
+                    if ds[varnm].attrs["axis"].upper() == "Z":
                         vertical_var = varnm
 
         if vertical_var is not None:
-            D.attrs["geospatial_vertical_min"] = np.round(D[vertical_var].values.min(), 2)
-            D.attrs["geospatial_vertical_max"] = np.round(D[vertical_var].values.max(), 2)
-            D.attrs["geospatial_vertical_units"] = D[vertical_var].units
-            D.attrs["geospatial_vertical_positive"] = "down"
-            D.attrs["geospatial_bounds_vertical_crs"] = "EPSG:5831"
+            ds.attrs["geospatial_vertical_min"] = np.round(
+                ds[vertical_var].values.min(), 2)
+            ds.attrs["geospatial_vertical_max"] = np.round(
+                ds[vertical_var].values.max(), 2)
+            ds.attrs["geospatial_vertical_units"] = ds[vertical_var].units
+            ds.attrs["geospatial_vertical_positive"] = "down"
+            ds.attrs["geospatial_bounds_vertical_crs"] = "EPSG:5831"
 
     except (AttributeError, KeyError, ValueError) as e:
         print(
@@ -85,26 +88,27 @@ def add_range_attrs(D, vertical_var=None):
 
     # Time
     try:
-        if D.TIME.dtype == np.dtype("datetime64[ns]"):
-            start_time, end_time = D.TIME.min(), D.TIME.max()
+        if ds.TIME.dtype == np.dtype("datetime64[ns]"):
+            start_time, end_time = ds.TIME.min(), ds.TIME.max()
         else:
-            start_time = cftime.num2date(D.TIME.min().values, D.TIME.units)
-            end_time = cftime.num2date(D.TIME.max().values, D.TIME.units)
-        D.attrs["time_coverage_start"] = time.datetime_to_ISO8601(start_time)
-        D.attrs["time_coverage_end"] = time.datetime_to_ISO8601(end_time)
+            start_time = cftime.num2date(ds.TIME.min().values, ds.TIME.units)
+            end_time = cftime.num2date(ds.TIME.max().values, ds.TIME.units)
+        ds.attrs["time_coverage_start"] = time.datetime_to_ISO8601(start_time)
+        ds.attrs["time_coverage_end"] = time.datetime_to_ISO8601(end_time)
 
         # Keep time_coverage_resolution if already present
-        if "time_coverage_resolution" not in D.attrs:
-            tdiff_std = np.std(np.diff(D.TIME))
-            tdiff_median = np.median(np.diff(D.TIME))
+        if "time_coverage_resolution" not in ds.attrs:
+            tdiff_std = np.std(np.diff(ds.TIME))
+            tdiff_median = np.median(np.diff(ds.TIME))
             if tdiff_std / tdiff_median < 1e-5:  # <- Looks like fixed interval
-                D.attrs["time_coverage_resolution"] = time.days_to_ISO8601(
+                ds.attrs["time_coverage_resolution"] = time.days_to_ISO8601(
                     tdiff_median
                 )
             else:  # <- Looks like a variable interval
-                D.attrs["time_coverage_resolution"] = "variable"
+                ds.attrs["time_coverage_resolution"] = "variable"
 
-        D.attrs["time_coverage_duration"] = _get_time_coverage_duration_str(D)
+        ds.attrs["time_coverage_duration"] = _get_time_coverage_duration_str(
+            ds)
     except (AttributeError, KeyError, ValueError) as e:
         print(
             'Did not find TIME variable (or TIME variable lacks "units" '
@@ -112,22 +116,22 @@ def add_range_attrs(D, vertical_var=None):
         )
         print(f"Error: {e}")
 
-    return D
+    return ds
 
 
-def add_now_as_date_created(D):
+def add_now_as_date_created(ds):
     """
     Add a global attribute "date_created" with todays date.
     """
     now_time = pd.Timestamp.now()
     now_str = time.datetime_to_ISO8601(now_time)
 
-    D.attrs["date_created"] = now_str
+    ds.attrs["date_created"] = now_str
 
-    return D
+    return ds
 
 
-def reorder_attrs(D):
+def reorder_attrs(ds):
     """
     Reorder global and variable attributes of a dataset based on the
     specified order in _standard_attrs.
@@ -141,33 +145,33 @@ def reorder_attrs(D):
     """
     # GLOBAL
     reordered_list = _reorder_list(
-        D.attrs, _standard_attrs.global_attrs_ordered
+        ds.attrs, _standard_attrs.global_attrs_ordered
     )
-    attrs_dict = D.attrs
-    D.attrs = {}
+    attrs_dict = ds.attrs
+    ds.attrs = {}
     for attr_name in reordered_list:
-        D.attrs[attr_name] = attrs_dict[attr_name]
+        ds.attrs[attr_name] = attrs_dict[attr_name]
 
     # VARIABLE
-    for varnm in D.data_vars:
+    for varnm in ds.data_vars:
         reordered_list_var = _reorder_list(
-            D[varnm].attrs, _standard_attrs.variable_attrs_ordered
+            ds[varnm].attrs, _standard_attrs.variable_attrs_ordered
         )
-        var_attrs_dict = D[varnm].attrs
-        D[varnm].attrs = {}
+        var_attrs_dict = ds[varnm].attrs
+        ds[varnm].attrs = {}
         for attr_name in reordered_list_var:
-            D[varnm].attrs[attr_name] = var_attrs_dict[attr_name]
-    return D
+            ds[varnm].attrs[attr_name] = var_attrs_dict[attr_name]
+    return ds
 
 
-def remove_numbers_in_var_names(D):
+def remove_numbers_in_var_names(ds):
     """
     Remove numbers from variable names like "TEMP1", "PSAL2".
 
     If more than one exists (e.g. "TEMP1", "TEMP2") -> don't change anything.
     """
     # Get variable names
-    all_varnms = [varnm for varnm in D.data_vars]
+    all_varnms = [varnm for varnm in ds.data_vars]
 
     # Get number-stripped names
     varnms_stripped = [re.sub(r"\d", "", varnm) for varnm in all_varnms]
@@ -180,9 +184,9 @@ def remove_numbers_in_var_names(D):
     for varnm in all_varnms:
         if re.sub(r"\d", "", varnm) not in duplicates:
             varnm_stripped = re.sub(r"\d", "", varnm)
-            D = D.rename_vars({varnm: varnm_stripped})
+            ds = ds.rename_vars({varnm: varnm_stripped})
 
-    return D
+    return ds
 
 
 def _reorder_list(input_list, ordered_list):
@@ -208,7 +212,7 @@ def _reorder_list(input_list, ordered_list):
     return reordered_attributes
 
 
-def _get_geospatial_bounds_wkt_str(D, decimals=2):
+def _get_geospatial_bounds_wkt_str(ds, decimals=2):
     """
     Get the geospatial_bounds_crs value on the required format:
 
@@ -218,14 +222,14 @@ def _get_geospatial_bounds_wkt_str(D, decimals=2):
     the last digit in the direction such that all points are contained
     within the polygon
 
-    NOTE: D must already have geospatial_lat_max (etc) attributes.
+    NOTE: ds must already have geospatial_lat_max (etc) attributes.
 
     """
 
-    lat_max = number.custom_round_ud(D.geospatial_lat_max, decimals, "up")
-    lat_min = number.custom_round_ud(D.geospatial_lat_min, decimals, "dn")
-    lon_max = number.custom_round_ud(D.geospatial_lon_max, decimals, "up")
-    lon_min = number.custom_round_ud(D.geospatial_lon_min, decimals, "dn")
+    lat_max = number.custom_round_ud(ds.geospatial_lat_max, decimals, "up")
+    lat_min = number.custom_round_ud(ds.geospatial_lat_min, decimals, "dn")
+    lon_max = number.custom_round_ud(ds.geospatial_lon_max, decimals, "up")
+    lon_min = number.custom_round_ud(ds.geospatial_lon_min, decimals, "dn")
 
     corner_dict = (
         lon_min,
@@ -244,18 +248,19 @@ def _get_geospatial_bounds_wkt_str(D, decimals=2):
     return wkt_str
 
 
-def _get_time_coverage_duration_str(D):
+def _get_time_coverage_duration_str(ds):
     """
     Get the time duration based on first and last time stamp on
     the required ISO8601format (P[YYYY]-[MM]-[DD]T[hh]:[mm]:[ss])
     """
-    start_dt, end_dt = cftime.num2date([D.TIME[0], D.TIME[-1]], D.TIME.units)
+    start_dt, end_dt = cftime.num2date(
+        [ds.TIME[0], ds.TIME[-1]], ds.TIME.units)
     duration_str = time.start_end_times_cftime_to_duration(start_dt, end_dt)
     return duration_str
 
 
 def add_standard_var_attrs(
-    D: xr.Dataset, override: bool = False, data_type: Optional[str] = None
+    ds: xr.Dataset, override: bool = False, data_type: Optional[str] = None
 ) -> xr.Dataset:
     """
     Add variable attributes to an xarray Dataset, as specified in
@@ -271,7 +276,7 @@ def add_standard_var_attrs(
 
     Parameters:
     -----------
-    D : xr.Dataset
+    ds : xr.Dataset
         The xarray Dataset to modify.
     override : bool, optional
         If True, existing variable attributes will be overwritten. Defaults to
@@ -282,11 +287,11 @@ def add_standard_var_attrs(
 
     Returns:
     --------
-    D : xr.Dataset
+    ds : xr.Dataset
         The modified xarray Dataset with updated variable attributes.
     """
 
-    for varnm in list(D.data_vars) + list(D.coords):
+    for varnm in list(ds.data_vars) + list(ds.coords):
 
         # Handling number suffix (e.g. TEMP1, PSAL2)
         try:
@@ -315,23 +320,23 @@ def add_standard_var_attrs(
                 core_name
             ].copy()
             for attr, item in var_attrs_dict.items():
-                if override or attr not in D[varnm].attrs:
-                    D[varnm].attrs[attr] = item
+                if override or attr not in ds[varnm].attrs:
+                    ds[varnm].attrs[attr] = item
 
             # Append suffix (e.g., "(primary sensor)") to long_name
-            if "long_name" in D[varnm].attrs:
-                D[varnm].attrs["long_name"] += long_name_add
+            if "long_name" in ds[varnm].attrs:
+                ds[varnm].attrs["long_name"] += long_name_add
 
         # Handle specific case for .btl files
-        if "source_files" in D.attrs and "long_name" in D[varnm].attrs:
-            if D.source_files[-3:].upper() == "BTL" and data_type == "ctdprof":
-                long_name = D[varnm].attrs["long_name"]
+        if "source_files" in ds.attrs and "long_name" in ds[varnm].attrs:
+            if ds.source_files[-3:].upper() == "BTL" and data_type == "ctdprof":
+                long_name = ds[varnm].attrs["long_name"]
                 long_name_nocap = long_name[0].lower() + long_name[1:]
                 if (
                     varnm != "NISKIN_NUMBER"
-                    and "NISKIN_NUMBER" in D[varnm].dims
+                    and "NISKIN_NUMBER" in ds[varnm].dims
                 ):
-                    D[varnm].attrs["long_name"] = (
+                    ds[varnm].attrs["long_name"] = (
                         f"Average {long_name_nocap} measured by CTD "
                         "during bottle closing")
 
@@ -349,43 +354,43 @@ def add_standard_var_attrs(
 
                 # Add remaining attributes
                 for attr, item in var_attrs_dict.items():
-                    if override or attr not in D[varnm].attrs:
-                        D[varnm].attrs[attr] = item
+                    if override or attr not in ds[varnm].attrs:
+                        ds[varnm].attrs[attr] = item
 
             # Add "Standard deviation of" to long_name
-            if "long_name" in D[varnm].attrs:
-                long_name = D[varnm].attrs["long_name"]
+            if "long_name" in ds[varnm].attrs:
+                long_name = ds[varnm].attrs["long_name"]
                 long_name_nocap = long_name[0].lower() + long_name[1:]
-                D[varnm].attrs[
+                ds[varnm].attrs[
                     "long_name"
                 ] = f"Standard deviation of {long_name_nocap}"
 
             # Link ancillary variables
-            D[varnm].attrs["ancillary_variables"] = varnm_prefix
-            D[varnm_prefix].attrs["ancillary_variables"] = varnm
+            ds[varnm].attrs["ancillary_variables"] = varnm_prefix
+            ds[varnm_prefix].attrs["ancillary_variables"] = varnm
 
         # Guess coverage_content_type if not already present
-        if not override and "coverage_content_type" not in D[varnm].attrs:
+        if not override and "coverage_content_type" not in ds[varnm].attrs:
             if varnm in ["NISKIN_NUMBER", "TIME", "TIME_SAMPLE"]:
-                D[varnm].attrs["coverage_content_type"] = "coordinate"
+                ds[varnm].attrs["coverage_content_type"] = "coordinate"
             elif varnm in ["LONGITUDE", "LATITUDE"]:
-                D[varnm].attrs["coverage_content_type"] = (
+                ds[varnm].attrs["coverage_content_type"] = (
                     "referenceInformation")
             elif varnm in ["PROCESSING", "INSTRUMENT"]:
-                D[varnm].attrs["coverage_content_type"] = (
+                ds[varnm].attrs["coverage_content_type"] = (
                     "auxiliaryInformation")
             else:
-                D[varnm].attrs["coverage_content_type"] = "physicalMeasurement"
+                ds[varnm].attrs["coverage_content_type"] = "physicalMeasurement"
 
         # Remove _FillValue from the PROCESSING variable
         if varnm == 'PROCESSING':
-            if '_FillValue' in D.PROCESSING.attrs:
-                del D.PROCESSING.attrs['_FillValue']
+            if '_FillValue' in ds.PROCESSING.attrs:
+                del ds.PROCESSING.attrs['_FillValue']
 
-    return D
+    return ds
 
 
-def add_standard_glob_attrs_org(D, override=False, org="npi"):
+def add_standard_glob_attrs_org(ds, override=False, org="npi"):
     """
     Adds standard organization, specific global variables for a CTD dataset as
     specified in kval.data.nc_format._standard_attrs_org.
@@ -402,16 +407,15 @@ def add_standard_glob_attrs_org(D, override=False, org="npi"):
     org_attrs = _standard_attrs_org.standard_globals_org[org.lower()]
 
     for attr, item in org_attrs.items():
-        if attr not in D.attrs:
-            D.attrs[attr] = item
+        if attr not in ds.attrs:
+            ds.attrs[attr] = item
         else:
             if override:
-                D.attrs[attr] = item
+                ds.attrs[attr] = item
 
-    return D
+    return ds
 
-
-def add_standard_glob_attrs_ctd(D, override=False, org=False):
+def add_standard_glob_attrs_ctd(ds, override=False, org=False):
     """
     Adds standard global variables for a CTD dataset as specified in
     kval.metadata.standard_attrs_global_ctd.
@@ -421,16 +425,15 @@ def add_standard_glob_attrs_ctd(D, override=False, org=False):
     """
 
     for attr, item in _standard_attrs.standard_attrs_global_ctd.items():
-        if attr not in D.attrs:
-            D.attrs[attr] = item
+        if attr not in ds.attrs:
+            ds.attrs[attr] = item
         else:
             if override:
-                D.attrs[attr] = item
+                ds.attrs[attr] = item
 
-    return D
+    return ds
 
-
-def add_standard_glob_attrs_moor(D, override=False, org=None):
+def add_standard_glob_attrs_moor(ds, override=False, org=None):
     """
     Adds standard global variables for a CTD dataset as specified in
     oceanograpy.data.nc_format.standard_attrs_global_moored.
@@ -440,16 +443,15 @@ def add_standard_glob_attrs_moor(D, override=False, org=None):
     """
 
     for attr, item in _standard_attrs.standard_attrs_global_moored.items():
-        if attr not in D.attrs:
-            D.attrs[attr] = item
+        if attr not in ds.attrs:
+            ds.attrs[attr] = item
         else:
             if override:
-                D.attrs[attr] = item
+                ds.attrs[attr] = item
 
-    return D
+    return ds
 
-
-def add_gmdc_keywords_ctd(D, reset=True, moored = False):
+def add_gmdc_keywords_ctd(ds, reset=True, moored=False):
     """
     Adds standard GMDC variables a la
     "OCEANS>OCEAN TEMPERATURE>WATER TEMPERATURE"
@@ -463,19 +465,18 @@ def add_gmdc_keywords_ctd(D, reset=True, moored = False):
         gmdc_dict = _standard_attrs.gmdc_keyword_dict_ctd
     keywords = []
 
-    for varnm in D.keys():
+    for varnm in ds.keys():
         for gmdc_kw in gmdc_dict:
             if gmdc_kw in varnm:
                 keywords += [gmdc_dict[gmdc_kw]]
 
     unique_keywords = list(set(keywords))
 
-    D.attrs["keywords"] = ",".join(unique_keywords)
+    ds.attrs["keywords"] = ",".join(unique_keywords)
 
-    return D
+    return ds
 
-
-def add_gmdc_keywords_moor(D, reset=True):
+def add_gmdc_keywords_moor(ds, reset=True):
     """
     Adds standard GMDC variables a la
     "OCEANS>OCEAN TEMPERATURE>WATER TEMPERATURE"
@@ -485,35 +486,34 @@ def add_gmdc_keywords_moor(D, reset=True):
     gmdc_dict = _standard_attrs.gmdc_keyword_dict_moored
     keywords = []
 
-    for varnm in D.keys():
+    for varnm in ds.keys():
         for gmdc_kw in gmdc_dict:
             if gmdc_kw in varnm:
                 keywords += [gmdc_dict[gmdc_kw]]
 
     unique_keywords = list(set(keywords))
 
-    D.attrs["keywords"] = ",".join(unique_keywords)
+    ds.attrs["keywords"] = ",".join(unique_keywords)
 
-    return D
+    return ds
 
-
-def set_var_attr(D, variable, attr):
+def set_var_attr(ds, variable, attr):
     """
     Set variable attributes for a dataset or data frame.
 
     Using interactive widgets.
     """
 
-    # Check if the attribute already exists in D
-    if attr in D[variable].attrs:
-        initial_value = D[variable].attrs[attr]
+    # Check if the attribute already exists in ds
+    if attr in ds[variable].attrs:
+        initial_value = ds[variable].attrs[attr]
     else:
         initial_value = None
 
     option_dict = _standard_attrs.global_attrs_options
     if attr in option_dict:
-        D = user_input.set_var_attr_pulldown(
-            D,
+        ds = user_input.set_var_attr_pulldown(
+            ds,
             variable,
             attr,
             _standard_attrs.global_attrs_options[attr],
@@ -525,14 +525,13 @@ def set_var_attr(D, variable, attr):
             rows = 10
         else:
             rows = 1
-        D = user_input.set_var_attr_textbox(
-            D, variable, attr, rows, initial_value=initial_value
+        ds = user_input.set_var_attr_textbox(
+            ds, variable, attr, rows, initial_value=initial_value
         )
 
-    return D
+    return ds
 
-
-def set_glob_attr(D, attr):
+def set_glob_attr(ds, attr):
     """
     Set global attributes for a  dataset or data frame.
 
@@ -543,14 +542,14 @@ def set_glob_attr(D, attr):
     option_dict = _standard_attrs.global_attrs_options
 
     # Check if the attribute already exists in D
-    if attr in D.attrs:
-        initial_value = D.attrs[attr]
+    if attr in ds.attrs:
+        initial_value = ds.attrs[attr]
     else:
         initial_value = None
 
     if attr in option_dict:
-        D = user_input.set_attr_pulldown(
-            D,
+        ds = user_input.set_attr_pulldown(
+            ds,
             attr,
             _standard_attrs.global_attrs_options[attr],
             initial_value=initial_value,
@@ -561,22 +560,21 @@ def set_glob_attr(D, attr):
             rows = 10
         else:
             rows = 1
-        D = user_input.set_attr_textbox(
-            D, attr, rows, initial_value=initial_value
+        ds = user_input.set_attr_textbox(
+            ds, attr, rows, initial_value=initial_value
         )
 
-    return D
+    return ds
 
-
-def add_missing_glob(D):
+def add_missing_glob(ds):
     """
     Prompts the user to fill in information for missing global attrubtes
     """
 
     var_attrs_dict_ref = _standard_attrs.variable_attrs_necessary.copy()
 
-    for varnm in D:
-        if "PRES" in D[varnm].dims or "NISKIN_NUMBER" in D[varnm].dims:
+    for varnm in ds:
+        if "PRES" in ds[varnm].dims or "NISKIN_NUMBER" in ds[varnm].dims:
             _attrs_dict_ref_var = var_attrs_dict_ref.copy()
 
             if varnm == "CHLA":
@@ -596,8 +594,8 @@ def add_missing_glob(D):
 
             any_missing = False
             for var_attr in _attrs_dict_ref_var:
-                if var_attr not in D[varnm].attrs:
-                    set_var_attr(D, varnm, var_attr)
+                if var_attr not in ds[varnm].attrs:
+                    set_var_attr(ds, varnm, var_attr)
                     any_missing = True
 
             if not any_missing:
@@ -607,7 +605,7 @@ def add_missing_glob(D):
     # glob_attrs_dict_ref = _standard_attrs.some_dict.copy()
 
     # for attr in glob_attrs_dict_ref:
-    #    if attr not in D.attrs:
-    #        set_glob_attr(D, attr)
+    #    if attr not in ds.attrs:
+    #        set_glob_attr(ds, attr)
 
-    return D
+    return ds
