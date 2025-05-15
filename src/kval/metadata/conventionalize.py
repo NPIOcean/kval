@@ -14,6 +14,21 @@ import pandas as pd
 import xarray as xr
 from typing import Optional
 
+def nans_to_fill_value(ds, fill_value=-9999.0):
+    '''
+    Replace NaNs in any (non-coodinate) variables with a fill value,
+    and update the _FillValue variable attributes accordingly.
+
+    Only works on float values; leaves integer values alone.
+    '''
+
+    for key in list(ds.coords) + list(ds.data_vars):
+        if np.issubdtype(ds[key].dtype, np.floating):  # Only for floats
+            ds[key] = ds[key].fillna(fill_value)
+            ds[key].attrs['_FillValue'] = fill_value
+
+    return ds
+
 
 def add_range_attrs(D, vertical_var=None):
     """
