@@ -56,7 +56,8 @@ def make_multiline_literals(obj):
 def export_metadata(ds, filename):
     meta = {
         "global_attributes": ds.attrs.copy(),
-        "variables": {var: ds[var].attrs.copy() for var in ds.data_vars}
+        "variables": {var: ds[var].attrs.copy() for
+                      var in list(ds.coords) + list(ds.data_vars)}
     }
     # Clean and process for YAML output
     meta = clean_metadata(meta)
