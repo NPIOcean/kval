@@ -49,10 +49,10 @@ def add_range_attrs(ds, vertical_var=None):
 
     # Lateral
     try:
-        ds.attrs["geospatial_lat_max"] = ds.LATITUDE.max().values
-        ds.attrs["geospatial_lon_max"] = ds.LONGITUDE.max().values
-        ds.attrs["geospatial_lat_min"] = ds.LATITUDE.min().values
-        ds.attrs["geospatial_lon_min"] = ds.LONGITUDE.min().values
+        ds.attrs["geospatial_lat_max"] = float(ds.LATITUDE.max().values)
+        ds.attrs["geospatial_lon_max"] = float(ds.LONGITUDE.max().values)
+        ds.attrs["geospatial_lat_min"] = float(ds.LATITUDE.min().values)
+        ds.attrs["geospatial_lon_min"] = float(ds.LONGITUDE.min().values)
         ds.attrs["geospatial_bounds"] = _get_geospatial_bounds_wkt_str(ds)
         ds.attrs["geospatial_bounds_crs"] = "EPSG:4326"
     except (AttributeError, KeyError, ValueError) as e:
@@ -71,12 +71,21 @@ def add_range_attrs(ds, vertical_var=None):
                     if ds[varnm].attrs["axis"].upper() == "Z":
                         vertical_var = varnm
 
+        # Make sure we dont include _FillValue (can have Nans for some aux
+        # coordinates..)
+        vertical_var_da = ds[vertical_var].copy(deep = True)
+        if '_FillValue' in vertical_var_da.attrs:
+            fill_value = vertical_var_da._FillValue
+            vertical_var_da = vertical_var_da.where(
+                vertical_var_da != fill_value)
+
+
         if vertical_var is not None:
             ds.attrs["geospatial_vertical_min"] = np.round(
-                ds[vertical_var].values.min(), 2)
+                np.nanmin(vertical_var_da.values), 2)
             ds.attrs["geospatial_vertical_max"] = np.round(
-                ds[vertical_var].values.max(), 2)
-            ds.attrs["geospatial_vertical_units"] = ds[vertical_var].units
+                np.nanmax(vertical_var_da.values), 2)
+            ds.attrs["geospatial_vertical_units"] = vertical_var_da.units
             ds.attrs["geospatial_vertical_positive"] = "down"
             ds.attrs["geospatial_bounds_vertical_crs"] = "EPSG:5831"
 

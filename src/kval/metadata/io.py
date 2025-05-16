@@ -63,7 +63,8 @@ def export_metadata(ds, filename):
     meta = make_multiline_literals(meta)
 
     with open(filename, 'w') as f:
-        yaml.dump(meta, f, sort_keys=False, Dumper=LiteralDumper)
+        yaml.dump(meta, f, sort_keys=False, Dumper=LiteralDumper,
+                  allow_unicode=True)
 
 
 
