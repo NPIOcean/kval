@@ -189,9 +189,15 @@ def read_cnv(
     # Apply the flags specified in the "flag" column of the cnv file
     if apply_flags:
         ds = _apply_flag(ds)
+        ds = _apply_flag_variables(
+            ds,
+            bad_flag_value=header_info["bad_flag_value"])
         ds.attrs["SBE_flags_applied"] = "yes"
+
     else:
         ds.attrs["SBE_flags_applied"] = "no"
+
+
 
     # Add a time dimension to a profile dataset
     if time_dim and not _is_moored:
@@ -327,7 +333,8 @@ def read_header(filename: str) -> dict:
             "longitude",
             "NMEA_time",
             "start_time",
-            "start_history"
+            "start_history",
+            "bad_flag_value",
         ]
         hdict = {hkey: [] for hkey in hkeys}
 
@@ -442,6 +449,16 @@ def read_header(filename: str) -> dict:
                     hdict["start_time"].strftime("%Y-%m-%d")
                     + ": Data collection."
                 )
+
+            # Read bad_flag value
+            if "# bad_flag" in line:
+
+                match = re.search(r"=\s*([-\d.eE]+)", line)
+                if match:
+                    hdict['bad_flag_value']= float(match.group(1))
+                else:
+                    print('Had trouble reading the `bad_flag` value - assigning nan')
+                    hdict['bad_flag_value']= np.nan
 
             # Read cruise/ship/station/bottom depth/operator if available
             if "** CRUISE" in line.upper():
@@ -1691,6 +1708,35 @@ def _apply_flag(ds):
     ds = ds.where(ds.SBE_FLAG == 0, drop=True)
 
     return ds
+
+
+def _apply_flag_variables(ds: xr.Dataset, bad_flag_value: float) -> xr.Dataset:
+    """
+    Replaces values equal to `bad_flag_value` with NaN in all variables in the dataset.
+
+    Parameters:
+    - ds: xarray.Dataset
+    - bad_flag_value: float, e.g. -9.990e-29
+
+    Returns:
+    - xarray.Dataset with bad values set to NaN and flagged entries removed
+    """
+
+    if bad_flag_value:
+        # Replace bad_flag_value with NaN
+
+        ds_clean = ds.copy(deep = True)
+
+        for var in ds.data_vars:
+            try:
+                # Only apply .where to numeric variables that contain the bad_flag_value
+                if np.issubdtype(ds[var].dtype, np.number) and (ds[var] == bad_flag_value).any():
+                    ds_clean[var] = ds[var].where(ds[var] != bad_flag_value, np.nan)
+            except Exception as e:
+                pass
+    else:
+        return ds
+    return ds_clean
 
 
 def _remove_up_dncast(ds, keep="downcast"):
