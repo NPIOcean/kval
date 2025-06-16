@@ -560,7 +560,7 @@ def read_header(filename: str) -> dict:
         # Deal with duplicate columns (append DUPLICATE to strings..)
         seen = set()
         duplicate_columns_in_cnv = False
-        for i, item in enumerate(hdict["col_names"]):
+        for i, item in enumerate(hdict["col_longnames"]):
             if item in seen:
                 hdict["col_names"][i] = f"{item}_DUPLICATE"
                 hdict["col_longnames"][i] = f"{item} [DUPLICATE]"
