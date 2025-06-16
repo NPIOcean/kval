@@ -15,8 +15,10 @@ def clean_metadata(obj):
         return {k: clean_metadata(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return [clean_metadata(v) for v in obj]
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()  # numpy array → native list
     elif isinstance(obj, np.generic):
-        return obj.item()  # numpy scalar → native
+        return obj.item()  # numpy scalar → native Python type
     else:
         return obj
 
