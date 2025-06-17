@@ -558,37 +558,27 @@ def read_header(filename: str) -> dict:
                 break
 
         # Deal with duplicate columns (append DUPLICATE to strings..)
-        #seen = set()
-        #duplicate_columns_in_cnv = False
-        #for i, item in enumerate(hdict["col_names"]):
-        #    if item in seen:
-        #        hdict["col_names"][i] = f"{item}_DUPLICATE"
-        #        hdict["col_longnames"][i] = f"{hdict['col_longnames'][i]} [DUPLICATE]"
-        #        duplicate_columns_in_cnv = True
-        #    else:
-        #        seen.add(item)
 
-        count = 0
-        seen=set()
-        while len(seen) != len(hdict["col_names"]):
-            seen = set()
-            count = count+1
-            for i, item in enumerate(hdict["col_names"]):
-                if item in seen:
-                    if count == 1:
-                        duplicate = "DUPLICATE"
-                    else: duplicate = f"{count}"
-                    hdict["col_names"][i] = f"{item}_{duplicate}"
-                    hdict["col_longnames"][i] = f"{hdict['col_longnames'][i]} [{duplicate}]"
-                    duplicate_columns_in_cnv = True
-                else:
-                    seen.add(item)
+        seen = set()
+        duplicate_columns_in_cnv = False
 
-        if duplicate_columns_in_cnv:
-#            print("NOTE: Duplicate columns found in cnv! "
-#                  "(inspect your .cnv files..)"
-#                  )
-            pass
+        for i, item in enumerate(hdict["col_names"]):
+            original_item = item
+            dup_str = 'DUPLICATE'
+            dup_count = 0
+
+            while item in seen:
+                duplicate_columns_in_cnv = True
+                item = f"{original_item}_{dup_str}" if dup_count == 0 else f"{original_item}_DUPLICATE{dup_count}"
+                dup_count += 1
+
+            hdict["col_names"][i] = item
+            if dup_count > 0:  # Only update longname if it was changed
+                hdict["col_longnames"][i] = f"{hdict['col_longnames'][i]} [{item.split('_', 1)[1]}]"
+            seen.add(item)
+
+        # if duplicate_columns_in_cnv:
+        #     print("NOTE: Duplicate columns found in cnv!")
 
         # Remove the first ('</Sensors>') and last ('*END*') lines from the SBE
         # history string.
