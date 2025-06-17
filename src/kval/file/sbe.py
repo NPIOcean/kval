@@ -1436,7 +1436,7 @@ def _remove_duplicate_variables(ds):
     """
 
     ds = ds.drop_vars(
-        [var for var in ds.variables if var.endswith("_DUPLICATE")]
+        [var for var in ds.variables if "_DUPLICATE" in var]
     )
 
     return ds
