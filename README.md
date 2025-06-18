@@ -18,7 +18,7 @@ About the latest release, `0.3.2`:
 
 - This version adds basic documentation.
 - This version is used to work out pypi and conda distribution.
-- An updated version with improved documentation and a code overhaul is planned for Spring 2025.
+- An updated version with improved documentation and a code overhaul is planned for 2025.
 
 
 `kval` is in active development.
@@ -33,6 +33,9 @@ Conda:
     conda install -c npiocean -c conda-forge kval
 
 
-Pip:
+Pip [^tag] :
 
     pip install kval
+
+
+[^tag]: Conda is recommended for Windows users as we have experienced errors with the dependent library `compliance-checker` on Windows+pip.
