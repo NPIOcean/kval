@@ -71,6 +71,8 @@ def read_cnv(
     lon: Optional[float] = None,
     station: Optional[str] = None,
     station_from_filename: Optional[bool] = False,
+    remove_duplicates: Optional[bool] = True,
+
 ) -> xr.Dataset:
     """
         Reads CTD data and metadata from a .cnv file into a more handy format.
@@ -130,12 +132,11 @@ def read_cnv(
             Option to read the station name from the file name, e.g. "STA001"
             from a file "STA001.cnv". Otherwise, we try to grab it from the
             header. Default is False.
-    racted (useful for inspecting up/downcast extraction and SBE flags).
-            Default is False.
+        remove_duplicates : bool, optional
+            Remove duplicate columns (identical name). If not removed,
+            duplicate comumns will be assigned suffices, DUPLICATE,
+            DUPLICATE2, etc. Default is True.
 
-            - Maybe also moored sensors/TSG? (or should those be separate?)
-        - Tests
-            - Make a test_ctd_data.cnv file with mock values and use pytest
     """
     # Parse useful information from the file header
     header_info = read_header(source_file)
@@ -149,7 +150,15 @@ def read_cnv(
     ds = _read_column_data_xr(source_file, header_info)
 
     # Remove duplicate varaiables
-    ds = _remove_duplicate_variables(ds)
+    if any("_DUPLICATE" in var for var in ds.data_vars):
+        if remove_duplicates:
+            ds = _remove_duplicate_variables(ds)
+            remove_dup_str = 'removing duplicates'
+        else:
+            remove_dup_str = 'preserving duplicates'
+
+        print(f'Note: Duplicate variables found ({remove_dup_str}).')
+
 
     # Update variable names (e.g. t090C -> TEMP1)
     ds = _update_variables(ds, source_file, _is_moored)
@@ -457,8 +466,9 @@ def read_header(filename: str) -> dict:
                 if match:
                     hdict['bad_flag_value']= float(match.group(1))
                 else:
-                    print('Had trouble reading the `bad_flag` value - assigning nan')
-                    hdict['bad_flag_value']= np.nan
+                    print('Had trouble reading the `bad_flag`'
+                          ' value - assigning nan')
+                    hdict['bad_flag_value'] = np.nan
 
             # Read cruise/ship/station/bottom depth/operator if available
             if "** CRUISE" in line.upper():
@@ -565,20 +575,21 @@ def read_header(filename: str) -> dict:
         for i, item in enumerate(hdict["col_names"]):
             original_item = item
             dup_str = 'DUPLICATE'
-            dup_count = 0
+            dup_count = 1
 
             while item in seen:
                 duplicate_columns_in_cnv = True
-                item = f"{original_item}_{dup_str}" if dup_count == 0 else f"{original_item}_DUPLICATE{dup_count}"
+                item = (f"{original_item}_{dup_str}" if dup_count == 1
+                        else f"{original_item}_DUPLICATE{dup_count}")
                 dup_count += 1
 
             hdict["col_names"][i] = item
-            if dup_count > 0:  # Only update longname if it was changed
-                hdict["col_longnames"][i] = f"{hdict['col_longnames'][i]} [{item.split('_', 1)[1]}]"
+            if dup_count > 1:  # Only update longname if it was changed
+
+                hdict["col_longnames"][i] = (
+                    f"{hdict['col_longnames'][i]} [{item.split('_', -1)[-1]}]")
             seen.add(item)
 
-        # if duplicate_columns_in_cnv:
-        #     print("NOTE: Duplicate columns found in cnv!")
 
         # Remove the first ('</Sensors>') and last ('*END*') lines from the SBE
         # history string.

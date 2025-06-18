@@ -63,6 +63,8 @@ def ctds_from_cnv_dir(
     start_time_NMEA=False,
     profile="downcast",
     processing_variable=True,
+    remove_duplicates=True,
+
 ) -> xr.Dataset:
     """
     Create CTD datasets from CNV files in the specified path.
@@ -78,9 +80,12 @@ def ctds_from_cnv_dir(
       header line. Default (False) is to grab it from the "start_time" line.
       (That seems to occasionally cause problems).
     - profile : str, optional
-            Specify the profile type (only relevant for unbinned input data).
-            Options are ['upcast', 'downcast', 'none'].
-
+        Specify the profile type (only relevant for unbinned input data).
+        Options are ['upcast', 'downcast', 'none'].
+    - remove_duplicates : bool, optional
+        Remove duplicate columns (identical name). If not removed,
+        duplicate comumns will be assigned suffices, DUPLICATE,
+        DUPLICATE2, etc. Default is True.
 
     Returns:
     - ds (xarray.Dataset): Joined CTD dataset.
@@ -102,6 +107,7 @@ def ctds_from_cnv_dir(
         station_from_filename=station_from_filename,
         verbose=verbose,
         start_time_NMEA=start_time_NMEA,
+        remove_duplicates=remove_duplicates,
     )
 
     ds = tools.join_cruise(profile_datasets, verbose=verbose)
@@ -149,6 +155,8 @@ def ctds_from_cnv_list(
     verbose: bool = True,
     start_time_NMEA=False,
     processing_variable=True,
+    remove_duplicates=True,
+
 ) -> xr.Dataset:
     """
     Create CTD datasets from CNV files in the specified list.
@@ -166,6 +174,10 @@ def ctds_from_cnv_list(
     - profile : str, optional
             Specify the profile type (only relevant for unbinned input data).
             Options are ['upcast', 'downcast', 'none'].
+    - remove_duplicates : bool, optional
+        Remove duplicate columns (identical name). If not removed,
+        duplicate comumns will be assigned suffices, DUPLICATE,
+        DUPLICATE2, etc. Default is True.
 
     Returns:
     - ds (xarray.Dataset): Joined CTD dataset.
@@ -176,6 +188,7 @@ def ctds_from_cnv_list(
         profile=profile,
         start_time_NMEA=start_time_NMEA,
         station_from_filename=station_from_filename,
+        remove_duplicates=remove_duplicates,
     )
     ds = tools.join_cruise(profile_datasets, verbose=verbose)
 

@@ -594,7 +594,8 @@ def _btl_files_from_path(path):
 def _datasets_from_cnvlist(cnv_list,
                            station_from_filename = False,
                            verbose = True, start_time_NMEA = False,
-                           profile = "downcast",):
+                           profile = "downcast",
+                           remove_duplicates=True):
     '''
     Get a list of profile xr.Datasets from a list of .cnv files.
     '''
@@ -606,7 +607,8 @@ def _datasets_from_cnvlist(cnv_list,
                             profile=profile,
                             suppress_time_warning=not verbose,
                             suppress_latlon_warning=not verbose,
-                            start_time_NMEA = start_time_NMEA)]
+                            start_time_NMEA = start_time_NMEA,
+                            remove_duplicates=remove_duplicates)]
         except:
             print(f'\n*NOTE*: Could not read file {fn}.')
             print('(This usually indicates some sort of problem with the file.'
