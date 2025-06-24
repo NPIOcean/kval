@@ -14,8 +14,6 @@ About the latest release, `0.3.2`:
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15268696.svg)](https://doi.org/10.5281/zenodo.15268696)
 
-
-
 - This version adds basic documentation.
 - This version is used to work out pypi and conda distribution.
 - An updated version with improved documentation and a code overhaul is planned for 2025.
