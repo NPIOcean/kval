@@ -42,7 +42,7 @@ def quiver(
     lon = np.asarray(lon)
     lat = np.asarray(lat)
     u = np.asarray(u_east)
-    v = np.asarray(v_east)
+    v = np.asarray(v_north)
 
     # Normalize longitudes to [-180, 180]
     lon = (lon + 180) % 360 - 180
