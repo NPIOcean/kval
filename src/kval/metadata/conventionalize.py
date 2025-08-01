@@ -127,15 +127,25 @@ def add_range_attrs(ds, vertical_var=None):
 
     return ds
 
-
-def add_now_as_date_created(ds):
+def add_now_as_date_created(
+    ds: xr.Dataset, 
+    datefmt: str = "%d %b %Y"
+) -> xr.Dataset:
     """
-    Add a global attribute "date_created" with todays date.
+    Adds a global attribute "date_created" with today's date formatted according to `datefmt`.
+
+    Args:
+        ds (xr.Dataset): The xarray Dataset to which the attribute will be added.
+        datefmt (str, optional): Date format string compatible with `datetime.strftime`.
+            Defaults to "%d %b %Y" (e.g., "01 Aug 2025").
+
+    Returns:
+        xr.Dataset: The input Dataset with updated global attribute "date_created".
     """
     now_time = pd.Timestamp.now()
-    now_str = time.datetime_to_ISO8601(now_time)
+    now_date_str = now_time.strftime(datefmt)
 
-    ds.attrs["date_created"] = now_str
+    ds.attrs["date_created"] = now_date_str
 
     return ds
 
