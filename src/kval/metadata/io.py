@@ -9,6 +9,8 @@ import xarray as xr
 import yaml
 import numpy as np
 
+
+
 # Optional: fallback to safe dump
 def clean_metadata(obj):
     if isinstance(obj, dict):
@@ -53,8 +55,6 @@ def make_multiline_literals(obj):
         return obj
 
 
-
-
 def export_metadata(ds, filename):
     meta = {
         "global_attributes": ds.attrs.copy(),
@@ -84,8 +84,14 @@ def import_metadata(ds, filename, replace_existing=True):
     with open(filename) as f:
         meta = yaml.safe_load(f)
 
+    def strip_trailing_newline(val):
+        if isinstance(val, str):
+            return val.rstrip('\n')
+        return val
+
     # Update global attributes
     for key, val in meta.get("global_attributes", {}).items():
+        val = strip_trailing_newline(val)
         if replace_existing or key not in ds.attrs:
             ds.attrs[key] = val
 
@@ -94,6 +100,7 @@ def import_metadata(ds, filename, replace_existing=True):
         if var not in ds:
             continue  # skip variables not in dataset
         for key, val in attrs.items():
+            val = strip_trailing_newline(val)
             if replace_existing or key not in ds[var].attrs:
                 ds[var].attrs[key] = val
 
