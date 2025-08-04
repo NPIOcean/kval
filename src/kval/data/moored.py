@@ -950,13 +950,13 @@ def calculate_PSAL(
     if psal_var in ds:
         ds[psal_var][:] = PSAL
     else:
-        ds[psal_var] = (ds.CNDC.dims, PSAL.data,
+        ds[psal_var] = (ds[cndc_var].dims, PSAL.data,
                         {'units': '1',})
-        if ('sensor_calibration_date' in ds.TEMP.attrs
-           and 'sensor_calibration_date' in ds.CNDC.attrs):
-            ds.PSAL.attrs['sensor_calibration_date'] = (
-                f'{ds.TEMP.sensor_calibration_date} (TEMP), '
-                f'{ds.CNDC.sensor_calibration_date} (CNDC)')
+        if ('sensor_calibration_date' in ds[temp_var].attrs
+           and 'sensor_calibration_date' in ds[cndc_var].attrs):
+            ds[psal_var].attrs['sensor_calibration_date'] = (
+                f'{ds[temp_var].sensor_calibration_date} (TEMP), '
+                f'{ds[cndc_var].sensor_calibration_date} (CNDC)')
 
     ds[psal_var].attrs["note"] = (
         f"Computed from {cndc_var}, {temp_var}, {pres_var} "
