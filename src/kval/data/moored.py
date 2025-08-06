@@ -970,7 +970,7 @@ def calculate_PSAL(
 
 
 
-# Recalculate sal
+# Recalculate SA & CT
 @record_processing(
     "Calculated TEOS-10 variables SA, CT using the GSW-Python module.",
     py_comment="Calculating SA, CT",
@@ -1036,7 +1036,7 @@ def calculate_SA_CT(
 
 
 
-# Recalculate sal
+# Recalculate RHO
 @record_processing(
     "Calculated RHO using the GSW-Python module.",
     py_comment="Calculating RHO",
@@ -1100,7 +1100,7 @@ def calculate_rho(
 
 
 
-# Recalculate sal
+# Recalculate sigma0
 @record_processing(
     "Calculated sigma0 using the GSW-Python module.",
     py_comment="Calculating RHO",
@@ -1159,6 +1159,84 @@ def calculate_sig0(
     )
     return ds
 
+
+# Recalculate cndc
+@record_processing(
+    "(Re)calculated CNDC using the GSW-Python module.",
+    py_comment="(Re)calculating CNDC",
+)
+def calculate_CNDC(
+    ds: xr.Dataset,
+    cndc_var: str = "CNDC",
+    temp_var: str = "TEMP",
+    pres_var: str = "PRES",
+    psal_var: str = "PSAL",
+    retain_nans: bool = True,
+) -> xr.Dataset:
+    """(Re)calculate Conductivity (CNDC) from practical salinity, temperature,
+    and pressure using the GSW-Python module
+    (https://teos-10.github.io/GSW-Python/).
+
+    This function updates the CNDC variable in the dataset with newly computed
+    conductivity values while preserving the metadata attributes of CNDC.
+
+    Args:
+        ds (xr.Dataset):
+            The input dataset containing salinity, temperature, and
+            pressure variables.
+        psal_var (str):
+            The name of the salinity variable in the dataset.
+            Defaults to 'PSAL'.
+        temp_var (str):
+            The name of the temperature variable in the dataset.
+            Defaults to 'TEMP'.
+        pres_var (str):
+            The name of the pressure variable in the dataset.
+            Defaults to 'PRES'.
+        cndc_var (str):
+            The name of the conductivity variable in the dataset.
+            Defaults to 'CNDC'.
+        retain_nans (bool):
+            If there is already a CNDC field: Retain the NaN values from
+            old to new CNDC field.
+            Defaults to True.
+
+    Returns:
+        xr.Dataset: The updated dataset with recalculated CNDC values.
+
+    Notes:
+        The operation preserves CNDC metadata attributes. If the input sensors
+        change (e.g., if a different temperature sensor is used), the CNDC
+        metadata attributes should be updated accordingly.
+    """
+
+    # Calculate CNDC (in mS/cm)
+    CNDC = gsw.C_from_SP(
+        ds[psal_var].values, ds[temp_var].values, ds[pres_var].values
+    )
+
+    # Retain NaNs if applicable
+    if retain_nans and cndc_var in ds:
+        CNDC = np.where(np.isnan(ds[cndc_var]), np.nan, CNDC)
+
+    # Overwrite or create CNDC variable
+    if cndc_var in ds:
+        ds[cndc_var][:] = CNDC
+    else:
+        ds[cndc_var] = (ds[psal_var].dims, CNDC.data, {'units': 'mS/cm'})
+        if ('sensor_calibration_date' in ds[temp_var].attrs
+           and 'sensor_calibration_date' in ds[psal_var].attrs):
+            ds[cndc_var].attrs['sensor_calibration_date'] = (
+                f'{ds[temp_var].sensor_calibration_date} (TEMP), '
+                f'{ds[psal_var].sensor_calibration_date} (PSAL)'
+            )
+
+    ds[cndc_var].attrs["note"] = (
+        f"Computed from {psal_var}, {temp_var}, {pres_var} "
+        "using the Python gsw module."
+    )
+
+    return ds
 
 
 
