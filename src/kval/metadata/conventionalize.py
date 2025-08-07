@@ -36,7 +36,8 @@ def nans_to_fill_value(ds: xr.Dataset, fill_value: float = -9999.0) -> xr.Datase
 
     return ds
 
-def convert_64_to_32(ds: xr.Dataset, force: bool = False) -> xr.Dataset:
+
+def convert_64_to_32(ds: xr.Dataset, force: bool = False, relative_tol: float = 1e-7) -> xr.Dataset:
     """
     Convert float64 and int64 variables (including coords) in an xarray.Dataset
     to float32 and int32, checking for precision loss or overflow.
@@ -50,33 +51,53 @@ def convert_64_to_32(ds: xr.Dataset, force: bool = False) -> xr.Dataset:
         Dataset to convert.
     force : bool, optional
         Force conversion even if precision loss or overflow may occur (default False).
+    relative_tol : float, optional
+        Maximum allowed relative difference between original float64 values and their float32
+        representation before warning or blocking conversion (default 1e-7).
 
     Returns
     -------
     xarray.Dataset
         New dataset with downcasted variables where safe or forced.
-    """    
+    """
     ds = ds.copy()
 
-    # Tolerance for float comparison (about single-precision epsilon)
-    float_tol = 1e-7
+    def max_relative_diff(arr64: np.ndarray) -> float:
+        arr32 = arr64.astype(np.float32)
+        arr64_roundtrip = arr32.astype(np.float64)  # simulate what will be stored
+        diff = np.abs(arr64 - arr64_roundtrip)
+
+        abs_arr64 = np.abs(arr64)
+        if np.isnan(abs_arr64).all():
+            scale = 1.0  # or 0? But better 1 to avoid division by zero
+        else:
+            scale = np.nanmax(abs_arr64)
+            if scale == 0:
+                scale = 1.0
+
+        if np.isnan(diff).all():
+            max_diff = 0.0
+        else:
+            max_diff = np.nanmax(diff)
+
+        return max_diff / scale
+
 
     for varnm in list(ds.data_vars) + list(ds.coords):
         arr = ds[varnm]
         dtype = arr.dtype
 
         if dtype == np.float64:
+            rel_diff = max_relative_diff(arr.values)
             casted = arr.astype(np.float32)
-            # Convert back to float64 to compare differences accurately
-            casted_back = casted.astype(np.float64)
-            diff = np.abs(arr.values - casted_back)
 
-            if np.any(diff > float_tol):
+            if rel_diff > relative_tol:
                 if force:
                     ds[varnm] = casted
                 else:
                     warnings.warn(
-                        f"Float64 → Float32 conversion may lose precision in variable '{varnm}'; kept as float64.",
+                        f"Float64 → Float32 conversion may lose precision in variable '{varnm}' "
+                        f"(max relative difference {rel_diff:.2e}); kept as float64.",
                         UserWarning
                     )
             else:
@@ -96,6 +117,8 @@ def convert_64_to_32(ds: xr.Dataset, force: bool = False) -> xr.Dataset:
                 ds[varnm] = casted
 
     return ds
+
+
 
 
 def add_range_attrs(ds, vertical_var=None):

@@ -47,6 +47,7 @@ def test_custom_fill_value():
 
 # Test convert_64_to_32
 
+# Helper to create dataset with float64 and int64 arrays
 def make_ds(float64_vals, int64_vals, coords=None):
     data_vars = {
         'floats': (('x',), float64_vals.astype(np.float64)),
@@ -61,30 +62,35 @@ def test_downcast_safe():
         int64_vals=np.array([10, 20, 30])
     )
     ds2 = conventionalize.convert_64_to_32(ds)
-    
     assert ds2['floats'].dtype == np.float32
     assert ds2['ints'].dtype == np.int32
-
-def test_no_precision_loss_warn(monkeypatch):
-    # Create floats that differ when converted
-    vals = np.array([1e20 + 1.0, 2.0, 3.0], dtype=np.float64)
+    
+def test_no_precision_loss_warn():
+    vals = np.array([1e7 + 0.1, 2.0, 3.0], dtype=np.float64)
     ds = make_ds(float64_vals=vals, int64_vals=np.array([1, 2, 3]))
 
+    # Default tolerance: conversion should happen, no warning
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         ds2 = conventionalize.convert_64_to_32(ds)
-        # Warning should be raised for float64
+        float_warnings = [warn for warn in w if "Float64 → Float32 conversion may lose precision" in str(warn.message)]
+        assert len(float_warnings) == 0
+        assert ds2['floats'].dtype == np.float32  # conversion happened
+
+    # Smaller tolerance to force warning and no conversion
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        ds3 = conventionalize.convert_64_to_32(ds, relative_tol=1e-9)
         float_warnings = [warn for warn in w if "Float64 → Float32 conversion may lose precision" in str(warn.message)]
         assert len(float_warnings) == 1
-        # dtype stays float64 since force=False
-        assert ds2['floats'].dtype == np.float64
+        assert ds3['floats'].dtype == np.float64  # no conversion due to warning
 
-def test_force_conversion(monkeypatch):
+        
+def test_force_conversion():
     vals = np.array([1.123456789012345, 2.0, 3.0], dtype=np.float64)
     ds = make_ds(float64_vals=vals, int64_vals=np.array([2**40, 20, 30]))
 
     ds2 = conventionalize.convert_64_to_32(ds, force=True)
-    # Both should be converted forcibly
     assert ds2['floats'].dtype == np.float32
     assert ds2['ints'].dtype == np.int32
 
@@ -102,10 +108,8 @@ def test_original_unchanged():
         int64_vals=np.array([10, 20, 30])
     )
     ds2 = conventionalize.convert_64_to_32(ds)
-    # Original dtype unchanged
     assert ds['floats'].dtype == np.float64
     assert ds['ints'].dtype == np.int64
-
 
 def test_float_nan_inf():
     vals = np.array([1.0, np.nan, np.inf, -np.inf, 1e10], dtype=np.float64)
@@ -114,13 +118,11 @@ def test_float_nan_inf():
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         ds2 = conventionalize.convert_64_to_32(ds)
-        # Conversion should succeed for finite values, NaN and Inf preserved
         assert ds2['floats'].dtype == np.float32
         np.testing.assert_array_equal(np.isnan(ds2['floats']), np.isnan(vals))
         np.testing.assert_array_equal(np.isinf(ds2['floats']), np.isinf(vals))
 
 def test_int64_edge_values():
-    # int32 max and min values
     int32_max = np.iinfo(np.int32).max
     int32_min = np.iinfo(np.int32).min
 
@@ -130,18 +132,15 @@ def test_int64_edge_values():
     ds_safe = make_ds(float64_vals=np.array([1.0, 2.0, 3.0]), int64_vals=vals_safe)
     ds_unsafe = make_ds(float64_vals=np.array([1.0, 2.0]), int64_vals=vals_unsafe)
 
-    # Safe downcast
     ds2_safe = conventionalize.convert_64_to_32(ds_safe)
     assert ds2_safe['ints'].dtype == np.int32
 
-    # Unsafe downcast should warn and keep int64 by default
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         ds2_unsafe = conventionalize.convert_64_to_32(ds_unsafe)
         int_warnings = [warn for warn in w if "Int64 → Int32 conversion may overflow" in str(warn.message)]
         assert len(int_warnings) == 1
         assert ds2_unsafe['ints'].dtype == np.int64
-
 
 def test_force_conversion_with_nans_and_infs():
     vals_float = np.array([np.nan, np.inf, -np.inf], dtype=np.float64)
@@ -157,7 +156,6 @@ def test_force_conversion_with_nans_and_infs():
     assert ds2['ints'].dtype == np.int32
     np.testing.assert_array_equal(np.isnan(ds2['floats']), np.isnan(vals_float))
     np.testing.assert_array_equal(np.isinf(ds2['floats']), np.isinf(vals_float))
-
 
 
 # Test add_range_attrs
