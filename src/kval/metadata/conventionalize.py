@@ -1,4 +1,6 @@
 """
+KVAL.METADATA.CONVENTIONALIZE
+
 Functions for making netcdfs cf-compliant.
 (Working with xarray datasets)
 """
@@ -13,41 +15,109 @@ from collections import Counter
 import pandas as pd
 import xarray as xr
 from typing import Optional
+import warnings
 
+def nans_to_fill_value(ds: xr.Dataset, fill_value: float = -9999.0) -> xr.Dataset:
+    """
+    Replace NaNs in float variables with a fill value and update '_FillValue' attribute.
 
-def nans_to_fill_value(ds, fill_value=-9999.0):
-    '''
-    Replace NaNs in any (non-coodinate) variables with a fill value,
-    and update the _FillValue variable attributes accordingly.
+    Args:
+        ds: xarray.Dataset with variables to process.
+        fill_value: float value to replace NaNs with (default: -9999.0).
 
-    Only works on float values; leaves integer values alone.
-    '''
+    Returns:
+        xarray.Dataset with NaNs replaced and '_FillValue' attributes updated.
+    """
+    for var_name in list(ds.coords) + list(ds.data_vars):
+        var = ds[var_name]
+        if np.issubdtype(var.dtype, np.floating):
+            ds[var_name] = var.fillna(fill_value)
+            ds[var_name].attrs['_FillValue'] = fill_value
 
-    for key in list(ds.coords) + list(ds.data_vars):
-        if np.issubdtype(ds[key].dtype, np.floating):  # Only for floats
-            ds[key] = ds[key].fillna(fill_value)
-            ds[key].attrs['_FillValue'] = fill_value
+    return ds
+
+def convert_64_to_32(ds: xr.Dataset, force: bool = False) -> xr.Dataset:
+    """
+    Convert float64 and int64 variables (including coords) in an xarray.Dataset
+    to float32 and int32, checking for precision loss or overflow.
+
+    If conversion is unsafe and force=False, the variable is left unchanged and
+    a warning is issued. If force=True, conversion is done regardless of risk.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to convert.
+    force : bool, optional
+        Force conversion even if precision loss or overflow may occur (default False).
+
+    Returns
+    -------
+    xarray.Dataset
+        New dataset with downcasted variables where safe or forced.
+    """    
+    ds = ds.copy()
+
+    # Tolerance for float comparison (about single-precision epsilon)
+    float_tol = 1e-7
+
+    for varnm in list(ds.data_vars) + list(ds.coords):
+        arr = ds[varnm]
+        dtype = arr.dtype
+
+        if dtype == np.float64:
+            casted = arr.astype(np.float32)
+            # Convert back to float64 to compare differences accurately
+            casted_back = casted.astype(np.float64)
+            diff = np.abs(arr.values - casted_back)
+
+            if np.any(diff > float_tol):
+                if force:
+                    ds[varnm] = casted
+                else:
+                    warnings.warn(
+                        f"Float64 → Float32 conversion may lose precision in variable '{varnm}'; kept as float64.",
+                        UserWarning
+                    )
+            else:
+                ds[varnm] = casted
+
+        elif dtype == np.int64:
+            casted = arr.astype(np.int32)
+            if not np.array_equal(arr.values, casted.values):
+                if force:
+                    ds[varnm] = casted
+                else:
+                    warnings.warn(
+                        f"Int64 → Int32 conversion may overflow in variable '{varnm}'; kept as int64.",
+                        UserWarning
+                    )
+            else:
+                ds[varnm] = casted
 
     return ds
 
 
 def add_range_attrs(ds, vertical_var=None):
     """
-    Add some global attributes based on the data.
+    Add global attributes for spatial and temporal ranges based on dataset variables.
 
-    "vertical_var" specifies a coordinate from which to extract
-    "geospatial_vertical_" parameters. If nothing is specified, we will
-    look for a variable with attribute "axis":"Z".
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to update with range attributes.
+    vertical_var : str, optional
+        Name of vertical coordinate variable to extract vertical range attributes from.
+        If None, looks for a variable with attribute `axis="Z"`.
 
-    - LATITUDE, LONGITUDE variables are required in order to set
-      geospatial range attributes
-    - TIME variable is required in order to set
-      time_coverage range attributes
-    - Vertical coordinate variable (see above) isadd_standard_glob_attrs_ctd
-      required in order to set geospatial_vertical range attributes
+    Notes
+    -----
+    - Requires `LATITUDE` and `LONGITUDE` variables for geospatial range attributes.
+    - Requires `TIME` variable for time coverage attributes.
+    - Requires vertical coordinate variable (see above) for vertical range attributes.
     """
 
-    # Lateral
+    # Lateral geospatial attributes
     try:
         ds.attrs["geospatial_lat_max"] = float(ds.LATITUDE.max().values)
         ds.attrs["geospatial_lon_max"] = float(ds.LONGITUDE.max().values)
@@ -57,79 +127,78 @@ def add_range_attrs(ds, vertical_var=None):
         ds.attrs["geospatial_bounds_crs"] = "EPSG:4326"
     except (AttributeError, KeyError, ValueError) as e:
         print(
-            "Did not find LATITUDE, LONGITUDE variables "
-            '-> Could not set "geospatial" attributes.'
+            'Did not find LATITUDE, LONGITUDE variables -> '
+            'Could not set "geospatial" attributes.'
         )
         print(f"Error: {e}")
 
-    # Vertical
+    # Vertical geospatial attributes
     try:
-        # If not specified: look for a variable with attribute *axis='Z'*
+        # Find vertical coordinate if not specified
         if vertical_var is None:
             for varnm in list(ds.keys()) + list(ds.coords.keys()):
-                if "axis" in ds[varnm].attrs:
-                    if ds[varnm].attrs["axis"].upper() == "Z":
-                        vertical_var = varnm
-
-        # Make sure we dont include _FillValue (can have Nans for some aux
-        # coordinates..)
-        vertical_var_da = ds[vertical_var].copy(deep = True)
-        if '_FillValue' in vertical_var_da.attrs:
-            fill_value = vertical_var_da._FillValue
-            vertical_var_da = vertical_var_da.where(
-                vertical_var_da != fill_value)
-
+                if "axis" in ds[varnm].attrs and ds[varnm].attrs["axis"].upper() == "Z":
+                    vertical_var = varnm
+                    break
 
         if vertical_var is not None:
-            ds.attrs["geospatial_vertical_min"] = np.round(
-                np.nanmin(vertical_var_da.values), 2)
-            ds.attrs["geospatial_vertical_max"] = np.round(
-                np.nanmax(vertical_var_da.values), 2)
+            vertical_var_da = ds[vertical_var].copy(deep=True)
+
+            # Exclude fill values to avoid NaNs in vertical calculations
+            if "_FillValue" in vertical_var_da.attrs:
+                fill_value = vertical_var_da._FillValue
+                vertical_var_da = vertical_var_da.where(vertical_var_da != fill_value)
+
+            ds.attrs["geospatial_vertical_min"] = np.round(np.nanmin(vertical_var_da.values), 3)
+            ds.attrs["geospatial_vertical_max"] = np.round(np.nanmax(vertical_var_da.values), 3)
             ds.attrs["geospatial_vertical_units"] = vertical_var_da.units
             ds.attrs["geospatial_vertical_positive"] = "down"
             ds.attrs["geospatial_bounds_vertical_crs"] = "EPSG:5831"
 
     except (AttributeError, KeyError, ValueError) as e:
         print(
-            "Did not find vertical variable "
-            '-> Could not set "geospatial_vertical" attributes.')
+            'Did not find vertical variable -> '
+            'Could not set "geospatial_vertical" attributes.'
+        )
         print(f"Error: {e}")
 
-    # Time
+    # Time coverage attributes
     try:
         if ds.TIME.dtype == np.dtype("datetime64[ns]"):
             start_time, end_time = ds.TIME.min(), ds.TIME.max()
         else:
             start_time = cftime.num2date(ds.TIME.min().values, ds.TIME.units)
             end_time = cftime.num2date(ds.TIME.max().values, ds.TIME.units)
+
         ds.attrs["time_coverage_start"] = time.datetime_to_ISO8601(start_time)
         ds.attrs["time_coverage_end"] = time.datetime_to_ISO8601(end_time)
 
-        # Keep time_coverage_resolution if already present
         if "time_coverage_resolution" not in ds.attrs:
-            tdiff_std = np.std(np.diff(ds.TIME))
-            tdiff_median = np.median(np.diff(ds.TIME))
-            if tdiff_std / tdiff_median < 1e-5:  # <- Looks like fixed interval
-                ds.attrs["time_coverage_resolution"] = time.days_to_ISO8601(
-                    tdiff_median
-                )
-            else:  # <- Looks like a variable interval
+            tdiff = np.diff(ds.TIME)
+            tdiff_std = np.std(tdiff)
+            tdiff_median = np.median(tdiff)
+            if tdiff_std / tdiff_median < 1e-5:
+                # Fixed interval time resolution
+                ds.attrs["time_coverage_resolution"] = time.days_to_ISO8601(tdiff_median)
+            else:
+                # Variable time intervals
                 ds.attrs["time_coverage_resolution"] = "variable"
 
-        ds.attrs["time_coverage_duration"] = _get_time_coverage_duration_str(
-            ds)
+        ds.attrs["time_coverage_duration"] = _get_time_coverage_duration_str(ds)
+
     except (AttributeError, KeyError, ValueError) as e:
         print(
-            'Did not find TIME variable (or TIME variable lacks "units" '
-            'attribute)\n-> Could not set "time_coverage" attributes.'
+            'Did not find TIME variable (or missing "units" attribute) -> '
+            'Could not set "time_coverage" attributes.'
         )
         print(f"Error: {e}")
 
     return ds
 
+
 def add_now_as_date_created(
     ds: xr.Dataset, 
-    datefmt: str = "%d %b %Y"
+    datefmt: str = "%Y-%m-%d"
 ) -> xr.Dataset:
     """
     Adds a global attribute "date_created" with today's date formatted according to `datefmt`.
