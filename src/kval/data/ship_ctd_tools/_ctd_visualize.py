@@ -21,6 +21,8 @@ from kval.util import internals
 from typing import Union
 import xarray as xr
 
+# thinf
+
 def inspect_profiles(ds: 'xr.Dataset') -> None:
     """
     Interactively inspect profiles in an xarray dataset.
@@ -177,7 +179,131 @@ def inspect_profiles(ds: 'xr.Dataset') -> None:
     ])
     display(widgets_collected)
 
+def inspect_phase_space(ds: 'xr.Dataset') -> None:
+    """
+    Interactively plot phase space (any variable vs any variable) from a profile dataset.
 
+    Parameters:
+    - ds: xr.Dataset
+        The xarray dataset containing dimensions 'TIME' and other variables.
+
+    Example:
+        inspect_phase_space(my_dataset)
+    """
+    internals.check_interactive()
+
+    # Determine if this is a single profile
+    is_single_profile = ds.sizes['TIME'] == 1
+
+    profile_vars = _ctd_tools._get_profile_variables(ds)
+    
+    def plot_profile(TIME_index: int, x_var: str, y_var: str) -> None:
+        try:
+            plt.close(plt.gcf())
+        except Exception:
+            pass
+
+        fig, ax = plt.subplots()
+
+        # Plot all other profiles in background
+        if not is_single_profile:
+            for nn in np.arange(ds.sizes['TIME']):
+                if nn != TIME_index:
+                    x = ds[x_var].isel(TIME=nn, drop=True).squeeze()
+                    y = ds[y_var].isel(TIME=nn, drop=True).squeeze()
+                    ax.plot(x, y, color='tab:blue', lw=0.5, alpha=0.4)
+
+        # Plot selected profile
+        if not is_single_profile:
+            x = ds[x_var].isel(TIME=TIME_index)
+            y = ds[y_var].isel(TIME=TIME_index)
+        else:
+            x = ds[x_var]
+            y = ds[y_var]
+
+        ms = 2 if len(y) > 100 else 2 + (100 - len(y)) * 0.05
+
+        ax.plot(x, y, color='k', lw=0.7)
+        ax.plot(x, y, '.', color='tab:orange', ms=ms)
+
+        # Title & axis labels
+        time_string = time.convert_timenum_to_datestring(
+            ds.TIME[TIME_index] if not is_single_profile else ds.TIME.item(),
+            ds.TIME.units
+        )
+        station = ds["STATION"].values[TIME_index] if 'STATION' in ds else 'N/A'
+
+        ax.set_title(f'Station: {station}, {time_string}')
+
+        xlabel = f"{x_var} [{ds[x_var].attrs.get('units', '')}]"
+        ylabel = f"{y_var} [{ds[y_var].attrs.get('units', '')}]"
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+
+        # Auto reverse y-axis if pressure is on y
+        if 'pres' in y_var.lower():
+            ax.invert_yaxis()
+
+        ax.grid()
+        fig.canvas.header_visible = False
+        plt.tight_layout()
+        plt.show()
+
+    # Widgets
+    time_values = list(range(ds.sizes['TIME']))
+    time_descriptions = [f'{nn} ({ds["STATION"].values[nn]})' for nn in time_values] \
+                        if 'STATION' in ds else time_values
+
+    time_slider = widgets.IntSlider(
+        min=0, max=len(time_values)-1, value=0, description='Profile #:',
+        style={'description_width': 'initial'}, layout=widgets.Layout(width='500px')
+    )
+
+    time_dropdown = widgets.Dropdown(
+        options=[(desc, val) for desc, val in zip(time_descriptions, time_values)],
+        value=0, description='TIME index:'
+    )
+
+    def sync_slider(change): time_slider.value = change.new
+    def sync_dropdown(change): time_dropdown.value = time_values[change.new]
+
+    time_dropdown.observe(sync_slider, names='value')
+    time_slider.observe(sync_dropdown, names='value')
+
+    x_dropdown = widgets.Dropdown(
+        options=profile_vars,
+        value=profile_vars[0],
+        description='X-axis:'
+    )
+
+    y_dropdown = widgets.Dropdown(
+        options=profile_vars,
+        value='PRES' if 'PRES' in profile_vars else profile_vars[1],
+        description='Y-axis:'
+    )
+
+    output = widgets.interactive_output(
+        plot_profile, {
+            'TIME_index': time_slider,
+            'x_var': x_dropdown,
+            'y_var': y_dropdown
+        }
+    )
+
+    close_button = widgets.Button(description="Close")
+
+    def close_plot(_):
+        plt.close()
+        widgets_collected.close()
+
+    close_button.on_click(close_plot)
+
+    widgets_collected = widgets.VBox([
+        widgets.HBox([time_slider, close_button]),
+        widgets.HBox([x_dropdown, y_dropdown, time_dropdown]),
+        output
+    ])
+    display(widgets_collected)
 
 def inspect_dual_sensors(ds: 'xr.Dataset') -> None:
     """

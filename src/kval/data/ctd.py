@@ -789,6 +789,34 @@ def inspect_profiles(ds: xr.Dataset) -> None:
     """
     viz.inspect_profiles(ds)
 
+def inspect_phase_space(ds: xr.Dataset) -> None:
+    """
+    Interactively inspect phase space plots of two variables in an xarray dataset.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The xarray dataset containing variables such as `PRES`, `STATION`, and
+        other profile variables.
+
+    This function creates an interactive plot that allows users to explore
+    profiles within the given xarray dataset. It displays a slider to choose a
+    profile by its index, a dropdown menu to select a variable for
+    visualization, and another dropdown to pick a specific station. The
+    selected profile is highlighted in color, while others are shown in the
+    background.
+
+    Examples
+    --------
+    >>> inspect_phase_sapce(ds)
+
+    Notes
+    -----
+    This function utilizes Matplotlib for plotting and ipywidgets for
+    interactive controls.
+    """
+    viz.inspect_phase_space(ds)
+
 
 def inspect_dual_sensors(ds: xr.Dataset) -> None:
     """

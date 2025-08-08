@@ -989,16 +989,30 @@ def _read_SBE_proc_steps(ds, header_info, _is_moored=False):
             )
 
         # Get input file names (without paths)
-        if "datcnv_in" in line:
-            hex_fn = re.search(r"\\([^\\]+\.HEX)", line.upper()).group(1)
+        if "datcnv_in" in line.lower():
+            match = re.search(r"\\([^\\]+)\.(HEX|DAT)", line, re.IGNORECASE)
+            if match:
+                hex_fn = match.group(0).split("\\")[-1]  # Just the filename
+            else:
+                hex_fn = None  # Or handle this case as needed
+
             try:
-                xmlcon_fn = re.search(
-                    r"\\([^\\]+\.XMLCON)", line.upper()
-                ).group(1)
+                xmlcon_fn = re.search(r"\\([^\\]+\.XMLCON)", line.upper()).group(1)
             except:
-                xmlcon_fn = re.search(r"\\([^\\]+\.CON)", line.upper()).group(
-                    1
-                )
+                xmlcon_fn = re.search(r"\\([^\\]+\.CON)", line.upper()).group(1)
+        
+        # thinf: try to include .dat files
+        # Get input file names (without paths)
+        #if "datcnv_in" in line:
+        #        hex_fn = re.search(r"\\([^\\]+\.HEX)", line.upper()).group(1)
+        #    try:
+        #        xmlcon_fn = re.search(
+        #            r"\\([^\\]+\.XMLCON)", line.upper()
+        #        ).group(1)
+        #    except:
+        #        xmlcon_fn = re.search(r"\\([^\\]+\.CON)", line.upper()).group(
+        #            1
+        #        )
 
             src_files_raw = f"{hex_fn}, {xmlcon_fn}"
             sbe_proc_str += [
@@ -2033,6 +2047,51 @@ def _nmea_time_to_datetime(mon, da, yr, hms):
 
 
 def _decdeg_from_line(line):
+    """
+    Parse a line containing latitude or longitude in degrees and minutes
+    (e.g., '** Latitude: 68 50 s') and return decimal degrees.
+    
+    Handles various formats like:
+      - '** Latitude: 081 16.1347'
+      - '** Longitude: 003 00 e'
+      - 'Latitude N 081 12.33'
+
+    Returns:
+        float or None: Decimal degrees, or None if parsing fails.
+    """
+    # Extract the part after the colon (if present)
+    if ":" in line:
+        deg_min_str = line[(line.rfind(":") + 1):].strip().split()
+    else:
+        deg_min_str = line.strip().split()
+
+    if not deg_min_str:
+        return None
+
+    # Remove any non-numeric prefixes
+    while deg_min_str and not deg_min_str[0].replace('.', '', 1).isdigit():
+        deg_min_str = deg_min_str[1:]
+
+    if len(deg_min_str) < 2:
+        return None
+
+    try:
+        deg = float(deg_min_str[0])
+        min = float(deg_min_str[1])
+    except ValueError:
+        return None
+
+    # Default is positive (N or E)
+    sign = 1
+
+    # Look for directional indicators (in last or third element)
+    direction = line.lower().strip().split()[-1]
+    if direction in ['s', 'w']:
+        sign = -1
+
+    return sign * (deg + min / 60)
+
+def _decdeg_from_line_old(line):
     """
     From a line line  '** Latitude: 081 16.1347'
     return decimal degrees, e.g. 81.26891166
