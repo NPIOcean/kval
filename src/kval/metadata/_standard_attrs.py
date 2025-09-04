@@ -32,7 +32,7 @@ standard_var_attrs = {
         "valid_max": 50.0,
     },
     "ATTN": {
-        "standard_name": ("volume_beam_attenuation_coefficient"
+        "standard_name": ("volume_beam_attenuation_coefficient_"
                           "of_radiative_flux_in_sea_water"),
         "units": "m-1",
         "long_name": "Beam attenuation coefficient",
