@@ -34,6 +34,8 @@ dependencies = [
   "pyrsktools>=1.1.1",
   "pygeomag>=1.1.0",
   "compliance-checker>=5.1.0",
+  "ruamel.yaml>=0.18.15",
+
 ]
 
 classifiers = [

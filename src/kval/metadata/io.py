@@ -6,68 +6,53 @@ Import/export metadata between NetCDF/xarray and human-readable yaml
 '''
 
 import xarray as xr
-import yaml
+from ruamel.yaml import YAML
+from ruamel.yaml.scalarstring import LiteralScalarString
 import numpy as np
 
+yaml = YAML()
+yaml.indent(mapping=2, sequence=4, offset=2)
 
-
-# Optional: fallback to safe dump
+# Optional: clean metadata (convert numpy arrays and scalars)
 def clean_metadata(obj):
     if isinstance(obj, dict):
         return {k: clean_metadata(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return [clean_metadata(v) for v in obj]
     elif isinstance(obj, np.ndarray):
-        return obj.tolist()  # numpy array → native list
+        return obj.tolist()
     elif isinstance(obj, np.generic):
-        return obj.item()  # numpy scalar → native Python type
+        return obj.item()
     else:
         return obj
 
-# Define LiteralStr first
-class LiteralStr(str): pass
-
-# Define str_presenter before registering it
-def str_presenter(dumper, data):
-    if '\n' in data:
-        return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
-    return dumper.represent_scalar('tag:yaml.org,2002:str', data)
-
-# Define a custom Dumper
-class LiteralDumper(yaml.SafeDumper):
-    pass
-
-# Register the presenter with the custom dumper
-yaml.add_representer(LiteralStr, str_presenter, Dumper=LiteralDumper)
-
-def make_multiline_literals(obj):
-    """Wrap multiline or long strings with LiteralStr to trigger YAML | block style."""
+# Recursively wrap multiline strings as LiteralScalarString
+def make_literals(obj):
     if isinstance(obj, dict):
-        return {k: make_multiline_literals(v) for k, v in obj.items()}
-    elif isinstance(obj, (list, tuple)):
-        return [make_multiline_literals(v) for v in obj]
-    elif isinstance(obj, str):
-        if '\n' in obj or len(obj) > 100:  # force wrap long strings too
-            return LiteralStr(obj)
-        else:
-            return obj
+        return {k: make_literals(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [make_literals(v) for v in obj]
+    elif isinstance(obj, str) and ('\n' in obj or len(obj) > 100):
+        # Use literal block for multiline or very long strings
+        return LiteralScalarString(obj)
     else:
         return obj
-
 
 def export_metadata(ds, filename):
+    """
+    Export xarray Dataset metadata to YAML in a human-readable format.
+    Preserves multiline strings with '|' block style.
+    """
     meta = {
         "global_attributes": ds.attrs.copy(),
-        "variables": {var: ds[var].attrs.copy() for
-                      var in list(ds.coords) + list(ds.data_vars)}
+        "variables": {var: ds[var].attrs.copy() for var in list(ds.coords) + list(ds.data_vars)}
     }
-    # Clean and process for YAML output
-    meta = clean_metadata(meta)
-    meta = make_multiline_literals(meta)
 
-    with open(filename, 'w') as f:
-        yaml.dump(meta, f, sort_keys=False, Dumper=LiteralDumper,
-                  allow_unicode=True)
+    meta = clean_metadata(meta)
+    meta = make_literals(meta)
+
+    with open(filename, 'w', encoding='utf-8') as f:
+        yaml.dump(meta, f)
 
 
 
@@ -82,7 +67,7 @@ def import_metadata(ds, filename, replace_existing=True):
     - replace_existing: bool — whether to override existing attributes.
     """
     with open(filename) as f:
-        meta = yaml.safe_load(f)
+        meta = yaml.load(f)
 
     def strip_trailing_newline(val):
         if isinstance(val, str):
