@@ -61,6 +61,8 @@ def import_metadata(ds, filename, replace_existing=True):
     """
     Import metadata from a YAML file into an xarray Dataset.
 
+    Will skip empty values.
+
     Parameters:
     - ds: xarray.Dataset — the dataset to update.
     - filename: str — path to YAML file.
@@ -74,9 +76,21 @@ def import_metadata(ds, filename, replace_existing=True):
             return val.rstrip('\n')
         return val
 
+    def is_empty(val):
+        if val is None:
+            return True
+        if isinstance(val, str) and val.strip() == "":
+            return True
+        if isinstance(val, (list, dict)) and len(val) == 0:
+            return True
+        return False
+
+
     # Update global attributes
     for key, val in meta.get("global_attributes", {}).items():
         val = strip_trailing_newline(val)
+        if is_empty(val):
+            continue  # skip empty attributes
         if replace_existing or key not in ds.attrs:
             ds.attrs[key] = val
 
@@ -86,6 +100,8 @@ def import_metadata(ds, filename, replace_existing=True):
             continue  # skip variables not in dataset
         for key, val in attrs.items():
             val = strip_trailing_newline(val)
+            if is_empty(val):
+                continue  # skip empty attributes
             if replace_existing or key not in ds[var].attrs:
                 ds[var].attrs[key] = val
 
