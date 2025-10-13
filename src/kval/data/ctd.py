@@ -45,6 +45,7 @@ from kval.metadata import conventionalize, _standard_attrs
 from kval.metadata.check_conventions import check_file_with_button
 from typing import List, Optional, Union
 import numpy as np
+from pathlib import Path
 
 
 # Want to be able to use these functions directly..
@@ -226,7 +227,7 @@ def ctds_from_cnv_list(
     "Loaded and combined BTL files from directory into a single dataset.",
 )
 def dataset_from_btl_dir(
-    path: str,
+    path: str | Path,
     station_from_filename: bool = False,
     start_time_NMEA: bool = False,
     time_adjust_NMEA: bool = False,
@@ -236,25 +237,29 @@ def dataset_from_btl_dir(
     Create CTD datasets from BTL files in the specified path.
 
     Parameters:
-    - path (str): Path to the BTL files.
-    - station_from_filename (bool): Whether to extract station information
-                                    from filenames.
-    - start_time_NMEA (bool): Whether to use start time from NMEA.
-    - time_adjust_NMEA (bool): Whether to adjust time using NMEA data.
-    - verbose (bool): If False, suppress some prints output.
+        path (str or Path): Directory containing .btl files.
+        station_from_filename (bool): Extract station info from filenames if True.
+        start_time_NMEA (bool): Use start time from NMEA if True.
+        time_adjust_NMEA (bool): Adjust time using NMEA data if True.
+        verbose (bool): If False, suppress some printed output.
 
     Returns:
-    - ds (xarray.Dataset): Joined CTD dataset.
+        xr.Dataset: Joined CTD dataset.
+
+    Raises:
+        FileNotFoundError: If no .btl files are found in the path.
     """
+    path = Path(path)  # Ensure Path object
+
     btl_files = tools._btl_files_from_path(path)
     number_of_btl_files = len(btl_files)
     if number_of_btl_files == 0:
-        raise Exception(
-            "Did not find any .btl files in the specified "
-            f'directory ("{path}"). Is there an error in the path?'
+        raise FileNotFoundError(
+            f'Did not find any .btl files in the specified directory ("{path}").'
         )
-    else:
+    if verbose:
         print(f'Found {number_of_btl_files} .btl files in "{path}".')
+
     profile_datasets = tools._datasets_from_btllist(
         btl_files,
         verbose=verbose,
@@ -262,10 +267,12 @@ def dataset_from_btl_dir(
         time_adjust_NMEA=time_adjust_NMEA,
         station_from_filename=station_from_filename,
     )
+
     ds = tools.join_cruise_btl(profile_datasets, verbose=verbose)
     ds = ds.transpose()
 
     return ds
+
 
 
 def from_netcdf(path_to_file):

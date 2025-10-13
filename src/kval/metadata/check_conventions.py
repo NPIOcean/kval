@@ -98,3 +98,4 @@ def check_file_with_button(file):
     # Your existing code
     with output_widget:
         check_file(file)
+

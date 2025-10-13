@@ -219,11 +219,15 @@ standard_var_attrs = {
         "long_name": "latitude",
         "axis": "Y",
     },
+    "SBE_FLAG": {
+        "long_name": "Quality flag assigned in SBE processing.",
+    },
+
 }
 
 
 standard_attrs_global_ctd = {
-    "Conventions": "ACDD-1.3, CF-1.8",
+    "Conventions": "ACDD-1.3, CF-1.10",
     "source": "CTD profiles from SBE911+",
     "instrument": "In Situ/Laboratory Instruments>Profilers/Sounders>CTD",
     "data_set_language": "eng",
@@ -236,7 +240,7 @@ standard_attrs_global_ctd = {
 }
 
 standard_attrs_global_moored = {
-    "Conventions": "ACDD-1.3, CF-1.8",
+    "Conventions": "ACDD-1.3, CF-1.10",
     "source": "Subsurface mooring",
     "instrument": "In Situ/Laboratory Instruments>Profilers/Sounders>CTD",
     "data_set_language": "eng",

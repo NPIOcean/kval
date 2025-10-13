@@ -22,6 +22,7 @@ import re
 import pandas as pd
 import cftime
 from collections import OrderedDict
+from pathlib import Path
 
 def join_cruise(nc_files, bins_dbar = 1, verbose = True,
                 epoch = '1970-01-01'):
@@ -583,11 +584,19 @@ def _cnv_files_from_path(path):
     cnv_list = glob2.glob(f'{path}*.cnv')
     return cnv_list
 
+
 def _btl_files_from_path(path):
-    '''
-    Get a list of .btl files from a path.
-    '''
-    btl_list = glob2.glob(f'{path}*.btl')
+    """
+    Get a list of .btl files from a directory path.
+
+    Args:
+        path (str or Path): Directory containing .btl files.
+
+    Returns:
+        list[str]: Sorted list of full paths to .btl files.
+    """
+    path = Path(path)  # ensure Path object
+    btl_list = sorted(glob2.glob(str(path / '*.btl')))
     return btl_list
 
 

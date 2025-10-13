@@ -149,7 +149,6 @@ SBE_name_map = { # Note: replace / with _  !
     'TIMES': {'name': 'TIME_ELAPSED', 'units': 's'},
     'TIMEJ': {'name': 'TIME_JULD', 'units': 'days'},
     'TIMEJV2': {'name': 'TIME_JULD', 'units': 'days'},
-
     'FLAG': {'name': 'SBE_FLAG', 'units': ''},
 
 }
@@ -208,7 +207,8 @@ var_attrs = {
         'standard_name': 'latitude',
         'units': 'degree_north',
         'long_name': 'latitude',
-    }
+    },
+
 }
 
 
