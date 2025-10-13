@@ -482,14 +482,14 @@ def add_standard_var_attrs(
 
         # Guess coverage_content_type if not already present
         if not override and "coverage_content_type" not in ds[varnm].attrs:
-            if varnm in ["NISKIN_NUMBER", "TIME", "TIME_SAMPLE"]:
+            if varnm in ["NISKIN_NUMBER", "TIME", "TIME_SAMPLE", "LONGITUDE", "LATITUDE"]:
                 ds[varnm].attrs["coverage_content_type"] = "coordinate"
-            elif varnm in ["LONGITUDE", "LATITUDE"]:
-                ds[varnm].attrs["coverage_content_type"] = (
-                    "referenceInformation")
             elif varnm in ["PROCESSING", "INSTRUMENT"]:
                 ds[varnm].attrs["coverage_content_type"] = (
                     "auxiliaryInformation")
+            elif varnm in ["SBE_FLAG"]:
+                ds[varnm].attrs["coverage_content_type"] = (
+                    "qualityInformation")
             else:
                 ds[varnm].attrs["coverage_content_type"] = "physicalMeasurement"
 
