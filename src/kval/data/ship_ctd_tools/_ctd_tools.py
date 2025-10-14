@@ -230,7 +230,8 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     # Add some standard metadata to the measurement variables
     N = _add_standard_variable_attributes(N)
 
-
+    # Set LATITUTDE, LONGITUDE and SSTATIOn as auxiliary coordinates (if available)
+    N = N.set_coords([v for v in ['LATITUDE', 'LONGITUDE', 'STATION'] if v in N])
 
     # Add some metadata to the STATION variable
     if 'STATION' in N.data_vars:
@@ -245,14 +246,6 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
             '\nThis is probably fine, but it is a good idea to sanity check '
             'the TIME field.')
 
-    # Add a cruise variable
-    if 'cruise_name' in N.attrs:
-        cruise = N.cruise_name
-    else:
-        cruise = '!! CRUISE (Not assigned) !!'
-
-    N['CRUISE'] =  xr.DataArray(cruise, dims=())
-    N['CRUISE'].attrs = {'long_name':'Cruise ID',}
 
     # Generalize (insert "e.g.") in attributes with specific file names
     N.attrs['source_file'] = f"E.g. {N.attrs['source_file']}"
