@@ -38,5 +38,5 @@ def test_cnv_pipeline(atwain_dir):
     assert isinstance(ds, xr.Dataset) , "Failed to load all ATWAIN .cnv files to xarray.Dataset"
 
     # Test that the coordinates TIME, PRES are present
-    assert list(ds.coords) == ['PRES', 'TIME'], "Coordinates not read as ['PRES', 'TIME']"
+    assert list(ds.coords) == ['STATION', 'LATITUDE', 'LONGITUDE', 'PRES', 'TIME'], "Coordinates not read as ['STATION', 'LATITUDE', 'LONGITUDE', 'PRES', 'TIME']"
 
