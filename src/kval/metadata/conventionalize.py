@@ -40,85 +40,64 @@ def nans_to_fill_value(ds: xr.Dataset, fill_value: float = -9999.0) -> xr.Datase
 def convert_64_to_32(ds: xr.Dataset, force: bool = False, relative_tol: float = 1e-7) -> xr.Dataset:
     """
     Convert float64 and int64 variables (including coords) in an xarray.Dataset
-    to float32 and int32, checking for precision loss or overflow.
-
-    If conversion is unsafe and force=False, the variable is left unchanged and
-    a warning is issued. If force=True, conversion is done regardless of risk.
-
-    Parameters
-    ----------
-    ds : xarray.Dataset
-        Dataset to convert.
-    force : bool, optional
-        Force conversion even if precision loss or overflow may occur (default False).
-    relative_tol : float, optional
-        Maximum allowed relative difference between original float64 values and their float32
-        representation before warning or blocking conversion (default 1e-7).
-
-    Returns
-    -------
-    xarray.Dataset
-        New dataset with downcasted variables where safe or forced.
+    to float32 and int32, updating related metadata attributes (valid_min, valid_max, valid_range).
     """
     ds = ds.copy()
 
     def max_relative_diff(arr64: np.ndarray) -> float:
         arr32 = arr64.astype(np.float32)
-        arr64_roundtrip = arr32.astype(np.float64)  # simulate what will be stored
+        arr64_roundtrip = arr32.astype(np.float64)
         diff = np.abs(arr64 - arr64_roundtrip)
 
         abs_arr64 = np.abs(arr64)
-        if np.isnan(abs_arr64).all():
-            scale = 1.0  # or 0? But better 1 to avoid division by zero
-        else:
-            scale = np.nanmax(abs_arr64)
-            if scale == 0:
-                scale = 1.0
+        scale = np.nanmax(abs_arr64) if not np.isnan(abs_arr64).all() else 1.0
+        if scale == 0:
+            scale = 1.0
 
-        if np.isnan(diff).all():
-            max_diff = 0.0
-        else:
-            max_diff = np.nanmax(diff)
-
+        max_diff = np.nanmax(diff) if not np.isnan(diff).all() else 0.0
         return max_diff / scale
-
 
     for varnm in list(ds.data_vars) + list(ds.coords):
         arr = ds[varnm]
         dtype = arr.dtype
 
+        # Determine the new dtype
         if dtype == np.float64:
             rel_diff = max_relative_diff(arr.values)
-            casted = arr.astype(np.float32)
-
-            if rel_diff > relative_tol:
-                if force:
-                    ds[varnm] = casted
-                else:
-                    warnings.warn(
-                        f"Float64 → Float32 conversion may lose precision in variable '{varnm}' "
-                        f"(max relative difference {rel_diff:.2e}); kept as float64.",
-                        UserWarning
-                    )
-            else:
-                ds[varnm] = casted
-
+            target_dtype = np.float32
+            if rel_diff > relative_tol and not force:
+                warnings.warn(
+                    f"Float64 → Float32 conversion may lose precision in variable '{varnm}' "
+                    f"(max relative difference {rel_diff:.2e}); kept as float64.",
+                    UserWarning
+                )
+                continue
         elif dtype == np.int64:
-            casted = arr.astype(np.int32)
-            if not np.array_equal(arr.values, casted.values):
-                if force:
-                    ds[varnm] = casted
-                else:
-                    warnings.warn(
-                        f"Int64 → Int32 conversion may overflow in variable '{varnm}'; kept as int64.",
-                        UserWarning
-                    )
-            else:
-                ds[varnm] = casted
+            target_dtype = np.int32
+            casted = arr.astype(target_dtype)
+            if not np.array_equal(arr.values, casted.values) and not force:
+                warnings.warn(
+                    f"Int64 → Int32 conversion may overflow in variable '{varnm}'; kept as int64.",
+                    UserWarning
+                )
+                continue
+        else:
+            continue  # skip other dtypes
+
+        # cast the variable
+        ds[varnm] = arr.astype(target_dtype)
+
+        # update metadata attributes if present
+        for attr in ["valid_min", "valid_max", "valid_range", "_FillValue"]:
+            if attr in ds[varnm].attrs:
+                val = ds[varnm].attrs[attr]
+                if isinstance(val, (int, float, np.integer, np.floating)):
+                    ds[varnm].attrs[attr] = target_dtype(val)
+                elif isinstance(val, (list, tuple, np.ndarray)):
+                    ds[varnm].attrs[attr] = np.array(val, dtype=target_dtype)
+                # else leave as-is (e.g., strings)
 
     return ds
-
-
 
 
 def add_range_attrs(ds, vertical_var=None):
