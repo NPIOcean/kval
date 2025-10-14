@@ -256,3 +256,25 @@ def swap_var_coord(
         ds = ds.reset_coords(coordinate, drop=False)
 
     return ds
+
+
+
+
+def promote_cf_coordinates(ds):
+    """
+    Promote all variables listed in any variable's 'coordinates' attribute
+    to auxiliary coordinates, if present in the dataset.
+    """
+    # collect all coordinate names mentioned in 'coordinates' attributes
+    coord_names = set()
+    for var in ds.data_vars:
+        coords_attr = ds[var].attrs.get("coordinates", "")
+        coord_names.update(coords_attr.split())
+
+    # keep only existing variables that aren't already coords
+    to_promote = [c for c in coord_names if c in ds and c not in ds.coords]
+
+    if to_promote:
+        ds = ds.set_coords(to_promote)
+
+    return ds
