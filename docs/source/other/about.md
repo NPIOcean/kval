@@ -53,7 +53,7 @@ ___
 
 ### Code
 
-- Written in Python (>=3.9).
+- Written in Python (>=3.10).
 - Tailored for use in a [Jupyter](www.jupyter.org) notebook environment.
 - Data and metadata should be stored in [xarray](https://docs.xarray.dev/en/stable/) `Datasets`.
     - Intermediate operations using, e.g., `numpy` or `pandas` objects are fine, but the end user should interact with `Datasets`.
@@ -86,6 +86,17 @@ Contributions, issues, and PRs are welcome!
 
 
 ## Latest release
+
+
+
+About the latest release, `0.4.0`:
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/NNN)](https://doi.org/10.5281/NNN)
+
+- Adds extended functionality for metadata handling.
+- Various other fixes and some added functionality, but not a major overhaul. 
+
+
 
 About the latest release, `0.3.2`:
 

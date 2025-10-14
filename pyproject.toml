@@ -1,7 +1,7 @@
 [project]
 name = "kval"
 description = "Processing and analysis of ocean data in Python"
-version = "0.3.2"
+version = "0.4.0"
 readme = "README.md"
 
 authors = [

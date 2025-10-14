@@ -10,13 +10,12 @@ ___
 
 ___
 
-About the latest release, `0.3.2`:
+About the latest release, `0.4.0`:
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15268696.svg)](https://doi.org/10.5281/zenodo.15268696)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/NNN)](https://doi.org/10.5281/NNN)
 
-- This version adds basic documentation.
-- This version is used to work out pypi and conda distribution.
-- An updated version with improved documentation and a code overhaul is planned for 2025.
+- Adds extended functionality for metadata handling.
+- Various other fixes and some added functionality, but not a major overhaul. 
 
 
 `kval` is in active development.
