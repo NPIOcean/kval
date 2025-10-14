@@ -230,7 +230,7 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     # Add some standard metadata to the measurement variables
     N = _add_standard_variable_attributes(N)
 
-    # Set LATITUTDE, LONGITUDE and SSTATIOn as auxiliary coordinates (if available)
+    # Set LATITUTDE, LONGITUDE and STATION as auxiliary coordinates (if available)
     N = N.set_coords([v for v in ['LATITUDE', 'LONGITUDE', 'STATION'] if v in N])
 
     # Add some metadata to the STATION variable

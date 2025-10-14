@@ -40,9 +40,12 @@ from kval.data.ship_ctd_tools import _ctd_edit as ctd_edit
 from kval.data.ship_ctd_tools._ctd_decorator import record_processing
 from kval.file import matfile
 from kval.data import dataset, edit
-from kval.util import time
+from kval.util import time, xr_funcs
 from kval.metadata import conventionalize, _standard_attrs
-from kval.metadata.check_conventions import check_file_with_button
+from kval.metadata.check_conventions import check_file_with_button, custom_checks
+from kval.metadata.conventionalize import convert_64_to_32, add_now_as_date_created
+from kval.metadata.io import import_metadata
+
 from typing import List, Optional, Union
 import numpy as np
 from pathlib import Path
@@ -279,8 +282,12 @@ def from_netcdf(path_to_file):
     """
     Import a netCDF file - e.g. one previously generated
     with these tools.
+
+    Skipping cf decoding, and re-promoting aux coordinates
+    (doesn't matter but nice for clarity).
     """
     ds = xr.open_dataset(path_to_file, decode_cf=False)
+    ds = xr_funcs.promote_cf_coordinates(ds)
     return ds
 
 
