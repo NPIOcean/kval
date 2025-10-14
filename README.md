@@ -12,7 +12,8 @@ ___
 
 About the latest release, `0.4.0`:
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/NNN)](https://doi.org/10.5281/NNN)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17353994.svg)](https://doi.org/10.5281/zenodo.17353994)
+
 
 - Adds extended functionality for metadata handling.
 - Various other fixes and some added functionality, but not a major overhaul. 
