@@ -134,8 +134,9 @@ def custom_checks(ds: xr.Dataset) -> None:
         check, warn, cross, arrow = "[OK]", "[!]", "[X]", "->"
 
     warnings, passed, issues = [], [], 0
-    skip_vars = {"STATION", "PROCESSING", "CRUISE", "DEPTH_INDEX", "NISKIN_NUMBER"}
+    skip_vars = {"STATION", "PROCESSING", "CRUISE", "DEPTH_INDEX", "NISKIN_NUMBER", "CAST"}
     vars_relevant = [v for v in ds.variables if v not in skip_vars]
+    data_vars_relevant = [v for v in ds.data_vars if v not in skip_vars]
 
     # 1. dtype check
     bad_types = [v for v in ds.variables if ds[v].dtype in (np.int64, np.float64)]
@@ -168,7 +169,12 @@ def custom_checks(ds: xr.Dataset) -> None:
         passed.append(f"{check} No obvious placeholder attributes")
 
     # 3. fill value check
-    bad_fill = [v for v in vars_relevant if ds[v].attrs.get("_FillValue") in (None, "nn")]
+    bad_fill = []
+    for v in vars_relevant:
+        fv = ds[v].attrs.get("_FillValue")
+        if fv is None or (isinstance(fv, (float, np.floating)) and np.isnan(fv)):
+            bad_fill.append(v)
+
     if bad_fill:
         warnings.append(
             f"{warn} Suspicious/missing _FillValue (including NaNs, which are discouraged):\n{', '.join(bad_fill)}\n   "
@@ -180,12 +186,12 @@ def custom_checks(ds: xr.Dataset) -> None:
 
     # 4. processing_level
     g_proc = "processing_level" in ds.attrs
-    v_proc = [v for v in vars_relevant if "processing_level" in ds[v].attrs]
+    v_proc = [v for v in data_vars_relevant if "processing_level" in ds[v].attrs]
     if g_proc and v_proc:
         warnings.append(f"{cross} 'processing_level' exists globally and on vars")
         issues += 1
-    elif not g_proc and len(v_proc) != len(vars_relevant):
-        missing = [v for v in vars_relevant if "processing_level" not in ds[v].attrs]
+    elif not g_proc and len(v_proc) != len(data_vars_relevant):
+        missing = [v for v in data_vars_relevant if "processing_level" not in ds[v].attrs]
         warnings.append(
             f"{cross} Missing 'processing_level':\n{', '.join(missing)}\n   "
             f"{arrow} Suggestion: add globally or on all relevant variables"
@@ -196,12 +202,12 @@ def custom_checks(ds: xr.Dataset) -> None:
 
     # 5. QC_indicator
     g_q = "QC_indicator" in ds.attrs
-    v_q = [v for v in vars_relevant if "QC_indicator" in ds[v].attrs]
+    v_q = [v for v in data_vars_relevant if "QC_indicator" in ds[v].attrs]
     if g_q and v_q:
         warnings.append(f"{warn} 'QC_indicator' exists globally and on vars")
         issues += 1
-    elif not g_q and len(v_q) != len(vars_relevant):
-        missing = [v for v in vars_relevant if "QC_indicator" not in ds[v].attrs]
+    elif not g_q and len(v_q) != len(data_vars_relevant):
+        missing = [v for v in data_vars_relevant if "QC_indicator" not in ds[v].attrs]
         warnings.append(f"{warn} Missing 'QC_indicator' (not strictly required):\n{', '.join(missing)}")
         issues += 1
     else:

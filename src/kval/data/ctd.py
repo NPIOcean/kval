@@ -43,7 +43,7 @@ from kval.data import dataset, edit
 from kval.util import time, xr_funcs
 from kval.metadata import conventionalize, _standard_attrs
 from kval.metadata.check_conventions import check_file_with_button, custom_checks
-from kval.metadata.conventionalize import convert_64_to_32, add_now_as_date_created
+from kval.metadata.conventionalize import convert_64_to_32, add_now_as_date_created, nans_to_fill_value
 from kval.metadata.io import import_metadata
 
 from typing import List, Optional, Union
