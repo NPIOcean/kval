@@ -208,6 +208,20 @@ standard_var_attrs = {
         "calendar": "gregorian",
         "axis": "T",
     },
+
+    "PAR": {
+        "standard_name":"downwelling_photosynthetic_photon_flux_in_sea_water",
+        "units": "umol m-2 s-1", 
+        "long_name": "Ocean photosynthetically active radiation (PAR)"
+
+    },
+
+    "SPAR": {
+        "standard_name":"surface_downwelling_photosynthetic_photon_flux_in_sea_water",
+        "long_name": "Surface photosynthetically active radiation (SPAR)",
+        "units": "umol m-2 s-1"
+    },
+
     "LONGITUDE": {
         "standard_name": "longitude",
         "units": "degree_east",
