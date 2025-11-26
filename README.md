@@ -30,7 +30,9 @@ ___
 
 About the latest release, `0.4.1`:
 
- [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17353994.svg)](https://doi.org/10.5281/zenodo.17353994)
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17723211.svg)](https://doi.org/10.5281/zenodo.17723211)
+
 
 - Various fixes, mostly small bugs.
 - Removed jupyterlab dependency.
