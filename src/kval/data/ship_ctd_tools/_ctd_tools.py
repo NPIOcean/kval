@@ -13,7 +13,6 @@ format produced by kval.file.cnv:
 
 from kval.file import sbe
 from kval.util import xr_funcs
-
 import numpy as np
 import xarray as xr
 from tqdm.notebook import tqdm

@@ -28,15 +28,15 @@ Pip [^tag] :
 
 ___
 
-About the latest release, `0.4.2`:
+About the latest release, `0.4.3`:
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17723685.svg)](https://doi.org/10.5281/zenodo.17723685)
-
 
 - Various fixes, mostly small bugs.
 - Removed jupyterlab dependency.
 - Resolved some version-related issues leading to problems with interactive plots.
 - Cleaned up the source code a bit. 
+
 
 `kval` is in active development.
 
