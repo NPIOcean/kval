@@ -11,7 +11,6 @@ import xarray as xr
 import numpy as np
 from kval.metadata import check_conventions, conventionalize
 from kval.util import time
-from typing import Union, List
 
 #### ADD VARIABLES
 
@@ -21,6 +20,8 @@ def add_latlon(ds, lon, lat, suppress_latlon_warning=False):
     Adds 0-d LATITUDE and LONGITUDE variables to a dataset.
 
     """
+
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     ds['LATITUDE'] = ((), (lat), {
             "standard_name": "latitude",
@@ -37,8 +38,6 @@ def add_latlon(ds, lon, lat, suppress_latlon_warning=False):
     return ds
 
 
-
-
 #### MODIFY METADATA
 
 def add_now_as_date_created(ds: xr.Dataset) -> xr.Dataset:
@@ -51,37 +50,51 @@ def add_now_as_date_created(ds: xr.Dataset) -> xr.Dataset:
     Returns:
     - The modified xarray.Dataset with the 'date_created' attribute.
     """
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
     now_time = pd.Timestamp.now()
     now_str = time.datetime_to_ISO8601(now_time)
     ds.attrs['date_created'] = now_str
     return ds
 
+
 def add_processing_history_var_ctd(
     ds: xr.Dataset,
-    source_file: Union[str, List[str], np.ndarray] = None,
+    source_file: str | list[str] | np.ndarray | None = None,
     post_processing: bool = True,
     py_script: bool = True
 ) -> xr.Dataset:
     """
-    Add a `PROCESSING` variable to store metadata about processing history.
+    Add a `PROCESSING` variable to store metadata about the dataset's processing history.
 
-    Parameters:
-    - ds: The xarray.Dataset to which the variable will be added.
-    - source_file: A single file or list of files from which data were loaded.
-    - post_processing: If True, include post-processing information.
-    - py_script: If True, include the Python script used for processing.
+    This variable tracks the source files, post-processing steps, and the Python
+    script used for processing.
 
-    Returns:
-    - The modified xarray.Dataset with the `PROCESSING` variable.
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The dataset to which the `PROCESSING` variable will be added.
+    source_file : str | list[str] | np.ndarray | None, default=None
+        Path(s) to source file(s) from which data were loaded.
+    post_processing : bool, default=True
+        Include information about post-processing steps if True.
+    py_script : bool, default=True
+        Include the Python script used for processing if True.
+
+    Returns
+    -------
+    xr.Dataset
+        The modified dataset with the added `PROCESSING` variable.
     """
+
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+
     ds['PROCESSING'] = xr.DataArray(
         data=None, dims=[],
         attrs={
             'long_name': 'Empty variable whose attributes describe processing '
                          'history of the dataset.',
             'comment': ''
-        }
-    )
+        })
 
     if 'SBE_processing' in ds.attrs:
         ds['PROCESSING'].attrs['SBE_processing'] = ds.attrs.pop('SBE_processing')
@@ -121,7 +134,6 @@ def add_processing_history_var_ctd(
     return ds
 
 
-
 def add_processing_history_var_moored(
     ds: xr.Dataset,
     source_file: str = None,
@@ -141,13 +153,14 @@ def add_processing_history_var_moored(
     - The modified xarray.Dataset with the `PROCESSING` variable.
     """
 
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+
     ds['PROCESSING'] = xr.DataArray(
         data=None, dims=[],
         attrs={
             'long_name': 'Empty variable whose attributes describe processing '
                          'history of the dataset.',
-        }
-    )
+        })
 
     if source_file is not None:
         if isinstance(source_file, str):
@@ -157,12 +170,8 @@ def add_processing_history_var_moored(
 
         ds['PROCESSING'].attrs['source_file'] = source_file_string
 
-
-
     if post_processing:
         ds['PROCESSING'].attrs['post_processing'] = ''
-
-
 
     if py_script:
         ds['PROCESSING'].attrs['python_script'] = ''
@@ -192,6 +201,9 @@ def to_netcdf(
     - add_to_history: If True, update the history attribute.
     - verbose: If True, print information about the export process.
     """
+
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+
     path = Path(path)
 
     ds = add_now_as_date_created(ds)
@@ -242,46 +254,3 @@ def to_netcdf(
     if convention_check:
         print('Running convention checker:')
         check_conventions.check_file(file_path)
-
-def metadata_to_txt(ds: xr.Dataset, outfile: str) -> None:
-    """
-    Write metadata from an xarray.Dataset to a text file.
-
-    Parameters:
-    - D: The dataset containing metadata to write.
-    - outfile: Path for the output text file. Extension '.txt' will be added if not provided.
-
-    Returns:
-    - None
-    """
-    if not outfile.lower().endswith('.txt'):
-        outfile += '.txt'
-
-    with open(outfile, 'w') as f:
-        file_header = f'FILE METADATA FROM: {ds.attrs.get("id", "Unknown")}'
-        f.write('#' * 80 + '\n')
-        f.write(f'####  {file_header:<68}  ####\n')
-        f.write('#' * 80 + '\n')
-        f.write('\n' + '#' * 27 + '\n')
-        f.write('### GLOBAL ATTRIBUTES   ###\n')
-        f.write('#' * 27 + '\n')
-        f.write('\n')
-
-        for key, item in ds.attrs.items():
-            f.write(f'# {key}:\n')
-            f.write(f'{item}\n')
-
-        f.write('\n' + '#' * 27 + '\n')
-        f.write('### VARIABLE ATTRIBUTES ###\n')
-        f.write('#' * 27 + '\n')
-
-        all_vars = list(ds.coords) + list(ds.data_vars)
-
-        for varnm in all_vars:
-            f.write('\n' + '-' * 50 + '\n')
-            f.write(f'{varnm} (coordinate)\n' if varnm in ds.coords else f'{varnm}\n')
-            f.write('-' * 50 + '\n')
-
-            for key, item in ds[varnm].attrs.items():
-                f.write(f'# {key}:\n')
-                f.write(f'{item}\n')

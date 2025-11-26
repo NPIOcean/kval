@@ -35,7 +35,6 @@ for other moored sensors.
 """
 
 import xarray as xr
-from typing import Optional, Tuple, Union, List
 import numpy as np
 
 import os
@@ -59,7 +58,7 @@ from kval.metadata.check_conventions import check_file_with_button
 import warnings
 
 # Want to be able to use these functions directly..
-from kval.data.dataset import metadata_to_txt, to_netcdf
+from kval.data.dataset import  to_netcdf
 
 if internals.is_notebook():
     from IPython.display import display
@@ -166,7 +165,7 @@ def chop_deck(
     ds: xr.Dataset,
     variable: str = "PRES",
     sd_thr: float = 1.0,
-    indices: Optional[Tuple[int, int]] = None,
+    indices: tuple[int, int] | None = None,
     auto_accept: bool = False,
     verbose: bool = True,
 ) -> xr.Dataset:
@@ -217,8 +216,8 @@ def chop_deck(
         If the specified `variable` is not present in the dataset or if the
         user input during the chop confirmation is invalid.
     """
-    # Make sure we are working with a copy
-    ds = ds.copy()
+
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     # Confirm that `variable` exists in ds
     if variable not in ds:
@@ -359,8 +358,8 @@ def chop_deck(
 
 def chop_by_time(
     ds: xr.Dataset,
-    start_time: Optional[str] = None,
-    end_time: Optional[str] = None,
+    start_time: str | None = None,
+    end_time: str | None = None,
     verbose: bool = True,
 ) -> xr.Dataset:
     """
@@ -372,11 +371,11 @@ def chop_by_time(
     ds : xr.Dataset
         The xarray Dataset containing the data to be chopped. It must include
         a 'TIME' coordinate, which can be either CF-compliant or numerical.
-    start_time : Optional[str], optional
+    start_time : str | None, optional
         The starting time for chopping in the format 'YYYY-MM-DD' or
         'YYYY-MM-DD HH:MM'. If not provided, the dataset will not be chopped
         from the start (i.e., retains all earlier data).
-    end_time : Optional[str], optional
+    end_time : str | None, optional
         The ending time for chopping in the format 'YYYY-MM-DD' or
         'YYYY-MM-DD HH:MM'. If not provided, the dataset will retain all data
         beyond this point (i.e., not chopped at the end).
@@ -396,6 +395,8 @@ def chop_by_time(
         If the `start_time` and `end_time` result in an invalid or empty slice.
         Also raised if the 'TIME' coordinate is missing.
     """
+
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     # Ensure the 'TIME' coordinate exists
     if 'TIME' not in ds.coords:
@@ -474,58 +475,53 @@ def despike_rolling(
     n_std: float,
     dim: str = "TIME",
     filter_type: str = "median",
-    min_periods: Union[int, None] = None,
+    min_periods: int | None = None,
     plot: bool = False,
     verbose: bool = False,
 ) -> xr.Dataset:
     """
+    Despike a variable in a dataset using a rolling mean or median filter.
 
-    Despike a variable in a dataset by identifying and removing outliers
-    based on a rolling mean/median and standard deviation.
-
-    Outliers are data points where the variable deviates from the rolling
-    mean/median by a number of standard deviations. Both the mean/median
-    and standard deviation are calculated within a rolling window centered
-    on each data point.
+    Outliers are identified as points deviating from the rolling mean/median by
+    more than `n_std` standard deviations. Both the rolling statistic and 
+    standard deviation are computed within a centered window along a specified 
+    dimension.
 
     Parameters
     ----------
-    ds : xarray.Dataset
-        The dataset containing the variable to despike.
+    ds : xr.Dataset
+        Dataset containing the variable to despike.
     var_name : str
-        The name of the variable to despike.
+        Name of the variable to despike.
     window_size : int
-        The size of the rolling window for calculating the mean/median
-        and standard deviation.
+        Size of the rolling window.
     n_std : float
-        The number of standard deviations used as the threshold to identify
-        outliers.
-    dim : str
-        The dimension along which to calculate the rolling statistics.
-        Default: 'TIME'.
-    filter_type : str, optional
-        The type of filter to apply ('mean' or 'median'). Default is 'mean'.
+        Number of standard deviations for thresholding outliers.
+    dim : str, default='TIME'
+        Dimension along which to compute rolling statistics.
+    filter_type : str, default='median'
+        Rolling filter type, either 'mean' or 'median'.
     min_periods : int or None, optional
-        The minimum number of observations in the window required to return
-        a valid result. Default is None.
-    plot : bool, optional
-        If True, plots the original data and the despiking results.
-        Default is False.
-    verbose : bool, optional
-        If True, print some basic info about the result of the despiking.
-        Default is False.
+        Minimum number of observations required in a window to compute a value.
+        Default is None.
+    plot : bool, default=False
+        If True, plots the original and despiked data.
+    verbose : bool, default=False
+        If True, prints summary information about the despiking.
+
     Returns
     -------
+    xr.Dataset
+        Dataset with the despiked variable. Optionally, depending on internal
+        flags, a mask of outliers may also be returned.
 
-        - If `return_ds` is True and `return_index` is False: returns the
-          updated dataset with the despiked variable.
-        - If `return_ds` is False and `return_index` is False: returns the
-          despiked variable as a DataArray.
-        - If `return_ds` is True and `return_index` is True: returns a tuple
-          of the updated dataset and a mask of outliers.
-        - If `return_ds` is False and `return_index` is True: returns a tuple
-          of the despiked variable and a mask of outliers.
+    Notes
+    -----
+    The function modifies the variable in place in a copy of the dataset,
+    leaving the original dataset unchanged.
     """
+
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     ds, is_outside_criterion = despike.despike_rolling(
         ds,
@@ -570,31 +566,40 @@ def despike_rolling(
     py_comment=(
         "Adjust for clock drift"
     ))
-
 def adjust_time_for_drift(
     ds: xr.Dataset,
-    seconds: Optional[float] = 0,
-    minutes: Optional[float] = 0,
-    hours: Optional[float] = 0,
-    days: Optional[float] = 0) -> xr.Dataset:
+    seconds: float = 0,
+    minutes: float = 0,
+    hours: float = 0,
+    days: float = 0
+) -> xr.Dataset:
     """
-    Adjust the TIME coordinate of an xarray Dataset for instrument clock drift.
+    Adjust the TIME coordinate of an xarray Dataset to correct for instrument clock drift.
 
-    Clock offset is specified in sec, min, hrs, days.
+    The offset can be specified in seconds, minutes, hours, or days.  
+    Negative drift values indicate the instrument lags true time (offset is added),  
+    positive values indicate the instrument leads true time (offset is subtracted).
 
-    *Negative* clock values: Instrument *lags* true -> *adding* offset.
-    *Positive* clock values: Instrument *leads* true -> *subtracting* offset.
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input dataset with a TIME coordinate.
+    seconds : float, default=0
+        Clock drift in seconds.
+    minutes : float, default=0
+        Clock drift in minutes.
+    hours : float, default=0
+        Clock drift in hours.
+    days : float, default=0
+        Clock drift in days.
 
-    Parameters:
-    ds (xarray.Dataset): Input dataset with a TIME coordinate.
-    seconds (float): Clock drift, seconds.
-    minutes (float): Clock drift, minutes.
-    hours (float): Clock drift, hours.
-    days (float): Clock drift, days.
-
-    Returns:
-    xarray.Dataset: Dataset with adjusted TIME coordinate.
+    Returns
+    -------
+    xr.Dataset
+        A new dataset with the adjusted TIME coordinate.
     """
+    
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     # Convert all drift values to seconds
     total_drift_seconds = (
@@ -656,41 +661,40 @@ def rolling_mean(
     window_size: int,
     filter_type: str = "mean",
     dim: str = "TIME",
-    min_periods: Union[bool, int] = None,
+    min_periods: int | bool | None = None,
     nan_edges: bool = True,
 ) -> xr.Dataset:
     """
-    Apply a running mean or median filter on a variable of an xarray Dataset
-    along a specific dimension, with options to handle NaNs and edge values.
+    Apply a rolling mean, median, or standard deviation filter to a variable
+    in an xarray Dataset along a specified dimension.
 
-    Parameters:
-    - ds: xarray.Dataset
+    Edge handling and minimum valid observations can be controlled.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
         The dataset containing the variable to filter.
-    - var_name: str
-        The name of the variable in the dataset to apply the filter on.
-    - dim: str
-        The dimension along which to apply the filter.
-        Default: TIME
-    - window_size: int
-        The size of the rolling window.
-    - filter_type: str, optional
-        The type of filter to apply: 'mean' for running mean, 'median' for
-        running median, 'sd' for standard deviation. Defaults to 'mean'.
-    - min_periods: Union[bool, int], optional
-        Minimum number of observations in the window required to have a value.
-        If an integer, it specifies the minimum number of observations in a
-        rolling window.
-        If `None` (default), all windows with a NaN will be set to Nan.
-    - nan_edges: bool, optional
-        Whether to set edge values (half of the window length) to NaN.
-        (Redundant if min_periods is set to `None`)
-        Defaults to `True`.
+    var_name : str
+        Name of the variable to apply the filter on.
+    window_size : int
+        Size of the rolling window.
+    filter_type : str, optional
+        Filter type: 'mean', 'median', or 'sd' (standard deviation). Default is 'mean'.
+    dim : str, optional
+        Dimension along which to apply the rolling filter. Default is 'TIME'.
+    min_periods : int, bool, or None, optional
+        Minimum number of observations in the window required to compute a value.
+        If None, windows containing NaN values are set to NaN. Default is None.
+    nan_edges : bool, optional
+        If True, sets edge values (half the window length) to NaN. Default is True.
 
-    Returns:
-    - ds_filt: xarray.Dataset
-        The dataset with the filtered variable, where edge values may be NaN
-        if `nan_edges` is `True`.
+    Returns
+    -------
+    xr.Dataset
+        The dataset with the filtered variable. Edge values may be NaN if `nan_edges` is True.
     """
+
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     ds = filt.rolling(
         ds=ds,
@@ -726,39 +730,37 @@ def rolling_mean(
 def threshold(
     ds: xr.Dataset,
     var_name: str,
-    min_val: Optional[float] = None,
-    max_val: Optional[float] = None,
+    min_val: float | None = None,
+    max_val: float | None = None,
 ) -> xr.Dataset:
     """
-    Apply a threshold to a specified variable in an xarray Dataset, setting
-    values outside the specified range (min_val, max_val) to NaN.
-
-    Also modifies the valid_min and valid_max variable attributes.
+    Threshold a variable in an xarray Dataset, setting values outside the
+    specified range to NaN. Updates `valid_min` and `valid_max` attributes.
 
     Parameters
     ----------
     ds : xr.Dataset
-        The input xarray Dataset.
+        Input dataset.
     var_name : str
-        The name of the variable within the Dataset to be thresholded.
-    min_val : Optional[float], default=None
-        The minimum allowed value for the variable. Values less than
-        this will be set to NaN. If None, no lower threshold is applied.
-    max_val : Optional[float], default=None
-        The maximum allowed value for the variable. Values greater than
-        this will be set to NaN. If None, no upper threshold is applied.
+        Variable to threshold.
+    min_val : float or None, optional
+        Minimum allowed value. Values below this are set to NaN. Default is None.
+    max_val : float or None, optional
+        Maximum allowed value. Values above this are set to NaN. Default is None.
 
     Returns
     -------
     xr.Dataset
-        A new xarray Dataset with the thresholded variable. The `valid_min`
-        and `valid_max` attributes are updated accordingly.
+        Dataset with the thresholded variable and updated attributes.
 
     Examples
     --------
-    # Reject temperatures below -1 and above 3
-    ds_thresholded = threshold(ds, 'TEMP', max_val=3, min_val=-1)
+    ds_thresholded = threshold(ds, 'TEMP', min_val=-1, max_val=3)
     """
+
+
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+
     ds = edit.threshold(
         ds=ds, variable=var_name, max_val=max_val, min_val=min_val
     )
@@ -794,6 +796,8 @@ def threshold_pick(ds: xr.Dataset) -> xr.Dataset:
     Utilizes interactive widgets for selecting thresholds within a Jupyter
     environment.
     """
+
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     data_variables = []
 
@@ -831,6 +835,8 @@ def remove_points(
       The dataset with specified points removed (set to NaN).
     """
 
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+
     ds = edit.remove_points_timeseries(
         ds=ds, varnm=varnm, remove_inds=remove_inds, time_var=time_var
     )
@@ -842,7 +848,7 @@ def remove_points(
 def hand_remove_points(
     ds: xr.Dataset,
     variable: str,
-    variable_edit: Optional[str] = None,
+    variable_edit: str | None = None,
 ) -> xr.Dataset:
     """
     Interactively remove data points from CTD profiles.
@@ -853,13 +859,14 @@ def hand_remove_points(
         The dataset containing the CTD data.
     variable : str
         The name of the variable to visualize (e.g., 'TEMP1', 'CHLA').
-    variable_edit : str
+    variable_edit : str or None, optional
         The name of the variable to edit (e.g., 'TEMP1', 'CHLA').
+        If None, the same variable as `variable` will be edited. Default is None.
 
     Returns
     -------
     xr.Dataset
-        The dataset with data points removed based on interactive input.
+        The dataset with points removed based on interactive input.
 
     Examples
     --------
@@ -870,6 +877,8 @@ def hand_remove_points(
     Use the interactive plot to select points for removal, then click the
     corresponding buttons for actions.
     """
+
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     if not variable_edit:
         variable_edit = variable
@@ -931,6 +940,8 @@ def calculate_PSAL(
         metadata attributes should be updated accordingly.
     """
 
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+
     CNDC_ = ds[cndc_var].copy()
     if 'units' in CNDC_.attrs:
         if CNDC_.units == 'S m-1':
@@ -964,10 +975,6 @@ def calculate_PSAL(
     )
 
     return ds
-
-
-
-
 
 
 # Recalculate SA & CT
@@ -1010,6 +1017,8 @@ def calculate_SA_CT(
         xr.Dataset: The updated dataset with SA, CT values.
 
     """
+
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     # Calculate absolute salinity
     SA = gsw.SA_from_SP(ds[psal_var], ds[pres_var], ds.LONGITUDE, ds.LATITUDE)
@@ -1077,6 +1086,8 @@ def calculate_rho(
 
     """
 
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+
     # Calculate absolute salinity
     SA = gsw.SA_from_SP(ds[psal_var], ds[pres_var], ds.LONGITUDE, ds.LATITUDE)
     # Calculate conservative temperature
@@ -1096,8 +1107,6 @@ def calculate_rho(
 
 
     return ds
-
-
 
 
 # Recalculate sigma0
@@ -1136,6 +1145,8 @@ def calculate_sig0(
         xr.Dataset: The updated dataset with SIG0 values.
 
     """
+
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     # Calculate absolute salinity
     SA = gsw.SA_from_SP(ds[psal_var], ds[pres_var], ds.LONGITUDE, ds.LATITUDE)
@@ -1205,6 +1216,8 @@ def calculate_CNDC(
         change (e.g., if a different temperature sensor is used), the CNDC
         metadata attributes should be updated accordingly.
     """
+
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     # Calculate CNDC (in mS/cm)
     CNDC = gsw.C_from_SP(
@@ -1305,6 +1318,10 @@ def assign_pressure(
         If latitude (`lat`) is not provided and cannot be inferred from
         `ds_main`.
     """
+
+    ds_main = ds_main.copy(deep=True) # Make sure we're not modifying the input ds
+    ds_above = ds_above.copy(deep=True) 
+    ds_below = ds_below.copy(deep=True) 
 
     # Ensure we have latitude for depth-to-pressure conversion
     if lat is None:
@@ -1435,43 +1452,42 @@ def linear_drift_offset(
     variable: str,
     end_val: float,
     start_val: float = 0,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None) -> xr.Dataset:
-    '''
-    (Wrapper for kval.data.edit.linear_drift)
+    start_date: str | None = None,
+    end_date: str | None = None
+) -> xr.Dataset:
+    """
+    Apply a linearly increasing drift offset to a variable in an xarray Dataset.
 
-    Apply a linearly increasing drift offset to a variable in the
-    dataset.
+    This function adds a linearly increasing additive offset over time to the
+    specified variable. The drift is applied between `start_date` and `end_date`
+    if provided, or over the entire time range of the dataset.
 
-    This function applies a linearly increasing drift over time to a specified
-    variable in an xarray Dataset. The drift is added as an additive factor.
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input xarray Dataset containing the time series data.
+    variable : str
+        The name of the variable in the dataset to which the drift will be applied.
+    end_val : float
+        The value of the drift offset at the end of the period.
+    start_val : float, optional
+        The starting value of the drift offset. Default is 0.
+    start_date : str or None, optional
+        Start date in 'YYYY-MM-DD' format. If None, uses the first time value.
+    end_date : str or None, optional
+        End date in 'YYYY-MM-DD' format. If None, uses the last time value.
 
-    The drift is applied between `start_date` and `end_date` (if provided), or
-    over the entire time range of the dataset.
+    Returns
+    -------
+    xr.Dataset
+        A new dataset with the drift offset applied to the specified variable.
 
-    Args:
-        ds (xr.Dataset):
-            Input xarray Dataset containing the time series data.
-        variable (str):
-            The name of the variable in the dataset to which the drift will be
-            applied.
-        end_val (float):
-            The value of the drift offset at the end of the period.
-        start_val (float, optional):
-            The starting value of the drift offset. Default is 0.
-        start_date (str, optional):
-            The starting date for applying the drift in 'YYYY-MM-DD' format. If
-            None, the drift starts at the first time value in the dataset.
-            Default is None.
-        end_date (str, optional):
-            The ending date for applying the drift in 'YYYY-MM-DD' format. If
-            None, the drift ends at the last time value in the dataset. Default
-            is None.
+    Notes
+    -----
+    This is a wrapper for `kval.data.edit.linear_drift`.
+    """
 
-    Returns:
-        xr.Dataset: A new dataset with the drift applied to the specified
-        variable.
-        '''
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     ds = edit.linear_drift(
         ds, variable, end_val, start_val=start_val, start_date=start_date,
@@ -1506,44 +1522,42 @@ def linear_drift_factor(
     variable: str,
     end_val: float,
     start_val: float = 1,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None) -> xr.Dataset:
-    '''
-    (Wrapper for kval.data.edit.linear_drift)
+    start_date: str | None = None,
+    end_date: str | None = None
+) -> xr.Dataset:
+    """
+    Apply a linearly increasing drift factor to a variable in an xarray Dataset.
 
-    Apply a linearly increasing drift factor to a variable in the
-    dataset.
+    This function applies a linearly increasing multiplicative drift over time
+    to a specified variable. The drift is applied between `start_date` and
+    `end_date` if provided, or over the entire time range of the dataset.
 
-    This function applies a linearly increasing drift over time to a specified
-    variable in an xarray Dataset. The drift is added as a multiplicative
-    factor.
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input xarray Dataset containing the time series data.
+    variable : str
+        The name of the variable to which the drift will be applied.
+    end_val : float
+        The value of the drift factor at the end of the period.
+    start_val : float, optional
+        The starting value of the drift factor. Default is 1.
+    start_date : str, optional
+        Start date in 'YYYY-MM-DD' format. If None, uses the first time value.
+    end_date : str, optional
+        End date in 'YYYY-MM-DD' format. If None, uses the last time value.
 
-    The drift is applied between `start_date` and `end_date` (if provided), or
-    over the entire time range of the dataset.
+    Returns
+    -------
+    xr.Dataset
+        A new dataset with the drift applied to the specified variable.
 
-    Args:
-        ds (xr.Dataset):
-            Input xarray Dataset containing the time series data.
-        variable (str):
-            The name of the variable in the dataset to which the drift will be
-            applied.
-        end_val (float):
-            The value of the drift factor at the end of the period .
-        start_val (float, optional):
-            The starting value of the drift factor. Default is 1.
-        start_date (str, optional):
-            The starting date for applying the drift in 'YYYY-MM-DD' format. If
-            None, the drift starts at the first time value in the dataset.
-            Default is None.
-        end_date (str, optional):
-            The ending date for applying the drift in 'YYYY-MM-DD' format. If
-            None, the drift ends at the last time value in the dataset. Default
-            is None.
+    Notes
+    -----
+    This is a wrapper for `kval.data.edit.linear_drift`.
+    """
 
-    Returns:
-        xr.Dataset: A new dataset with the drift applied to the specified
-        variable.
-        '''
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     # Apply drift
     ds = edit.linear_drift(
@@ -1572,85 +1586,55 @@ def linear_drift_factor(
 @record_processing("", py_comment="Dropping some variables")
 # Note: Doing PROCESSING.post_processing record keeping within the
 # drop_variables() function because we want to access the *dropped* list.
+
 def drop_variables(
     ds: xr.Dataset,
-    drop_vars: Optional[List[str]] = None,
-    retain_vars: Optional[Union[List[str], bool]] = None,
+    drop: list[str] | None = None,
+    retain: list[str] | bool | None = None,
     verbose: bool = True,
+    dims_to_check: list[str] = ["TIME"],    
 ) -> xr.Dataset:
     """
-    Drop measurement variables from the dataset based on specified criteria.
+    Drop or retain variables in an xarray Dataset based on specified criteria.
 
-    This function retains or drops variables from an xarray.Dataset based on
-    provided lists of variables to retain or drop. If `retain_vars` is True,
-    no variables will be dropped.
+    Exactly one of `drop` or `retain` can be provided. Variables without a TIME 
+    dimension are always retained. If neither is provided, the dataset is returned unchanged.
 
     Parameters
     ----------
     ds : xr.Dataset
         The dataset from which variables will be dropped.
-    retain_vars : Optional[Union[List[str], bool]], default=None
-        List of variables to retain. If a boolean `True` is provided, all
-        variables are retained (no changes made). This parameter is ignored if
-        `drop_vars` is specified.
-    drop_vars : Optional[List[str]], default=None
-        List of variables to drop from the dataset. If specified, this will
-        override `retain_vars`.
+    drop : list[str], optional
+        Variables to remove from the dataset. Overrides `retain` if provided.
+    retain : list[str] or bool, optional
+        Variables to keep. If True, all variables are retained. Ignored if `drop` is provided.
     verbose : bool, default=True
-        Whether to print information about the dropped variables.
-
+        If True, prints information about dropped variables.
+    dims_to_check : list[str], optional
+        Dimensions to consider when dropping variables. Only variables that
+        have at least one of these dimensions are eligible for dropping.
+        Defaults to ["TIME"].
     Returns
     -------
     xr.Dataset
-        The modified dataset with specified variables dropped or retained.
+        A new dataset with the specified variables dropped or retained, or unchanged if neither is supplied.
 
-    Notes
-    -----
-    Provide *either* `retain_vars` or `drop_vars`, but not both.
-    Variables without a TIME dimension are always retained.
+    Raises
+    ------
+    ValueError
+        If both `drop` and `retain` are provided.
+
+    Examples
+    --------
+    >>> ds_new = drop_variables(ds, drop=['TEMP1', 'SAL'])
+    >>> ds_new = drop_variables(ds, retain=['TEMP1', 'SAL'])
     """
+    ds = ds.copy(deep=True)  # Ensure input dataset is not modified
 
-    if retain_vars is not None and drop_vars is not None:
-        raise ValueError(
-            "Specify either `retain_vars` or `drop_vars`, but not both."
-        )
-
-    if retain_vars is None and drop_vars is None:
-        return ds
-
-    dropped = []  # To keep track of dropped variables
-
-    # Case: drop variables by explicitly provided drop_vars
-    if drop_vars is not None:
-        ds = ds.drop_vars(drop_vars)
-        dropped = drop_vars
-    # Case: retain variables based on retain_vars list
-    else:
-        if isinstance(retain_vars, bool):
-            if retain_vars:  # If retain_vars is True, return unchanged dataset
-                return ds
-            retain_vars = []  # If False, treat it as an empty retain list
-
-        all_vars = list(ds.data_vars)
-        for varnm in all_vars:
-            # Drop variables not in retain_vars, and those having "TIME" in
-            # dimensions
-            if varnm not in retain_vars and "TIME" in ds[varnm].dims:
-                ds = ds.drop_vars(varnm)
-                dropped.append(varnm)
-
-    # Inform and log dropped variables
-    if dropped:
-        drop_str = f"Dropped variables from the Dataset: {dropped}."
-        if verbose:
-            print(drop_str)
-        if "PROCESSING" in ds:
-            ds["PROCESSING"].attrs["post_processing"] = (
-                ds["PROCESSING"].attrs.get("post_processing", "")
-                + f"{drop_str}\n")
+    ds = edit.drop_variables(ds, drop= drop, retain=retain, verbose=verbose, 
+                   dims_to_check=dims_to_check)
 
     return ds
-
 
 # Drop variables (interactive)
 def drop_vars_pick(ds: xr.Dataset) -> xr.Dataset:
@@ -1674,6 +1658,9 @@ def drop_vars_pick(ds: xr.Dataset) -> xr.Dataset:
     the "Drop variables" button. The removed variables are also printed to the
     output.
     """
+
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+
     edit_obj = edit.drop_vars_pick(ds, moored=True)
     return edit_obj.D
 
@@ -1723,6 +1710,8 @@ def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
     - `reorder_attrs`:
         Reorders attributes for consistency.
     """
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+
     ds = conventionalize.remove_numbers_in_var_names(ds)
     ds = conventionalize.add_standard_var_attrs(ds, data_type='moored')
     ds = conventionalize.add_standard_glob_attrs_moor(ds, override=False)
@@ -1733,29 +1722,36 @@ def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
 
     return ds
 
-
-# Export to matfile
-def to_mat(ds, outfile, simplify=False):
+def to_mat(ds: xr.Dataset, outfile: str, simplify: bool = False) -> None:
     """
-    Convert the CTD data (xarray.Dataset) to a MATLAB .mat file.
+    Convert a CTD xarray.Dataset to a MATLAB .mat file.
 
-    A field 'TIME_mat' with Matlab datenums is added along with the data.
+    Adds a field `TIME_mat` containing MATLAB datenums along with the dataset.
 
-    Parameters:
-    - ds (xarray.Dataset): Input dataset to be converted.
-    - outfile (str): Output file path for the MATLAB .mat file. If the path
-      doesn't end with '.mat', it will be appended.
-    - simplify (bool, optional): If True, simplify the dataset by extracting
-      only coordinate and data variables (no metadata attributes). If False,
-      the matfile will be a struct containing [attrs, data_vars, coords, dims].
-      Defaults to False.
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input dataset to be converted.
+    outfile : str
+        Output path for the MATLAB .mat file. If the path does not end with
+        '.mat', the extension will be appended automatically.
+    simplify : bool, optional
+        If True, only coordinate and data variables are included (no metadata).
+        If False, the .mat file will include a struct containing attrs, data_vars,
+        coords, and dims. Default is False.
 
-    Returns:
-    None: The function saves the dataset as a MATLAB .mat file.
+    Returns
+    -------
+    None
+        Saves the dataset as a MATLAB .mat file.
 
-    Example:
-    >>> moored.xr_to_mat(ds, 'output_matfile', simplify=True)
+    Examples
+    --------
+    >>> to_mat(ds, 'output_matfile', simplify=True)
     """
+
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+
     # Drop the empty PROCESSING variable (doesn't work well with MATLAB)
     ds_wo_proc = drop_variables(ds, drop_vars="PROCESSING")
 
@@ -1764,43 +1760,46 @@ def to_mat(ds, outfile, simplify=False):
     matfile.xr_to_mat(ds_wo_proc.transpose(), outfile, simplify=simplify)
 
 
-def check_metadata(ds: Union[xr.Dataset, str]) -> None:
+def check_metadata(ds: xr.Dataset | str) -> None:
     """
-    Use the IOOS compliance checker to check an NetCDF file (CF and ACDD
-    conventions).
+    Run the IOOS compliance checker on a dataset or NetCDF file.
+
+    Checks for compliance with CF and ACDD conventions and displays the results
+    interactively with a "Close" button.
 
     Parameters
     ----------
-    ds : Union[xr.Dataset, str]
-        The dataset or file path to check. Can be either an xarray Dataset or a
-        file path.
+    ds : xr.Dataset or str
+        The dataset or path to a NetCDF file to check.
 
-    Displays the compliance check results with a "Close" button.
+    Notes
+    -----
+    This function is intended for interactive use in a Jupyter environment.
     """
-    check_file_with_button(ds)
 
 
 def plot(ds: xr.Dataset) -> None:
-    '''
-    Visualizes time series data interactively with options for applying
-    hourly and daily mean filters.
+    """
+    Interactively visualize time series data from an xarray Dataset.
 
-    Lets the user display any variable with a TIME dimension.
+    Supports applying hourly or daily mean filters to variables with a TIME dimension.
 
-    Assuming:
-
-        - 1-D time series data with a TIME dimension.
-        - Running a jupyter notebook with the matplotlib widget backend
-
-        (Your mileage may vary otherwise).
+    Assumptions
+    -----------
+    - 1-D time series data along the TIME dimension.
+    - Running in a Jupyter notebook with the matplotlib widget backend.
 
     Parameters
     ----------
-    ds : Union[xr.Dataset, str]
-        The dataset
+    ds : xr.Dataset
+        The dataset containing variables with a TIME dimension.
 
-    Displays the compliance check results with a "Close" button.
-    '''
+    Notes
+    -----
+    Displays the plot interactively with a "Close" button to dismiss the figure.
+    """
+
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     # Make sure we have datetime TIME
     ds_cf = xr.decode_cf(ds)
@@ -1845,6 +1844,8 @@ def adjust_PSAL_from_CNDC_TEMP(
         xr.Dataset: A new dataset with updated PSAL values and a comment
         attribute.
     '''
+
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     CNDC_mS_cm = ds.CNDC.copy()
 
@@ -1954,6 +1955,8 @@ def get_median_depth(ds: xr.Dataset, lat: float = None, decimals: int = 1) -> fl
         ValueError: If latitude is not provided and cannot be extracted from the dataset.
         KeyError: If the dataset does not contain a 'PRES' variable.
     """
+
+    
 
     # Ensure the dataset contains the 'PRES' variable
     if 'PRES' not in ds:

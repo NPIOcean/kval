@@ -10,12 +10,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import xarray as xr
 import ipywidgets as widgets
-from typing import Optional
 from IPython.display import display, clear_output
 from kval.data import ctd, moored
 from kval.calc.number import order_of_magnitude
 from kval.util import internals, index, time
-from typing import Optional
 
 
 def remove_points_profile(ds: xr.Dataset, varnm: str, TIME_index: int,
@@ -37,6 +35,7 @@ def remove_points_profile(ds: xr.Dataset, varnm: str, TIME_index: int,
     - ds: xarray.Dataset
       The dataset with specified points removed (set to NaN).
     """
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     # Convert remove_inds to a list if it's not already
     remove_inds = np.asarray(remove_inds)
@@ -71,6 +70,7 @@ def remove_points_timeseries(ds: xr.Dataset, varnm: str,
       The dataset with specified points removed (set to NaN).
     """
 
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     # Handle case where no points are to be removed
     if not remove_inds:
@@ -127,7 +127,7 @@ def offset(ds: xr.Dataset, variable: str, offset: float) -> xr.Dataset:
     ds_offset = offset(ds, 'TEMP', offset=5)
     """
 
-    ds_new = ds.copy()
+    ds_new = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     if variable not in ds_new:
         raise ValueError(f"Variable '{variable}' not found in the Dataset.")
@@ -145,9 +145,10 @@ def offset(ds: xr.Dataset, variable: str, offset: float) -> xr.Dataset:
 
     return ds_new
 
+
 def threshold(ds: xr.Dataset, variable: str,
-              max_val: Optional[float] = None,
-              min_val: Optional[float] = None) -> xr.Dataset:
+              max_val: float | None = None,
+              min_val: float | None = None) -> xr.Dataset:
     """
     Apply a threshold to a specified variable in an xarray Dataset, setting
     values outside the specified range (min_val, max_val) to NaN.
@@ -181,7 +182,7 @@ def threshold(ds: xr.Dataset, variable: str,
     ds_thresholded = threshold(ds, 'TEMP', min_val=-1, max_val=3)
     """
 
-    ds_new = ds.copy()
+    ds_new = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     if max_val is not None:
         ds_new[variable] = ds_new[variable].where(ds_new[variable] <= max_val)
@@ -230,12 +231,14 @@ def replace(
     Returns:
         xr.Dataset: A new dataset with updated values (and optionally updated flag variable).
     """
+
+    
     # Check that source and target variables exist
     for var in [var_source, var_target]:
         if var not in ds:
             raise ValueError(f"Variable '{var}' not found in dataset.")
 
-    ds_new = ds.copy(deep=True)
+    ds_new = ds.copy(deep=True) # Make sure we're not modifying the input ds
     dims = ds[var_target].dims
 
     # Normalize use_values to a dict per-dimension
@@ -299,17 +302,16 @@ def replace(
     return ds_new
 
 
-
-
 def linear_drift(
     ds: xr.Dataset,
     variable: str,
     end_val: float,
     factor: bool = False,
     start_val: float = 0,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None) -> xr.Dataset:
-
+    start_date: str | None = None,
+    end_date: str | None = None
+) -> xr.Dataset:
+    
     """
     Apply a linearly increasing drift (offset or factor) to a variable in the
     dataset.
@@ -354,6 +356,8 @@ def linear_drift(
         variable.
 
     """
+
+    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     # Convert string dates to numpy datetime64 objects
     if start_date:
@@ -434,38 +438,132 @@ def linear_drift(
 
 
 
-class drop_vars_pick:
-    '''
-    Interactive class for dropping selected variables from an xarray Dataset.
+def drop_variables(
+    ds: xr.Dataset,
+    drop: list[str] | None = None,
+    retain: list[str] | bool | None = None,
+    dims_to_check: list[str] = ["TIME"],
+    verbose: bool = True,
+) -> xr.Dataset:
+    """
+    Drop or retain variables in an xarray Dataset based on specified criteria.
 
-    Parameters:
-    - D (xarray.Dataset): The dataset from which variables will be dropped.
+    Exactly one of `drop` or `retain` must be provided. Variables whose dimensions
+    do not match `dims_to_check` are always retained.
 
-    Displays an interactive widget with checkboxes for each variable, allowing users
-    to select variables to remove. The removal is performed by clicking the "Drop variables"
-    button. The removed variables are also printed to the output.
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The dataset from which variables will be dropped or retained.
+    drop : list[str] | None, optional
+        List of variable names to drop. Overrides `retain` if provided.
+    retain : list[str] | bool | None, optional
+        List of variable names to keep. If True, all variables are retained.
+        Ignored if `drop` is provided.
+    dims_to_check : list[str], optional
+        Dimensions to consider when dropping variables. Only variables that
+        have at least one of these dimensions are eligible for dropping.
+        Defaults to ["TIME"].
+    verbose : bool, default=True
+        If True, prints the list of dropped variables.
 
-    Examples:
-    ```python
-    drop_vars_pick(my_dataset)
-    ```
+    Returns
+    -------
+    xr.Dataset
+        A new xarray Dataset with the specified variables dropped or retained.
 
-    Note: This class utilizes IPython widgets for interactive use within a Jupyter environment.
-    '''
+    Raises
+    ------
+    ValueError
+        If both `drop` and `retain` are provided.
+
+    Notes
+    -----
+    This function also updates the `PROCESSING.attrs["post_processing"]`
+    field, if present, with a record of dropped variables.
+
+    Examples
+    --------
+    # Moored dataset example:
+    ds_new = drop_variables(ds, drop=["TEMP", "SAL"], dims_to_check=["TIME"])
+
+    # CTD dataset example:
+    ds_new = drop_variables(ds, retain=["TEMP"], dims_to_check=["PRES", "NISKIN_NUMBER"])
+    """
+    ds = ds.copy(deep=True)
+
+    if drop is not None and retain is not None:
+        raise ValueError("Specify exactly one of `drop` or `retain`; both were supplied.")
+    if drop is None and retain is None:
+        return ds
+
+    dropped = []
+
+    # Drop variables explicitly
+    if drop is not None:
+        ds = ds.drop_vars(drop)
+        dropped = drop
+    else:
+        if isinstance(retain, bool) and retain:
+            return ds
+        if retain is None or (isinstance(retain, bool) and not retain):
+            retain = []
+
+        all_vars = list(ds.data_vars)
+        for var in all_vars:
+            if var not in retain and any(dim in ds[var].dims for dim in dims_to_check):
+                ds = ds.drop_vars(var)
+                dropped.append(var)
+
+    # Log dropped variables
+    if dropped:
+        drop_str = f"Dropped variables from the Dataset: {dropped}."
+        if verbose:
+            print(drop_str)
+        if "PROCESSING" in ds:
+            ds["PROCESSING"].attrs["post_processing"] = (
+                ds["PROCESSING"].attrs.get("post_processing", "") + f"{drop_str}\n"
+            )
+
+    return ds
 
 
-    def __init__(self, D, moored=None):
+class drop_vars_pick: 
+    """
+    Interactive tool to drop selected variables from an xarray Dataset.
+
+    Provides a simple Jupyter notebook interface for selecting variables 
+    to remove. Users can choose variables via checkboxes and apply the 
+    removal by clicking "Drop variables", or exit without making changes. 
+    Removed variables are printed to the notebook output.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The input dataset from which variables can be dropped. The internal 
+        copy is modified interactively.
+    moored : Optional[bool], default=None
+        If True, applies mooring-specific variable removal logic. Otherwise, 
+        standard CTD variable removal is used.
+
+    Examples
+    --------
+    >>> import xarray as xr
+    >>> ds = xr.open_dataset("my_ctd_data.nc")
+    >>> drop_vars_pick(ds)
+    """
+    def __init__(self, ds, moored=None):
 
         # Check that we in a notebook and with the ipympl backend..
         # (raise a warning otherwise)
         internals.check_interactive()
 
-        self.D = D
+        self.ds = ds.copy(deep=True)  # Make sure we're not modifying the input ds
         self.moored = moored
         self.selected_options = []
 
         # List of checkbox labels
-        self.checkbox_labels = list(D.data_vars)
+        self.checkbox_labels = list(ds.data_vars)
 
         # Create Checkbox widgets
         self.checkbox_widgets = [widgets.Checkbox(description=label) for label in self.checkbox_labels]
@@ -491,7 +589,7 @@ class drop_vars_pick:
         self.exit_button = widgets.ToggleButton(value=False, description='Exit', button_style='danger')
 
         # Attach button event handlers
-        self.remove_button.observe(lambda change: self.on_remove_button_click(change, D), names='value')
+        self.remove_button.observe(lambda change: self.on_remove_button_click(change, ds), names='value')
         self.exit_button.observe(self.on_exit_button_click, names='value')
 
         # Layout for buttons
@@ -512,7 +610,7 @@ class drop_vars_pick:
         display(self.hbox_buttons)
         display(self.output_widget)
 
-    def on_remove_button_click(self, change, D):
+    def on_remove_button_click(self, change, ds):
         if change['new']:
 
             # Clunky: Want to preserve the metadata from drop_variables,
@@ -522,17 +620,17 @@ class drop_vars_pick:
             # For a mooring dataset:
             if self.moored:
             # Otherwise assume CTD dataset
-                D_dropped = moored.drop_variables(
-                  self.D, drop_vars = self.selected_options)
+                ds_dropped = moored.drop_variables(
+                  self.ds, drop_vars = self.selected_options)
             else:
-                D_dropped = ctd.drop_variables(
-                  self.D, drop_vars = self.selected_options)
+                ds_dropped = ctd.drop_variables(
+                  self.ds, drop_vars = self.selected_options)
 
-            if 'PROCESSING' in D_dropped:
-                self.D['PROCESSING'] = D_dropped.PROCESSING
+            if 'PROCESSING' in ds_dropped:
+                self.ds['PROCESSING'] = ds_dropped.PROCESSING
 
             for key in self.selected_options:
-                del self.D[key]
+                del self.ds[key]
 
 
             self.close_widgets()
@@ -553,25 +651,46 @@ class drop_vars_pick:
         self.hbox_buttons.close()
 
 
-#########################################################################
-
-
-def threshold_edit(d, variables):
+def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
     """
+    Interactive threshold editor for variables in an xarray Dataset.
 
-    Docstring needs updating
-    Interactive tool for threshold editing of a variable in a dataset.
+    This function provides a Jupyter notebook widget interface to 
+    inspect the distribution of variables and set min/max threshold 
+    values interactively. Users can visualize the effect of thresholds 
+    on the data and apply them to update the dataset in-place. 
 
-    Parameters:
-    - d (xarray.Dataset): The input dataset containing the variable to be
-                          threshold-edited.
+    The interface includes:
+    - Dropdown to select a variable.
+    - Sliders and text boxes to adjust min/max thresholds.
+    - Histogram plots highlighting values inside/outside the range.
+    - Buttons to apply threshold, reset sliders, or exit the tool.
+    - Real-time feedback on the number and percentage of data points affected.
 
+    **Requirements:**
+    - Must be run in a Jupyter notebook with the `ipympl` backend active.
+    - `xarray` dataset variables should contain numeric data.
 
-    Usage:
-    Call this function with the dataset as an argument to interactively
-    set threshold values and visualize the impact on the data.
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The input dataset containing variables to threshold-edit. The dataset 
+        is modified in-place if thresholds are applied.
+    variables : list[str]
+        List of variable names in the dataset that can be threshold-edited. 
+        The first variable in the list is selected by default.
 
-    Returns: None
+    Returns
+    -------
+    None
+        This function does not return a value; it provides an interactive 
+        widget-based UI in the notebook.
+
+    Examples
+    --------
+    >>> import xarray as xr
+    >>> ds = xr.open_dataset("my_ctd_data.nc")
+    >>> threshold_edit(ds, ["TEMP", "SAL", "OXYGEN"])
     """
 
 
@@ -579,7 +698,7 @@ def threshold_edit(d, variables):
     # (raise a warning otherwise)
     internals.check_interactive()
 
-    def get_slider_params(d, variable):
+    def get_slider_params(ds, variable):
         """
         Helper function to calculate slider parameters based on the variable's
         data range.
@@ -599,8 +718,8 @@ def threshold_edit(d, variables):
         Tuple (float, float, float, int): Lower floor, upper ceil, step,
                                           order of magnitude step.
         """
-        upper = float(d[variable].max())
-        lower = float(d[variable].min())
+        upper = float(ds[variable].max())
+        lower = float(ds[variable].min())
 
         range = upper-lower
         oom_range = order_of_magnitude(range)
@@ -646,36 +765,36 @@ def threshold_edit(d, variables):
         ax0 = plt.subplot2grid((1, 1), (0, 0))
         fig.canvas.header_visible = False  # Hide the figure header
 
-        var_range = (np.nanmin(d[variable].values),
-                     np.nanmax(d[variable].values))
+        var_range = (np.nanmin(ds[variable].values),
+                     np.nanmax(ds[variable].values))
         var_span = var_range[1] - var_range[0]
 
-        hist_all = ax0.hist(d[variable].values.flatten(), bins=100,
+        hist_all = ax0.hist(ds[variable].values.flatten(), bins=100,
                             range= var_range, color='tab:orange',
                             alpha=0.7, label='Distribution outside range')
 
-        condition = ((d[variable] >= min_value)
-                    & (d[variable] <= max_value))
-        d_reduced = d.copy()
-        d_reduced[variable] = d_reduced[variable].where(condition)
+        condition = ((ds[variable] >= min_value)
+                    & (ds[variable] <= max_value))
+        ds_reduced = ds.copy()
+        ds_reduced[variable] = ds_reduced[variable].where(condition)
 
         # Count non-nan values in each dataset
-        count_valid_d = int(d[variable].count())
-        count_valid_d_reduced = int(d_reduced[variable].count())
+        count_valid_ds = int(ds[variable].count())
+        count_valid_ds_reduced = int(ds_reduced[variable].count())
 
         # Calculate the number of points that would be dropped by the
         # threshold cut
-        points_cut = count_valid_d - count_valid_d_reduced
-        points_pct = points_cut / count_valid_d * 100
+        points_cut = count_valid_ds - count_valid_ds_reduced
+        points_pct = points_cut / count_valid_ds * 100
 
         ax0.set_title(
             f'Histogram of {variable}', fontsize = 10)
 
-        ax0.hist(d_reduced[variable].values.flatten(), bins=100,
+        ax0.hist(ds_reduced[variable].values.flatten(), bins=100,
                  range=var_range, color='tab:blue', alpha=1,
                  label='Distribution inside range')
 
-        ax0.set_xlabel(f'[{d[variable].units}]')
+        ax0.set_xlabel(f'[{ds[variable].units}]')
         ax0.set_ylabel('Frequency')
         var_span = (np.nanmax(d[variable].values)
                     - np.nanmin(d[variable].values))
@@ -715,7 +834,7 @@ def threshold_edit(d, variables):
 
         variable = variable_dropdown.value
 
-        lower_floor, upper_ceil, step, oom_step = get_slider_params(d, variable)
+        lower_floor, upper_ceil, step, oom_step = get_slider_params(ds, variable)
 
         min_value = np.round(np.floor(min_slider.value*10**(-oom_step))
                                      *10**(oom_step), -oom_step)
@@ -724,7 +843,7 @@ def threshold_edit(d, variables):
 
         var_max = float(d[variable].max())
         var_min = float(d[variable].min())
-        unit = d[variable].units
+        unit = ds[variable].units
 
         if unit == '1':
             unit=''
@@ -734,30 +853,30 @@ def threshold_edit(d, variables):
         elif min_value<=var_min and max_value<var_max:
             thr = True
             thr_str = f'Rejected all data above {max_value} {unit}.'
-            d[variable].attrs['valid_max'] = max_value
+            ds[variable].attrs['valid_max'] = max_value
         elif min_value>var_min and max_value>=var_max:
             thr = True
             thr_str = f'Rejected all data below {min_value} {unit}.'
-            d[variable].attrs['valid_min'] = min_value
+            ds[variable].attrs['valid_min'] = min_value
         elif min_value>var_min and max_value<var_max:
             thr = True
             thr_str = ('Rejected all data outside ('
                        f'{min_value}, {max_value}) {unit}.')
-            d[variable].attrs['valid_max'] = max_value
-            d[variable].attrs['valid_min'] = min_value
+            ds[variable].attrs['valid_max'] = max_value
+            ds[variable].attrs['valid_min'] = min_value
 
         if thr:
             # Count non-nan values in the dataset
             count_valid_before = int(d[variable].count())
 
-            d_thr = threshold(ds=d, variable = variable,
+            ds_thr = threshold(ds=ds.opy(deep=True), variable = variable,
                         max_val = max_value, min_val = min_value)
-            d[variable] = d_thr[variable]
-            if 'PROCESSING' in d:
-                d['PROCESSING'] = d_thr['PROCESSING']
-                print(d_thr['PROCESSING'])
+            ds[variable] = ds_thr[variable]
+            if 'PROCESSING' in ds:
+                ds['PROCESSING'] = ds_thr['PROCESSING']
+                print(ds_thr['PROCESSING'])
             # Count non-nan values in the dataset
-            count_valid_after = int(d[variable].count())
+            count_valid_after = int(ds[variable].count())
 
             # Calculate the number of points that would be dropped by the
             # threshold cut
@@ -788,15 +907,15 @@ def threshold_edit(d, variables):
 
 
     # Determine the range of values in the dataset
-    value_range = (d[variable_dropdown.value].max()
-                   - d[variable_dropdown.value].min())
+    value_range = (ds[variable_dropdown.value].max()
+                   - ds[variable_dropdown.value].min())
 
     # Calculate a suitable step size that includes whole numbers
     step_size = max(1, np.round(value_range / 100, 2))  # Adjust 100 as needed
 
     # Range sliders and input boxes
     slider_min, slider_max, slider_step, oom_step = get_slider_params(
-        d, variable_dropdown.value)
+        ds, variable_dropdown.value)
 
 
     min_slider = widgets.FloatSlider(
@@ -876,7 +995,7 @@ def threshold_edit(d, variables):
     def update_sliders(change):
         variable = change.new
         slider_min, slider_max, slider_step, oom = get_slider_params(
-            d, variable)
+            ds, variable)
 
         max_slider.min, max_slider.max = -1e9, 1e9
         min_slider.min, min_slider.max = -1e9, 1e9

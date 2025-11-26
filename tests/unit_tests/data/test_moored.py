@@ -194,28 +194,28 @@ def sample_dataset_dropvars():
 
 def test_drop_vars(sample_dataset_dropvars):
     """Test dropping specific variables using the drop_vars argument."""
-    ds = drop_variables(sample_dataset_dropvars, drop_vars=["var1"])
+    ds = drop_variables(sample_dataset_dropvars, drop=["var1"])
     assert "var1" not in ds
     assert "var2" in ds
     assert "static_var" in ds  # static_var should not be dropped
 
 def test_retain_vars(sample_dataset_dropvars):
     """Test retaining specific variables using the retain_vars argument."""
-    ds = drop_variables(sample_dataset_dropvars, retain_vars=["var1"])
+    ds = drop_variables(sample_dataset_dropvars, retain=["var1"])
     assert "var1" in ds
     assert "var2" not in ds
     assert "static_var" in ds  # static_var should not be dropped
 
 def test_retain_all_vars(sample_dataset_dropvars):
     """Test retaining all variables by setting retain_vars to True."""
-    ds = drop_variables(sample_dataset_dropvars, retain_vars=True)
+    ds = drop_variables(sample_dataset_dropvars, retain=True)
     assert "var1" in ds
     assert "var2" in ds
     assert "static_var" in ds  # All variables should be retained
 
 def test_no_retain_vars(sample_dataset_dropvars):
     """Test that no variables are retained when retain_vars is an empty list."""
-    ds = drop_variables(sample_dataset_dropvars, retain_vars=[])
+    ds = drop_variables(sample_dataset_dropvars, retain=[])
     assert "var1" not in ds
     assert "var2" not in ds
     assert "static_var" in ds  # static_var should not be dropped since it has no TIME dimension
@@ -223,11 +223,11 @@ def test_no_retain_vars(sample_dataset_dropvars):
 def test_error_if_both_retain_and_drop(sample_dataset_dropvars):
     """Test that an error is raised if both retain_vars and drop_vars are specified."""
     with pytest.raises(ValueError):
-        drop_variables(sample_dataset_dropvars, retain_vars=["var1"], drop_vars=["var2"])
+        drop_variables(sample_dataset_dropvars, retain=["var1"], drop=["var2"])
 
 def test_verbose_output(capfd, sample_dataset_dropvars):
     """Test verbose output when dropping variables."""
-    drop_variables(sample_dataset_dropvars, drop_vars=["var1"], verbose=True)
+    drop_variables(sample_dataset_dropvars, drop=["var1"], verbose=True)
     captured = capfd.readouterr()
     assert "Dropped variables from the Dataset: ['var1']" in captured.out
 
