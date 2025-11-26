@@ -76,10 +76,6 @@ ___
 - Development is supported by supported by the project [HiAOOS](https://hiaoos.eu/).
 - External contributions (pull requests, issues, whatever) are very welcome!
 
-
-
-
-
 Contributions, issues, and PRs are welcome!
 
 
@@ -87,7 +83,7 @@ Contributions, issues, and PRs are welcome!
 
 About the latest release, `0.4.2`:
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17723211.svg)](https://doi.org/10.5281/zenodo.17723211)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17723685.svg)](https://doi.org/10.5281/zenodo.17723685)
 
 
 - Various fixes, mostly small bugs.
