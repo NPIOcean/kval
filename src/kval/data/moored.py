@@ -1107,7 +1107,6 @@ def calculate_rho(
 )
 def calculate_sig0(
     ds: xr.Dataset,
-    cndc_var: str = "CNDC",
     temp_var: str = "TEMP",
     pres_var: str = "PRES",
     psal_var: str = "PSAL",
@@ -1123,9 +1122,6 @@ def calculate_sig0(
         ds (xr.Dataset):
             The input dataset containing conductivity, temperature, and
             pressure variables.
-        cndc_var (str):
-            The name of the conductivity variable in the dataset.
-            Defaults to 'CNDC'.
         temp_var (str):
             The name of the temperature variable in the dataset.
             Defaults to 'TEMP'.
@@ -1154,7 +1150,7 @@ def calculate_sig0(
                                 'minus 1000 kg m-3.')})
 
     ds['SIG0'].attrs["note"] = (
-        f"Computed from {cndc_var}, {temp_var}, {pres_var} "
+        f"Computed from {temp_var}, {pres_var} "
         "using the Python gsw module."
     )
     return ds
