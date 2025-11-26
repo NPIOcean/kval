@@ -621,10 +621,10 @@ class drop_vars_pick:
             if self.moored:
             # Otherwise assume CTD dataset
                 ds_dropped = moored.drop_variables(
-                  self.ds, drop_vars = self.selected_options)
+                  self.ds, drop = self.selected_options)
             else:
                 ds_dropped = ctd.drop_variables(
-                  self.ds, drop_vars = self.selected_options)
+                  self.ds, drop = self.selected_options)
 
             if 'PROCESSING' in ds_dropped:
                 self.ds['PROCESSING'] = ds_dropped.PROCESSING
@@ -796,10 +796,10 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
 
         ax0.set_xlabel(f'[{ds[variable].units}]')
         ax0.set_ylabel('Frequency')
-        var_span = (np.nanmax(d[variable].values)
-                    - np.nanmin(d[variable].values))
-        ax0.set_xlim(np.nanmin(d[variable].values) - var_span * 0.05,
-                      np.nanmax(d[variable].values) + var_span * 0.05)
+        var_span = (np.nanmax(ds[variable].values)
+                    - np.nanmin(ds[variable].values))
+        ax0.set_xlim(np.nanmin(ds[variable].values) - var_span * 0.05,
+                      np.nanmax(ds[variable].values) + var_span * 0.05)
 
         # Vertical lines for range values
         ax0.axvline(x=min_value, color='k', linestyle='--', label='Min Range')
@@ -841,8 +841,8 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
         max_value = np.round(np.floor(max_slider.value*10**(-oom_step))
                                      *10**(oom_step), -oom_step)
 
-        var_max = float(d[variable].max())
-        var_min = float(d[variable].min())
+        var_max = float(ds[variable].max())
+        var_min = float(ds[variable].min())
         unit = ds[variable].units
 
         if unit == '1':
@@ -867,7 +867,7 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
 
         if thr:
             # Count non-nan values in the dataset
-            count_valid_before = int(d[variable].count())
+            count_valid_before = int(ds[variable].count())
 
             ds_thr = threshold(ds=ds.opy(deep=True), variable = variable,
                         max_val = max_value, min_val = min_value)
@@ -940,14 +940,14 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
 
     # Numeric input boxes for min and max values
     min_value_text = widgets.FloatText(
-        value=d[variable_dropdown.value].min(),
+        value=ds[variable_dropdown.value].min(),
         description='Min Value:',
         style={'description_width': 'initial'},
         layout={'width': '200px'}
     )
 
     max_value_text = widgets.FloatText(
-        value=d[variable_dropdown.value].max(),
+        value=ds[variable_dropdown.value].max(),
         description='Max Value:',
         style={'description_width': 'initial'},
         layout={'width': '200px'}
@@ -1014,9 +1014,9 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
             min_slider.min = slider_min
 
         min_slider.description = (
-            f'Lower cutoff value (units: {d[variable_dropdown.value].units}):')
+            f'Lower cutoff value (units: {ds[variable_dropdown.value].units}):')
         max_slider.description = (
-            f'Upper cutoff value (units: {d[variable_dropdown.value].units}):')
+            f'Upper cutoff value (units: {ds[variable_dropdown.value].units}):')
 
         min_slider.value = min_slider.min
         max_slider.value = max_slider.max

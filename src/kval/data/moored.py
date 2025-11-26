@@ -1753,7 +1753,7 @@ def to_mat(ds: xr.Dataset, outfile: str, simplify: bool = False) -> None:
     ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     # Drop the empty PROCESSING variable (doesn't work well with MATLAB)
-    ds_wo_proc = drop_variables(ds, drop_vars="PROCESSING")
+    ds_wo_proc = drop_variables(ds, drop="PROCESSING")
 
     # Also transposing dimensions to PRES, TIME for ease of plotting etc in
     # MATLAB.

@@ -345,7 +345,7 @@ def to_mat(ds: xr.Dataset, outfile: str, simplify: bool = False) -> None:
 
     # Drop the empty PROCESSING variable (doesn't work well with MATLAB)
     if "PROCESSING" in ds:
-        ds_wo_proc = drop_variables(ds, drop_vars="PROCESSING")
+        ds_wo_proc = drop_variables(ds, drop="PROCESSING")
     else:
         ds_wo_proc = ds
 
@@ -692,10 +692,10 @@ def drop_variables(
     ----------
     ds : xr.Dataset
         Dataset from which variables will be dropped or retained.
-    retain_vars : list[str] | bool | None, default=None
+    retain : list[str] | bool | None, default=None
         List of variables to retain. If True, all variables are kept. Ignored
         if `drop_vars` is specified.
-    drop_vars : list[str] | None, default=None
+    drop : list[str] | None, default=None
         List of variables to drop. Overrides `retain_vars` if provided.
     verbose : bool, default=True
         If True, prints the list of dropped variables.
@@ -711,13 +711,13 @@ def drop_variables(
 
     Notes
     -----
-    Only one of `retain_vars` or `drop_vars` should be provided. 
+    Only one of `retain` or `drop` should be provided. 
     Variables without 'PRES' or 'NISKIN_NUMBER' dimensions are always retained.
     """
 
     ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
-    ds = edit.drop_variables(ds, retain=retain, drop=drop, verose=verbose, 
+    ds = edit.drop_variables(ds, retain=retain, drop=drop, verbose=verbose, 
                              dims_to_check= dims_to_check)
 
     return ds
