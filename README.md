@@ -28,7 +28,7 @@ Pip [^tag] :
 
 ___
 
-About the latest release, `0.4.1`:
+About the latest release, `0.4.2`:
 
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17723211.svg)](https://doi.org/10.5281/zenodo.17723211)
