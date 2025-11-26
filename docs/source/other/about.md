@@ -17,8 +17,6 @@ The library works best in a modern Python environment and using [Jupyter noteboo
 ```
 
 
-
-
 ## Submodules
 
 
@@ -87,6 +85,16 @@ Contributions, issues, and PRs are welcome!
 
 ## Latest release
 
+
+
+About the latest release, `0.4.1`:
+
+% [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17353994.svg)](https://doi.org/10.5281/zenodo.17353994)
+
+- Various fixes, mostly small bugs.
+- Removed jupyterlab dependency.
+- Resolved some version-related issues leading to problems with interactive plots.
+- Cleaned up the source code a bit. 
 
 
 About the latest release, `0.4.0`:
