@@ -1,7 +1,7 @@
 import numpy as np
 import xarray as xr
 import pytest
-from kval.file import sbe
+from kval.file import sbe_cnv
 import glob2
 import os
 
@@ -55,7 +55,7 @@ def test_read_cnv_returns_xarray_dataset(file_list_test_cnvs_single):
     different input files.
     '''
 
-    datasets = [sbe.read_cnv(fn) for fn in file_list_test_cnvs_single]
+    datasets = [sbe_cnv.read_cnv(fn) for fn in file_list_test_cnvs_single]
     assert all(isinstance(ds, xr.Dataset) for ds in datasets), "Failed to load all test .cnv files to xarray.Dataset"
 
 
@@ -65,7 +65,7 @@ def test_read_btl_returns_xarray_dataset(file_list_test_btls_single):
     different input files.
     '''
 
-    datasets = [sbe.read_btl(fn) for fn in file_list_test_btls_single]
+    datasets = [sbe_cnv.read_btl(fn) for fn in file_list_test_btls_single]
     assert all(isinstance(ds, xr.Dataset) for ds in datasets), "Failed to load all test .btl files to xarray.Dataset"
 
 
@@ -81,7 +81,7 @@ def test_read_csv_valid_file():
 
     for filename in csv_files:
         # Check that the function does not raise an error and returns an xarray Dataset
-        ds = sbe.read_csv(filename)
+        ds = sbe_cnv.read_csv(filename)
 
         # Assertions to check if the dataset has the expected structure and attributes
         assert isinstance(ds, xr.Dataset), "Output should be an xarray Dataset"
@@ -104,7 +104,7 @@ def test_read_csv_file_not_found():
     invalid_filename = os.path.join(test_data_dir, 'invalid_file.csv')
 
     with pytest.raises(FileNotFoundError) as excinfo:
-        sbe.read_csv(invalid_filename)
+        sbe_cnv.read_csv(invalid_filename)
 
     assert "File not found" in str(excinfo.value)
 

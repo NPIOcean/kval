@@ -46,7 +46,7 @@ import matplotlib as mpl
 
 from scipy import signal
 
-from kval.file import sbe, rbr, matfile
+from kval.file import sbe_cnv, rbr, matfile
 from kval.data import dataset, edit
 from kval.data.moored_tools import _moored_tools
 from kval.data.moored_tools._moored_decorator import record_processing
@@ -107,9 +107,9 @@ def load_moored(
     if instr_type == "RBR":
         ds = rbr.read_rsk(file)
     elif instr_type in ("SBE", "SBE_asc"):
-        ds = sbe.read_cnv(file)
+        ds = sbe_cnv.read_cnv(file)
     elif instr_type in ("SBE_csv"):
-        ds = sbe.read_csv(file)
+        ds = sbe_cnv.read_csv(file)
 
     # Assign lat/lon if we have specified them
     if lat:

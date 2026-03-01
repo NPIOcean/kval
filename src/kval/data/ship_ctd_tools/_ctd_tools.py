@@ -11,7 +11,7 @@ format produced by kval.file.cnv:
 
 '''
 
-from kval.file import sbe
+from kval.file import sbe_cnv
 from kval.util import xr_funcs
 import numpy as np
 import xarray as xr
@@ -603,7 +603,7 @@ def _datasets_from_cnvlist(cnv_list,
     dataset_list = []
     for fn in cnv_list:
         try:
-            dataset_list += [sbe.read_cnv(fn, time_dim=True,
+            dataset_list += [sbe_cnv.read_cnv(fn, time_dim=True,
                             station_from_filename = station_from_filename,
                             profile=profile,
                             suppress_time_warning=not verbose,
@@ -625,7 +625,7 @@ def _datasets_from_btllist(btl_list,
     '''
     Get a list of profile xr.Datasets from a list of .btl files.
     '''
-    dataset_list = [sbe.read_btl(fn, time_dim=True,
+    dataset_list = [sbe_cnv.read_btl(fn, time_dim=True,
                         station_from_filename = station_from_filename,
                         start_time_NMEA = start_time_NMEA,
                         time_adjust_NMEA = time_adjust_NMEA)
