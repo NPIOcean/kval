@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SBE_InstrumentConfiguration SB_ConfigCTD_FileVersion="7.26.4.0" >
+  <Instrument Type="14" >
+    <Name>SBE 37 Microcat</Name>
+    <FrequencyChannelsAdded>2</FrequencyChannelsAdded>
+    <SampleIntervalSeconds>3.60000e+003</SampleIntervalSeconds>
+    <!-- MooredPressure not applicable if instrument has pressure sensor. -->
+    <MooredPressure>0.00000e+000</MooredPressure>
+    <MooredLatitude>0.00000e+000</MooredLatitude>
+    <UseMooredLatitude>0</UseMooredLatitude>
+    <DeviceType>SBE37SMP-ODO-RS232</DeviceType>
+    <FirmwareVersion>6.2.0</FirmwareVersion>
+    <SensorArray Size="4" >
+      <Sensor index="0" SensorID="58" >
+        <TemperatureSensor SensorID="58" >
+          <SerialNumber>23180</SerialNumber>
+          <CalibrationDate>24-Mar-21</CalibrationDate>
+          <A0>-1.91141700e-004</A0>
+          <A1>3.16128100e-004</A1>
+          <A2>-4.74610900e-006</A2>
+          <A3>2.09572600e-007</A3>
+          <Slope>1.00000000</Slope>
+          <Offset>0.0000</Offset>
+        </TemperatureSensor>
+      </Sensor>
+      <Sensor index="1" SensorID="3" >
+        <ConductivitySensor SensorID="3" >
+          <SerialNumber>23180</SerialNumber>
+          <CalibrationDate>24-Mar-21</CalibrationDate>
+          <UseG_J>1</UseG_J>
+          <!-- Cell const and series R are applicable only for wide range sensors. -->
+          <SeriesR>0.0000</SeriesR>
+          <CellConst>2000.0000</CellConst>
+          <ConductivityType>1</ConductivityType>
+          <Coefficients equation="0" >
+            <A>0.00000000e+000</A>
+            <B>0.00000000e+000</B>
+            <C>0.00000000e+000</C>
+            <D>0.00000000e+000</D>
+            <M>0.0</M>
+            <CPcor>-9.57000000e-008</CPcor>
+          </Coefficients>
+          <Coefficients equation="1" >
+            <G>-1.01390400e+000</G>
+            <H>1.54923600e-001</H>
+            <I>-4.41628900e-004</I>
+            <J>5.72097000e-005</J>
+            <CPcor>-9.57000000e-008</CPcor>
+            <CTcor>3.2500e-006</CTcor>
+            <!-- WBOTC not applicable unless ConductivityType = 1. -->
+            <WBOTC>9.74763600e-008</WBOTC>
+          </Coefficients>
+          <Slope>1.00000000</Slope>
+          <Offset>0.00000</Offset>
+        </ConductivitySensor>
+      </Sensor>
+      <Sensor index="2" SensorID="72" >
+        <OxygenSensor SensorID="72" >
+          <SerialNumber>2802</SerialNumber>
+          <CalibrationDate>16-Mar-21</CalibrationDate>
+          <A0>1.051300e+000</A0>
+          <A1>-1.500000e-003</A1>
+          <A2>4.486038e-001</A2>
+          <B0>-2.482829e-001</B0>
+          <B1>1.680401e+000</B1>
+          <C0>9.817236e-002</C0>
+          <C1>4.192379e-003</C1>
+          <C2>5.699130e-005</C2>
+          <TA0>7.176782e-004</TA0>
+          <TA1>2.477499e-004</TA1>
+          <TA2>1.002549e-006</TA2>
+          <TA3>8.979891e-008</TA3>
+          <pcor>1.100000e-002</pcor>
+          <Slope>1.00000000</Slope>
+          <Offset>0.00000</Offset>
+        </OxygenSensor>
+      </Sensor>
+      <Sensor index="3" SensorID="46" >
+        <PressureSensor SensorID="46" >
+          <SerialNumber>49887</SerialNumber>
+          <CalibrationDate>19-Mar-21</CalibrationDate>
+          <PA0>2.98807300e-001</PA0>
+          <PA1>1.59261500e-002</PA1>
+          <PA2>-6.68496600e-010</PA2>
+          <PTEMPA0>-7.45212400e+001</PTEMPA0>
+          <PTEMPA1>4.92688700e-002</PTEMPA1>
+          <PTEMPA2>-8.74858000e-008</PTEMPA2>
+          <PTCA0>5.23828300e+005</PTCA0>
+          <PTCA1>2.43390400e+000</PTCA1>
+          <PTCA2>-7.39697100e-002</PTCA2>
+          <PTCB0>2.50868000e+001</PTCB0>
+          <PTCB1>-5.50000000e-004</PTCB1>
+          <PTCB2>0.00000000e+000</PTCB2>
+          <Offset>0.000000</Offset>
+        </PressureSensor>
+      </Sensor>
+    </SensorArray>
+  </Instrument>
+</SBE_InstrumentConfiguration>
