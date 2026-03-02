@@ -59,7 +59,6 @@ def read_cnv(
     source_file: str,
     apply_flags: Optional[bool] = True,
     profile: Optional[str] = "downcast",
-    remove_surface_soak: Optional[bool] = True,
     time_dim: Optional[bool] = False,
     inspect_plot: Optional[bool] = False,
     start_scan: Optional[int] = None,
