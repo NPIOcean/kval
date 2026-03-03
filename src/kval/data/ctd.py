@@ -42,6 +42,7 @@ more directly.
 """
 
 import xarray as xr
+import matplotlib.pyplot as plt
 from kval.data.ship_ctd_tools import _ctd_tools as tools
 from kval.data.ship_ctd_tools import _ctd_visualize as viz
 from kval.data.ship_ctd_tools import _ctd_edit as ctd_edit
@@ -54,10 +55,11 @@ from kval.metadata.check_conventions import check_file_with_button, custom_check
 from kval.metadata.conventionalize import convert_64_to_32, add_now_as_date_created, nans_to_fill_value
 from kval.metadata.io import import_metadata, export_metadata
 
+from IPython.display import display
+
 from typing import List, Optional, Union
 import numpy as np
 from pathlib import Path
-
 
 # Want to be able to use these functions directly..
 from kval.data.dataset import to_netcdf
@@ -956,7 +958,6 @@ def set_attr_var(ds: xr.Dataset, variable: str, attr: str) -> xr.Dataset:
 # (Wrappers for functions in the data.edit and data.ship_ctd_tools._ctd_edit.py
 #  module)
 
-
 def hand_remove_points(
     ds: xr.Dataset, variable: str, TIME_index: str
 ) -> xr.Dataset:
@@ -987,14 +988,10 @@ def hand_remove_points(
     Use the interactive plot to select points for removal, then click the
     corresponding buttons for actions.
     """
-
-    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
-
+    ds = ds.copy(deep=True)
     hand_remove = ctd_edit.hand_remove_points(ds, variable, TIME_index)
     ds = hand_remove.d
-
-    return ds
-
+    return ds   
 
 def apply_threshold(ds: xr.Dataset) -> xr.Dataset:
     """

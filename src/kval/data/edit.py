@@ -45,9 +45,10 @@ def remove_points_profile(ds: xr.Dataset, varnm: str, TIME_index: int,
     remove_bool[remove_inds] = True
 
     # Use the `where` method to set the selected points to NaN
-    ds[varnm].isel(TIME=TIME_index).values[:] = np.where(remove_bool,
-                                                         np.nan,
-                                                         ds[varnm].isel(TIME=TIME_index).values)
+   # ds[varnm].isel(TIME=TIME_index).values[:] = np.where(remove_bool,
+   #                                                      np.nan,
+   #                                                      ds[varnm].isel(TIME=TIME_index).values)
+    ds[varnm].values[TIME_index] = np.where(remove_bool, np.nan, ds[varnm].values[TIME_index])
 
     return ds
 

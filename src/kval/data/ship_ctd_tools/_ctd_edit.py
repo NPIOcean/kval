@@ -255,7 +255,8 @@ class hand_remove_points:
          #                           np.nan, self.d[self.varnm].loc[time_loc])
 
         self.remove_inds = np.where(self.remove_bool)[0]
-        self.d = edit.remove_points_profile(self.d, self.varnm, self.TIME_index, self.remove_inds)
+        result = edit.remove_points_profile(self.d, self.varnm, self.TIME_index, self.remove_inds)
+        self.d.update(result)
 
         # If we have a PROCESSING field:
         if hasattr(self.d, 'PROCESSING'):
