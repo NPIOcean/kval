@@ -188,11 +188,14 @@ def _convert_911_core(ds: xr.Dataset, sensors: list, instrument: dict) -> xr.Dat
     # ── Primary conductivity (needs TEMP + PRES) ──────────────────────
     c1_sensor = _find_sensor(sensors, "ConductivitySensor", nth=0)
     if c1_sensor and "conductivity_primary_raw" in ds and "TEMP" in ds and "PRES" in ds:
+        # freq_from_3bytes gives Hz directly. convert_conductivity divides by
+        # 1000 internally to get kHz. scalar=0.1 applies the /10 from the
+        # SBE4 calibration equation (C = (g+hf²+if³+jf⁴)/10 * (1+dt+ep)).
         freq   = ds["conductivity_primary_raw"].values
         temp   = ds["TEMP"].values
         pres   = ds["PRES"].values
         coefs  = _make_conductivity_coefs(c1_sensor)
-        cndc1  = conv.convert_conductivity(freq, temp, pres, coefs)
+        cndc1  = conv.convert_conductivity(freq, temp, pres, coefs, scalar=0.1)
         ds = _replace_var(ds, "conductivity_primary_raw", "CNDC",
                           cndc1, "S m-1", c1_sensor)
 
@@ -212,7 +215,7 @@ def _convert_911_core(ds: xr.Dataset, sensors: list, instrument: dict) -> xr.Dat
         temp   = ds["TEMP2"].values
         pres   = ds["PRES"].values
         coefs  = _make_conductivity_coefs(c2_sensor)
-        cndc2  = conv.convert_conductivity(freq, temp, pres, coefs)
+        cndc2  = conv.convert_conductivity(freq, temp, pres, coefs, scalar=0.1)
         ds = _replace_var(ds, "conductivity_secondary_raw", "CNDC2",
                           cndc2, "S m-1", c2_sensor)
 
@@ -449,11 +452,11 @@ def _convert_one_voltage(
         return result, "PAR", "microE m-2 s-1"
 
     elif sensor_type == "WET_LabsCStar":
-        # No seabirdscientific function — use manufacturer equation directly:
-        # T [%] = 100 * exp(-M * V + B)   (where V is voltage from sensor)
-        m = c["M"]
-        b = c["B"]
-        result = 100.0 * np.exp(-m * volts + b)
+        # Seasoft linear equation: Transmission [%] = M * V + B
+        # M and B are the linearization coefficients from the xmlcon.
+        # (Not to be confused with beam attenuation; these are Seasoft's
+        #  internal voltage-to-% mapping coefficients.)
+        result = c["M"] * volts + c["B"]
         return result, "TRANSMITTANCE", "%"
 
     elif sensor_type == "FluoroSeapointSensor":

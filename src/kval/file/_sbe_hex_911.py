@@ -106,9 +106,11 @@ def build_911_layout(
     ))
 
     # Primary conductivity (always present)
+    # Stored as freq_from_3bytes (= actual_freq / 2, due to SBE11 encoding).
+    # _sbe_convert.py multiplies by 2 before calling convert_conductivity.
     layout.append(HexField(
         name="conductivity_primary_raw",
-        description="primary conductivity (Hz)",
+        description="primary conductivity (Hz, = actual freq / 2)",
         n_hex_chars=6,
         convert=freq_from_3bytes,
         units="Hz",
@@ -145,7 +147,7 @@ def build_911_layout(
                                 if s["type"] == "ConductivitySensor"]) >= 2
         layout.append(HexField(
             name="conductivity_secondary_raw",
-            description="secondary conductivity (Hz)",
+            description="secondary conductivity (Hz, = actual freq / 2)",
             n_hex_chars=6,
             convert=freq_from_3bytes if has_secondary_c else None,
             units="Hz",
@@ -190,8 +192,10 @@ def build_911_layout(
 
     # ------------------------------------------------------------------
     # Surface PAR (if enabled): 3 unused chars + 3 PAR chars = 6 total
+    # The A/D offset from the header is subtracted before dividing by 819.
     # ------------------------------------------------------------------
     if hex_header["surface_par_added"]:
+        ad_offset = hex_header.get("ad_offset", 0)
         layout.append(HexField(
             name="_par_unused",
             description="surface PAR padding (unused)",
@@ -201,9 +205,9 @@ def build_911_layout(
         ))
         layout.append(HexField(
             name="surface_par_raw",
-            description="surface PAR (raw counts / 819)",
+            description="surface PAR (raw counts - AD_offset) / 819",
             n_hex_chars=3,
-            convert=par_from_3chars,
+            convert=lambda h, _off=ad_offset: (int(h, 16) - _off) / 819,
             units="counts/819",
         ))
 

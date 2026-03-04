@@ -291,6 +291,10 @@ def parse_hex_header(path: Path) -> dict:
     m = _find(r"VoltageWordsSuppressed\s*=\s*(\d+)")
     volt_suppressed = int(m.group(1)) if m else 0
 
+    # Surface PAR A/D offset (default 0 if not present)
+    m = _find(r"A/D offset\s*=\s*(\d+)")
+    ad_offset = int(m.group(1)) if m else 0
+
     # Optional appended data flags
     surface_par_added  = any("surface par voltage added" in l.lower() for l in header_lines)
     scan_time_added    = any("append system time" in l.lower() for l in header_lines)
@@ -327,6 +331,7 @@ def parse_hex_header(path: Path) -> dict:
         "freq_suppressed":    freq_suppressed,
         "volt_suppressed":    volt_suppressed,
         "surface_par_added":  surface_par_added,
+        "ad_offset":          ad_offset,
         "scan_time_added":    scan_time_added,
         "nmea_position_added": nmea_position_added,
         "nmea_depth_added":   nmea_depth_added,

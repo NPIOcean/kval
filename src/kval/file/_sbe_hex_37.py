@@ -70,12 +70,15 @@ def build_37_layout(
     ))
 
     # Conductivity — always present
+    # Stored as raw A/D integer count (no /256 — that was wrong).
+    # seabirdscientific convert_conductivity expects raw counts and
+    # does the /1000 conversion internally.
     layout.append(HexField(
         name="conductivity_raw",
-        description="conductivity (raw count / 256)",
+        description="conductivity (A/D counts)",
         n_hex_chars=6,
-        convert=lambda h: int(h, 16) / 256,
-        units="counts/256",
+        convert=lambda h: int(h, 16),
+        units="counts",
     ))
 
     # SBE63 oxygen (phase + temperature) — present if OxygenSensor in xmlcon
