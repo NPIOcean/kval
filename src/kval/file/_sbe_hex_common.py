@@ -298,7 +298,11 @@ def parse_hex_header(path: Path) -> dict:
     # Optional appended data flags
     surface_par_added  = any("surface par voltage added" in l.lower() for l in header_lines)
     scan_time_added    = any("append system time" in l.lower() for l in header_lines)
-    nmea_position_added = any("latitude/longitude added" in l.lower() for l in header_lines)
+    nmea_position_added = any(
+        "latitude/longitude added" in l.lower() or
+        "store lat/lon data = append" in l.lower()
+        for l in header_lines
+    )
     nmea_depth_added   = any("nmea depth" in l.lower() for l in header_lines)
     nmea_time_added    = any("nmea time" in l.lower() for l in header_lines)
 

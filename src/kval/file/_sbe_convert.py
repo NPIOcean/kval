@@ -171,6 +171,7 @@ def _convert_911_core(ds: xr.Dataset, sensors: list, instrument: dict) -> xr.Dat
         freq = ds["temperature_primary_raw"].values
         coefs = _make_temp_freq_coefs(t1_sensor)
         temp1 = conv.convert_temperature_frequency(freq, coefs)
+        temp1 = _apply_slope_offset(temp1, t1_sensor)
         ds = _replace_var(ds, "temperature_primary_raw", "TEMP",
                           temp1, "degree_Celsius", t1_sensor)
 
@@ -183,6 +184,9 @@ def _convert_911_core(ds: xr.Dataset, sensors: list, instrument: dict) -> xr.Dat
         pres   = conv.convert_pressure_digiquartz(freq, tcomp, coefs,
                                                   units="dbar",
                                                   sample_interval=sample_interval)
+        p_offset = float(p_sensor.get("coefficients", {}).get("Offset", 0.0))
+        if p_offset != 0.0:
+            pres = pres + p_offset
         ds = _replace_var(ds, "pressure_raw", "PRES", pres, "dbar", p_sensor)
 
     # ── Primary conductivity (needs TEMP + PRES) ──────────────────────
@@ -196,6 +200,7 @@ def _convert_911_core(ds: xr.Dataset, sensors: list, instrument: dict) -> xr.Dat
         pres   = ds["PRES"].values
         coefs  = _make_conductivity_coefs(c1_sensor)
         cndc1  = conv.convert_conductivity(freq, temp, pres, coefs, scalar=0.1)
+        cndc1  = _apply_slope_offset(cndc1, c1_sensor)
         ds = _replace_var(ds, "conductivity_primary_raw", "CNDC",
                           cndc1, "S m-1", c1_sensor)
 
@@ -205,6 +210,7 @@ def _convert_911_core(ds: xr.Dataset, sensors: list, instrument: dict) -> xr.Dat
         freq  = ds["temperature_secondary_raw"].values
         coefs = _make_temp_freq_coefs(t2_sensor)
         temp2 = conv.convert_temperature_frequency(freq, coefs)
+        temp2 = _apply_slope_offset(temp2, t2_sensor)
         ds = _replace_var(ds, "temperature_secondary_raw", "TEMP2",
                           temp2, "degree_Celsius", t2_sensor)
 
@@ -216,6 +222,7 @@ def _convert_911_core(ds: xr.Dataset, sensors: list, instrument: dict) -> xr.Dat
         pres   = ds["PRES"].values
         coefs  = _make_conductivity_coefs(c2_sensor)
         cndc2  = conv.convert_conductivity(freq, temp, pres, coefs, scalar=0.1)
+        cndc2  = _apply_slope_offset(cndc2, c2_sensor)
         ds = _replace_var(ds, "conductivity_secondary_raw", "CNDC2",
                           cndc2, "S m-1", c2_sensor)
 
@@ -414,6 +421,7 @@ def _convert_one_voltage(
             h1=c["H1"], h2=c["H2"], h3=c["H3"],
         )
         result = conv.convert_sbe43_oxygen(volts, temp, pres, sal, coefs)
+        result = result * c.get("Slope", 1.0) + c.get("Offset", 0.0)
         return result, "DOXY", "ml l-1"
 
     elif sensor_type in ("FluoroWetlabECO_AFL_FL_Sensor",
@@ -442,6 +450,14 @@ def _convert_one_voltage(
         return result, "ALT", "m"
 
     elif sensor_type == "PAR_BiosphericalLicorChelseaSensor":
+        if c.get("B", 0) == 0:
+            warnings.warn(
+                f"\nPAR sensor (voltage channel {volt_idx}) has calibration "
+                f"coefficient B=0 — sensor may not be calibrated. "
+                f"Raw voltage kept as 'volt_{volt_idx}_par_raw'.",
+                stacklevel=3,
+            )
+            return None, "", ""
         coefs = cc.PARCoefficients(
             im=c["CalibrationConstant"],
             a0=c["M"],
@@ -549,6 +565,22 @@ def _make_pressure_strain_coefs(sensor: dict) -> cc.PressureCoefficients:
 
 # ---------------------------------------------------------------------------
 # Helpers
+# ---------------------------------------------------------------------------
+
+def _apply_slope_offset(values: np.ndarray, sensor: dict) -> np.ndarray:
+    """Apply Seasoft Slope/Offset post-calibration adjustment.
+
+    Seasoft convention: result = values * Slope + Offset
+    Defaults are Slope=1.0, Offset=0.0 (no-op) if not present in xmlcon.
+    """
+    c = sensor.get("coefficients", {})
+    slope  = float(c.get("Slope",  1.0))
+    offset = float(c.get("Offset", 0.0))
+    if slope == 1.0 and offset == 0.0:
+        return values
+    return values * slope + offset
+
+
 # ---------------------------------------------------------------------------
 
 def _find_sensor(

@@ -220,8 +220,26 @@ def build_911_layout(
             name="_nmea_loc",
             description="NMEA position (lat/lon packed, decoded separately)",
             n_hex_chars=14,
-            convert=nmea_location_from_7bytes,  # returns (lat, lon) tuple
+            convert=nmea_location_from_7bytes,
             units="degrees",
+        ))
+
+    # ------------------------------------------------------------------
+    # NMEA time (some firmware versions): 4 bytes = 8 hex chars
+    # Present when NMEA position is appended AND bytes_per_scan is 4
+    # bytes larger than the layout without it. Detected by comparing
+    # running hex char count to what the fixed tail fields will consume.
+    # ------------------------------------------------------------------
+    _tail_hex = 3 + 1 + 2 + (8 if hex_header["scan_time_added"] else 0)  # hex chars
+    _current_hex = sum(f.n_hex_chars for f in layout)
+    _remaining_hex = hex_header["bytes_per_scan"] * 2 - _current_hex - _tail_hex
+    if _remaining_hex == 8 and hex_header["nmea_position_added"]:
+        layout.append(HexField(
+            name="_nmea_time",
+            description="NMEA UTC time word (packed, not decoded)",
+            n_hex_chars=8,
+            convert=None,
+            store=False,
         ))
 
     # ------------------------------------------------------------------
