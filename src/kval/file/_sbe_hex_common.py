@@ -326,6 +326,52 @@ def parse_hex_header(path: Path) -> dict:
         lon = int(m_lon.group(1)) + float(m_lon.group(2)) / 60.0
         longitude = lon if m_lon.group(3).upper() == "E" else -lon
 
+    # Parse ** user comment lines into structured metadata fields
+    # (same fields as sbe.py reads from CNV headers — the deck unit writes
+    #  identical ** lines in both formats)
+    def _from_comment(keyword: str) -> str | None:
+        """Return value from '** KEYWORD: value' lines, case-insensitive."""
+        kw = keyword.upper()
+        for line in user_comments:
+            if line.upper().lstrip().startswith(kw):
+                idx = line.find(":")
+                if idx != -1:
+                    return line[idx + 1:].strip() or None
+        return None
+
+    station     = _from_comment("STATION")
+    cruise_name = _from_comment("CRUISE NAME") or _from_comment("CRUISE")
+    operator    = _from_comment("OPERATOR")
+
+    # Ship — may be "Ship name [platform code]: NAME [CODE]" or "Ship: NAME"
+    ship_raw = _from_comment("SHIP NAME") or _from_comment("SHIP")
+    # Strip trailing platform code e.g. '[9566] ""' → keep just the vessel name
+    ship = ship_raw.split("[")[0].strip() if ship_raw else None
+
+    # Bottom depth — "Echodepth [m]: 191" or "Bottom Depth: 191"
+    bdep_str = _from_comment("ECHODEPTH") or _from_comment("BOTTOM DEPTH")
+    bdep: float | None = None
+    if bdep_str:
+        try:
+            bdep = float(bdep_str.split()[0])
+        except ValueError:
+            bdep = None
+
+    # Moon pool — "Moonpool(M)/Skuteside(S): M" or old "Skuteside M/S"
+    moon_pool: bool | None = None
+    for line in user_comments:
+        lu = line.upper()
+        if "MOONPOOL" in lu and "SKUTESIDE" in lu:
+            # Format: "Moonpool(M)/Skuteside(S): M" or "...: S"
+            side = line.split(":")[-1].strip().upper()
+            moon_pool = (side == "M")
+            break
+        elif "SKUTESIDE" in lu:
+            # Old format: "Skuteside M" or "Skuteside S"
+            side = line.split()[-1].upper()
+            moon_pool = (side == "M")
+            break
+
     return {
         "instrument_family":  instrument_family,
         "instrument_name":    instrument_name,
@@ -343,6 +389,12 @@ def parse_hex_header(path: Path) -> dict:
         "upload_time":        upload_time,
         "latitude":           latitude,
         "longitude":          longitude,
+        "station":            station,
+        "cruise_name":        cruise_name,
+        "ship":               ship,
+        "operator":           operator,
+        "bottom_depth":       bdep,
+        "moon_pool":          moon_pool,
         "user_comments":      user_comments,
         "raw_header_lines":   header_lines,
         "data_start_line":    data_start_line,

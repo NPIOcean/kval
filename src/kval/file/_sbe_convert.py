@@ -52,20 +52,24 @@ import seabirdscientific.cal_coefficients as cc
 # ---------------------------------------------------------------------------
 # Variable name and unit definitions
 # ---------------------------------------------------------------------------
+# Names and units sourced from kval.file._variable_defs.SBE_name_map /
+# var_attrs to ensure consistency with the CNV-based pipeline.
+# Sensor numbering (TEMP1/TEMP2, CNDC1/CNDC2) reflects that primary and
+# secondary sensors are of equal standing until the user decides otherwise.
 
-# Maps the raw field name produced by the hex parser to the CF-style
-# output variable name and its standard units.
+# Maps the raw field name produced by the hex parser to the output
+# variable name and its standard units.
 _RAW_TO_OUTPUT: dict[str, tuple[str, str]] = {
     # SBE911 primary
-    "temperature_primary_raw":     ("TEMP",      "degree_Celsius"),
-    "conductivity_primary_raw":    ("CNDC",      "S m-1"),
+    "temperature_primary_raw":     ("TEMP1",     "degree_Celsius"),
+    "conductivity_primary_raw":    ("CNDC1",     "S m-1"),
     "pressure_raw":                ("PRES",      "dbar"),
     # SBE911 secondary
     "temperature_secondary_raw":   ("TEMP2",     "degree_Celsius"),
     "conductivity_secondary_raw":  ("CNDC2",     "S m-1"),
-    # SBE37
-    "temperature_raw":             ("TEMP",      "degree_Celsius"),
-    "conductivity_raw":            ("CNDC",      "S m-1"),
+    # SBE37 (single sensor — still named TEMP1/CNDC1 for consistency)
+    "temperature_raw":             ("TEMP1",     "degree_Celsius"),
+    "conductivity_raw":            ("CNDC1",     "S m-1"),
     # Shared pressure temp-comp (consumed internally, not output)
     "pressure_temp_comp_raw":      ("_discard",  ""),
     # SBE37 SBE63 oxygen intermediates (consumed, replaced by DOXY)
@@ -74,16 +78,17 @@ _RAW_TO_OUTPUT: dict[str, tuple[str, str]] = {
 }
 
 # Voltage sensor type → (output variable name, units)
+# Numbering suffix (_1, _2) added at runtime if multiple sensors of same type.
 _VOLT_SENSOR_OUTPUT: dict[str, tuple[str, str]] = {
-    "OxygenSensor":                      ("DOXY",          "ml l-1"),
-    "FluoroWetlabECO_AFL_FL_Sensor":    ("CHLA",          "mg m-3"),
-    "FluoroWetlabWetstarSensor":         ("CHLA",          "mg m-3"),
-    "FluoroWetlabCDOM_Sensor":           ("CDOM",          "ppb"),
-    "WET_LabsCStar":                     ("TRANSMITTANCE", "%"),
-    "AltimeterSensor":                   ("ALT",           "m"),
-    "PAR_BiosphericalLicorChelseaSensor": ("PAR",          "microE m-2 s-1"),
-    "SPAR_Sensor":                       ("SPAR",          "microE m-2 s-1"),
-    "FluoroSeapointSensor":              ("SEAPOINT_FL",   "mg m-3"),
+    "OxygenSensor":                       ("DOXY1_instr",        "ml l-1"),
+    "FluoroWetlabECO_AFL_FL_Sensor":     ("CHLA1_fluorescence", "mg m-3"),
+    "FluoroWetlabWetstarSensor":          ("CHLA1_fluorescence", "mg m-3"),
+    "FluoroWetlabCDOM_Sensor":            ("CDOM1_instr",        "mg m-3"),
+    "WET_LabsCStar":                      ("TRANS1",             "%"),
+    "AltimeterSensor":                    ("ALTI",               "m"),
+    "PAR_BiosphericalLicorChelseaSensor": ("PAR",                "umol m-2 s-1"),
+    "SPAR_Sensor":                        ("SPAR",               "umol m-2 s-1"),
+    "FluoroSeapointSensor":               ("CHLA1_fluorescence", "mg m-3"),
 }
 
 
@@ -91,7 +96,8 @@ _VOLT_SENSOR_OUTPUT: dict[str, tuple[str, str]] = {
 # Public entry point
 # ---------------------------------------------------------------------------
 
-def convert_raw_dataset(ds: xr.Dataset, xmlcon_config: dict) -> xr.Dataset:
+def convert_raw_dataset(ds: xr.Dataset, xmlcon_config: dict,
+                        raw_names: bool = False) -> xr.Dataset:
     """
     Convert a raw xr.Dataset (Hz/counts/volts) to physical units in-place.
 
@@ -104,6 +110,10 @@ def convert_raw_dataset(ds: xr.Dataset, xmlcon_config: dict) -> xr.Dataset:
         contain Hz / integer counts / voltages.
     xmlcon_config : dict
         Parsed xmlcon configuration from parse_xmlcon().
+    raw_names : bool
+        If True, skip renaming variables to canonical names (e.g. keep
+        'temperature_primary_raw' instead of 'TEMP1'). Useful for
+        troubleshooting. Default False.
 
     Returns
     -------
@@ -146,12 +156,32 @@ def convert_raw_dataset(ds: xr.Dataset, xmlcon_config: dict) -> xr.Dataset:
         ds_out = _convert_surface_par(ds_out, sensors)
 
     # ------------------------------------------------------------------
-    # Step 5: Drop internal bookkeeping variables
+    # Step 5: Drop internal bookkeeping variables (unless raw_names)
     # ------------------------------------------------------------------
-    to_drop = [v for v in ds_out.data_vars
-               if v.endswith("_raw") or v in ("status", "data_integrity",
-                                               "pressure_temp_comp_raw")]
-    ds_out = ds_out.drop_vars([v for v in to_drop if v in ds_out])
+    if not raw_names:
+        to_drop = [v for v in ds_out.data_vars
+                   if v.endswith("_raw") or v in ("status", "data_integrity",
+                                                   "pressure_temp_comp_raw")]
+        ds_out = ds_out.drop_vars([v for v in to_drop if v in ds_out])
+    else:
+        # raw_names=True: rename canonical output names back to raw-style
+        # so the user sees e.g. 'temperature_primary_raw' with physical
+        # values — useful for troubleshooting.
+        # Build reverse map preferring _primary_ names over plain names
+        # (both temperature_primary_raw and temperature_raw → TEMP1;
+        #  we want TEMP1 → temperature_primary_raw, not temperature_raw)
+        reverse: dict[str, str] = {}
+        for raw_key, (canonical, _) in _RAW_TO_OUTPUT.items():
+            if canonical == "_discard":
+                continue
+            # Only overwrite if this key is more specific (contains "primary")
+            # or if the canonical name hasn't been seen yet
+            if canonical not in reverse or "primary" in raw_key:
+                reverse[canonical] = raw_key
+        rename_map = {v: reverse[v] for v in ds_out.data_vars
+                      if v in reverse}
+        if rename_map:
+            ds_out = ds_out.rename(rename_map)
 
     return ds_out
 
@@ -172,7 +202,7 @@ def _convert_911_core(ds: xr.Dataset, sensors: list, instrument: dict) -> xr.Dat
         coefs = _make_temp_freq_coefs(t1_sensor)
         temp1 = conv.convert_temperature_frequency(freq, coefs)
         temp1 = _apply_slope_offset(temp1, t1_sensor)
-        ds = _replace_var(ds, "temperature_primary_raw", "TEMP",
+        ds = _replace_var(ds, "temperature_primary_raw", "TEMP1",
                           temp1, "degree_Celsius", t1_sensor)
 
     # ── Primary pressure ─────────────────────────────────────────────
@@ -191,17 +221,17 @@ def _convert_911_core(ds: xr.Dataset, sensors: list, instrument: dict) -> xr.Dat
 
     # ── Primary conductivity (needs TEMP + PRES) ──────────────────────
     c1_sensor = _find_sensor(sensors, "ConductivitySensor", nth=0)
-    if c1_sensor and "conductivity_primary_raw" in ds and "TEMP" in ds and "PRES" in ds:
+    if c1_sensor and "conductivity_primary_raw" in ds and "TEMP1" in ds and "PRES" in ds:
         # freq_from_3bytes gives Hz directly. convert_conductivity divides by
         # 1000 internally to get kHz. scalar=0.1 applies the /10 from the
         # SBE4 calibration equation (C = (g+hf²+if³+jf⁴)/10 * (1+dt+ep)).
         freq   = ds["conductivity_primary_raw"].values
-        temp   = ds["TEMP"].values
+        temp   = ds["TEMP1"].values
         pres   = ds["PRES"].values
         coefs  = _make_conductivity_coefs(c1_sensor)
         cndc1  = conv.convert_conductivity(freq, temp, pres, coefs, scalar=0.1)
         cndc1  = _apply_slope_offset(cndc1, c1_sensor)
-        ds = _replace_var(ds, "conductivity_primary_raw", "CNDC",
+        ds = _replace_var(ds, "conductivity_primary_raw", "CNDC1",
                           cndc1, "S m-1", c1_sensor)
 
     # ── Secondary temperature ─────────────────────────────────────────
@@ -242,7 +272,7 @@ def _convert_37_core(ds: xr.Dataset, sensors: list) -> xr.Dataset:
         counts = ds["temperature_raw"].values
         coefs  = _make_temp_counts_coefs(t_sensor)
         temp   = conv.convert_temperature(counts, coefs)
-        ds = _replace_var(ds, "temperature_raw", "TEMP",
+        ds = _replace_var(ds, "temperature_raw", "TEMP1",
                           temp, "degree_Celsius", t_sensor)
 
     # ── Pressure (strain gauge) ───────────────────────────────────────
@@ -256,13 +286,13 @@ def _convert_37_core(ds: xr.Dataset, sensors: list) -> xr.Dataset:
 
     # ── Conductivity (needs TEMP + PRES) ─────────────────────────────
     c_sensor = _find_sensor(sensors, "ConductivitySensor")
-    if c_sensor and "conductivity_raw" in ds and "TEMP" in ds and "PRES" in ds:
+    if c_sensor and "conductivity_raw" in ds and "TEMP1" in ds and "PRES" in ds:
         counts = ds["conductivity_raw"].values
-        temp   = ds["TEMP"].values
+        temp   = ds["TEMP1"].values
         pres   = ds["PRES"].values
         coefs  = _make_conductivity_coefs(c_sensor)
         cndc   = conv.convert_conductivity(counts, temp, pres, coefs)
-        ds = _replace_var(ds, "conductivity_raw", "CNDC", cndc, "S m-1", c_sensor)
+        ds = _replace_var(ds, "conductivity_raw", "CNDC1", cndc, "S m-1", c_sensor)
 
     return ds
 
@@ -315,7 +345,7 @@ def _convert_sbe63(ds: xr.Dataset, sensors: list) -> xr.Dataset:
     )
 
     ds = ds.drop_vars(["sbe63_phase_raw", "sbe63_temperature_raw"])
-    ds["DOXY"] = xr.DataArray(
+    ds["DOXY1_instr"] = xr.DataArray(
         doxy, dims=["scan"],
         attrs={**_base_attrs(o2_sensor),
                "units": "ml l-1",
@@ -381,9 +411,16 @@ def _convert_voltage_sensors(ds: xr.Dataset, sensors: list) -> xr.Dataset:
             )
             continue
 
-        # Handle duplicate output names (e.g. two oxygen sensors → DOXY, DOXY2)
+
+        # Handle duplicate output names (e.g. two oxygen sensors →
+        # DOXY1_instr → DOXY2_instr; two CHLA → CHLA1_ → CHLA2_)
         if out_name in ds:
-            out_name = out_name + "2"
+            if "_instr" in out_name:
+                out_name = out_name.replace("1_instr", "2_instr")
+            elif "_fluorescence" in out_name:
+                out_name = out_name.replace("1_fluorescence", "2_fluorescence")
+            else:
+                out_name = out_name + "2"
 
         ds = ds.drop_vars([field_name])
         ds[out_name] = xr.DataArray(
@@ -411,7 +448,7 @@ def _convert_one_voltage(
 
     if sensor_type == "OxygenSensor":
         # SBE43 dissolved oxygen
-        temp = ds["TEMP"].values  if "TEMP"  in ds else np.zeros(len(volts))
+        temp = ds["TEMP1"].values if "TEMP1" in ds else np.zeros(len(volts))
         pres = ds["PRES"].values  if "PRES"  in ds else np.zeros(len(volts))
         sal  = _compute_salinity(ds)
         coefs = cc.Oxygen43Coefficients(
@@ -422,7 +459,7 @@ def _convert_one_voltage(
         )
         result = conv.convert_sbe43_oxygen(volts, temp, pres, sal, coefs)
         result = result * c.get("Slope", 1.0) + c.get("Offset", 0.0)
-        return result, "DOXY", "ml l-1"
+        return result, "DOXY1_instr", "ml l-1"
 
     elif sensor_type in ("FluoroWetlabECO_AFL_FL_Sensor",
                          "FluoroWetlabWetstarSensor"):
@@ -431,7 +468,7 @@ def _convert_one_voltage(
             offset=c["Vblank"],
         )
         result = conv.convert_eco(volts, coefs)
-        return result, "CHLA", "mg m-3"
+        return result, "CHLA1_fluorescence", "mg m-3"
 
     elif sensor_type == "FluoroWetlabCDOM_Sensor":
         coefs = cc.ECOCoefficients(
@@ -439,7 +476,7 @@ def _convert_one_voltage(
             offset=c["Vblank"],
         )
         result = conv.convert_eco(volts, coefs)
-        return result, "CDOM", "ppb"
+        return result, "CDOM1_instr", "mg m-3"
 
     elif sensor_type == "AltimeterSensor":
         coefs = cc.AltimeterCoefficients(
@@ -447,7 +484,7 @@ def _convert_one_voltage(
             offset=c["Offset"],
         )
         result = conv.convert_altimeter(volts, coefs)
-        return result, "ALT", "m"
+        return result, "ALTI", "m"
 
     elif sensor_type == "PAR_BiosphericalLicorChelseaSensor":
         if c.get("B", 0) == 0:
@@ -465,7 +502,7 @@ def _convert_one_voltage(
             multiplier=c.get("Multiplier", 1.0),
         )
         result = conv.convert_par_logarithmic(volts, coefs)
-        return result, "PAR", "microE m-2 s-1"
+        return result, "PAR", "umol m-2 s-1"
 
     elif sensor_type == "WET_LabsCStar":
         # Seasoft linear equation: Transmission [%] = M * V + B
@@ -473,14 +510,14 @@ def _convert_one_voltage(
         # (Not to be confused with beam attenuation; these are Seasoft's
         #  internal voltage-to-% mapping coefficients.)
         result = c["M"] * volts + c["B"]
-        return result, "TRANSMITTANCE", "%"
+        return result, "TRANS1", "%"
 
     elif sensor_type == "FluoroSeapointSensor":
         # Simple linear: fluorescence = GainSetting * V + Offset
         gain   = float(c.get("GainSetting", 1.0))
         offset = float(c.get("Offset", 0.0))
         result = gain * volts + offset
-        return result, "SEAPOINT_FL", "mg m-3"
+        return result, "CHLA1_fluorescence", "mg m-3"
 
     else:
         return None, "", ""
@@ -610,6 +647,7 @@ def _replace_var(
     sensor: dict,
 ) -> xr.Dataset:
     """Drop old_name, add new_name with converted values and metadata attrs."""
+
     old_attrs = dict(ds[old_name].attrs) if old_name in ds else {}
     ds = ds.drop_vars([old_name], errors="ignore")
     ds[new_name] = xr.DataArray(
@@ -624,25 +662,50 @@ def _replace_var(
 
 
 def _base_attrs(sensor: dict) -> dict:
+    sensor_id = sensor.get("sensor_id")
     return {
-        "sensor_type":      sensor.get("type", ""),
+        "sensor_type":      _SENSOR_ID_NAMES.get(sensor_id, sensor.get("type", "")),
+        "sbe_sensor_id":    sensor_id if sensor_id is not None else "",
         "serial_number":    str(sensor.get("serial_number") or ""),
         "calibration_date": str(sensor.get("calibration_date") or ""),
     }
 
 
+# SensorID values from Seasoft xmlcon → human-readable instrument name.
+# Source: SBEDataProcessing documentation and sbe_xmlcon.py.
+_SENSOR_ID_NAMES: dict[int, str] = {
+    0:  "Altimeter",
+    3:  "SBE 4",                   # Conductivity (SBE37)
+    8:  "SBE 911plus",             # Instrument
+    11: "Seapoint fluorometer",
+    14: "SBE 37",                  # Instrument / SBE32 carousel
+    19: "WET Labs ECO CDOM",
+    20: "WET Labs ECO AFL/FL",
+    21: "WET Labs WETstar",
+    38: "SBE 43",                  # Dissolved oxygen
+    42: "Biospherical/Licor PAR",
+    45: "SBE 9 pressure",          # Digiquartz
+    46: "SBE 9 pressure",          # Strain gauge
+    51: "Biospherical/Licor SPAR",
+    55: "SBE 3",                   # Temperature (SBE911)
+    58: "SBE 4",                   # Temperature (SBE37)
+    61: "SBE 63",                  # Optical dissolved oxygen
+    71: "WET Labs C-Star",         # Transmissometer
+}
+
+
 def _compute_salinity(ds: xr.Dataset) -> np.ndarray:
     """
-    Compute practical salinity from CNDC, TEMP, PRES if all are present,
+    Compute practical salinity from CNDC1, TEMP1, PRES if all are present,
     otherwise return zeros (salinity=0 assumption).
 
     Used for oxygen conversion where salinity affects the solubility.
     """
-    if all(v in ds for v in ("CNDC", "TEMP", "PRES")):
+    if all(v in ds for v in ("CNDC1", "TEMP1", "PRES")):
         import gsw
         # gsw.SP_from_C expects conductivity in mS/cm, not S/m
-        cndc_mscm = ds["CNDC"].values * 10.0
-        temp      = ds["TEMP"].values
+        cndc_mscm = ds["CNDC1"].values * 10.0
+        temp      = ds["TEMP1"].values
         pres      = ds["PRES"].values
         return gsw.SP_from_C(cndc_mscm, temp, pres)
     else:

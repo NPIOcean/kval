@@ -47,6 +47,7 @@ from datetime import datetime, timedelta
 from typing import Union
 import numpy as np
 import xarray as xr
+from tqdm.notebook import tqdm
 
 from kval.file.sbe_xmlcon import parse_xmlcon
 from kval.file._sbe_hex_common import (
@@ -72,6 +73,7 @@ from kval.file._sbe_convert import convert_raw_dataset
 def parse_hex(
     hex_path: Union[str, Path],
     xmlcon_path: Union[str, Path],
+    raw_names: bool = False,
 ) -> xr.Dataset:
     """
     Parse an SBE hex file into an xarray Dataset.
@@ -84,14 +86,19 @@ def parse_hex(
         Path to the matching .xmlcon configuration file.  Must be the
         configuration that was active when the data was collected —
         a mismatch will be caught and reported clearly.
+    raw_names : bool
+        If True, skip variable renaming and keep internal raw names
+        (e.g. 'temperature_primary_raw', 'conductivity_primary_raw').
+        Useful for troubleshooting. Default False.
 
     Returns
     -------
     xr.Dataset
         Dataset with:
           - 'scan' as the integer index dimension
-          - 'TIME' coordinate (datetime64) if per-scan timestamps are
-            available, otherwise constructed from upload time + sample rate
+          - 'TIME_SCAN' coordinate (datetime64[ns], per-scan) if timestamps
+            are available; assign a scalar TIME per cast later via
+            assign_cast_time()
           - One data variable per raw sensor channel
           - 'LATITUDE' and 'LONGITUDE' variables (SBE911 with NMEA only)
           - Variable-level attributes: sensor_type, serial_number,
@@ -170,9 +177,10 @@ def parse_hex(
     data_vars = {}
     coords    = {"scan": scan_coord}
 
-    # TIME coordinate
+    # TIME_SCAN coordinate — per-scan timestamps along scan dimension.
+    # TIME (scalar, per-cast) is assigned later via assign_cast_time().
     if time_coord is not None:
-        coords["TIME"] = ("scan", time_coord)
+        coords["TIME_SCAN"] = ("scan", time_coord)
 
     # Sensor data variables
     for field_name, arr in raw_data.items():
@@ -220,6 +228,14 @@ def parse_hex(
         "parsed_by":          "kval.file.sbe_hex",
     }
 
+    # Cruise metadata from ** header lines — only set if present
+    for key in ("station", "cruise_name", "ship", "operator", "bottom_depth"):
+        val = hex_header.get(key)
+        if val is not None:
+            ds.attrs[key] = val
+    if hex_header.get("moon_pool") is not None:
+        ds.attrs["moon_pool"] = hex_header["moon_pool"]
+
     # Header latitude/longitude (single position, not per-scan)
     if hex_header.get("latitude") is not None:
         ds.attrs["header_latitude"]  = hex_header["latitude"]
@@ -228,13 +244,269 @@ def parse_hex(
     # ------------------------------------------------------------------
     # Step 7: Convert raw Hz / counts / volts to physical units
     # ------------------------------------------------------------------
-    ds = convert_raw_dataset(ds, xmlcon_config)
+    ds = convert_raw_dataset(ds, xmlcon_config, raw_names=raw_names)
 
     return ds
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
+def parse_hex_dir(
+    hex_dir: Union[str, Path],
+    xmlcon: Union[str, Path, None] = None,
+    verbose: bool = True,
+) -> xr.Dataset:
+    """
+    Parse all SBE hex files in a directory into a single multi-cast Dataset.
+
+    Each hex file is parsed individually via parse_hex(), then all casts are
+    concatenated along a 'TIME' dimension (cast start time). The scan
+    dimension is padded with NaN to the length of the longest cast.
+
+    Parameters
+    ----------
+    hex_dir : str or Path
+        Directory containing .hex files. All .hex files found are loaded.
+    xmlcon : str, Path, or None
+        If a path is given, this single xmlcon file is used for all casts.
+        If None (default), each hex file is matched to an xmlcon with the
+        same stem in the same directory (e.g. Sta0243.hex → STA0243.XMLCON).
+        Matching is case-insensitive.
+    verbose : bool
+        Print progress. Default True.
+
+    Returns
+    -------
+    xr.Dataset
+        Dataset with dimensions (TIME, scan_count). TIME is a scalar
+        coordinate giving cast start time. STATION is a coordinate along
+        TIME populated from the ** header if available. All per-cast
+        variables are NaN-padded to the longest cast.
+
+    Raises
+    ------
+    FileNotFoundError
+        If no hex files are found, or if xmlcon auto-matching fails for
+        any cast.
+    """
+    hex_dir = Path(hex_dir)
+    hex_files = sorted(hex_dir.glob("*.hex")) + sorted(hex_dir.glob("*.HEX"))
+    hex_files = sorted(set(hex_files))  # deduplicate if both extensions present
+
+    if not hex_files:
+        raise FileNotFoundError(
+            f"No .hex files found in '{hex_dir}'."
+        )
+
+    if verbose:
+        print(f"Found {len(hex_files)} hex file(s) in '{hex_dir}'.")
+
+    # ------------------------------------------------------------------
+    # Build xmlcon lookup: stem (lower) → Path
+    # ------------------------------------------------------------------
+    if xmlcon is not None:
+        xmlcon_path = Path(xmlcon)
+        xmlcon_lookup = None  # signal: use same file for all
+    else:
+        xmlcon_lookup = {}
+        for f in hex_dir.iterdir():
+            if f.suffix.lower() in (".xmlcon", ".xml"):
+                xmlcon_lookup[f.stem.lower()] = f
+
+    # ------------------------------------------------------------------
+    # Parse each cast
+    # ------------------------------------------------------------------
+    datasets = []
+    failed   = []
+
+    for hex_path in tqdm(hex_files, desc="Parsing hex files", disable=not verbose):
+        # Resolve xmlcon
+        if xmlcon_lookup is None:
+            xc = xmlcon_path
+        else:
+            xc = xmlcon_lookup.get(hex_path.stem.lower())
+            if xc is None:
+                matches = [v for k, v in xmlcon_lookup.items()
+                           if k == hex_path.stem.lower()]
+                xc = matches[0] if matches else None
+            if xc is None:
+                msg = (f"No matching xmlcon found for '{hex_path.name}'. "
+                       f"Pass xmlcon=<path> to use a single xmlcon for all casts.")
+                failed.append((hex_path, msg))
+                continue
+
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                ds_cast = parse_hex(hex_path, xc)
+            datasets.append(ds_cast)
+        except Exception as e:
+            failed.append((hex_path, str(e)))
+
+    if failed and verbose:
+        print(f"\n  {len(failed)} cast(s) failed:")
+        for path, msg in failed:
+            print(f"    {path.name}: {msg}")
+
+    if not datasets:
+        raise ValueError("No casts were parsed successfully.")
+    # ------------------------------------------------------------------
+    # Concatenate along TIME, padding scan dimension
+    # ------------------------------------------------------------------
+    max_scans = max(ds.sizes["scan"] for ds in datasets)
+
+    padded   = []
+    times    = []
+    stations = []
+
+    for ds_cast in datasets:
+        n = ds_cast.sizes["scan"]
+        pad = max_scans - n
+
+        # Get cast start time from TIME_SCAN before padding
+        if "TIME_SCAN" in ds_cast.coords:
+            cast_time = ds_cast.TIME_SCAN.values[0]
+        else:
+            cast_time = np.datetime64("NaT")
+        times.append(cast_time)
+        stations.append(ds_cast.attrs.get("station", None))
+
+        # Move TIME_SCAN from coord → data var so it survives concat+padding
+        if "TIME_SCAN" in ds_cast.coords:
+            ts = ds_cast.TIME_SCAN.values
+            ds_cast = ds_cast.drop_vars("TIME_SCAN")
+            ds_cast["TIME_SCAN"] = xr.DataArray(ts, dims=["scan"],
+                                                 attrs={"long_name": "per-scan timestamp"})
+
+        if pad > 0:
+            new_scan = np.arange(max_scans)
+            pad_vars = {}
+            for var in list(ds_cast.data_vars):
+                arr = ds_cast[var].values
+                if np.issubdtype(arr.dtype, np.floating):
+                    padded_arr = np.full(max_scans, np.nan, dtype=arr.dtype)
+                    padded_arr[:n] = arr
+                elif np.issubdtype(arr.dtype, "datetime64"):
+                    padded_arr = np.full(max_scans, np.datetime64("NaT"), dtype=arr.dtype)
+                    padded_arr[:n] = arr
+                elif np.issubdtype(arr.dtype, np.integer):
+                    padded_arr = np.zeros(max_scans, dtype=arr.dtype)
+                    padded_arr[:n] = arr
+                else:
+                    padded_arr = arr
+                pad_vars[var] = xr.DataArray(
+                    padded_arr, dims=["scan"], attrs=ds_cast[var].attrs)
+            ds_cast = xr.Dataset(pad_vars,
+                                 coords={"scan": new_scan},
+                                 attrs=ds_cast.attrs)
+        padded.append(ds_cast)
+
+    # Rename scan → scan_count
+    padded = [ds.rename({"scan": "scan_count"}) for ds in padded]
+
+    # Concatenate — use a dummy integer dimension, then assign TIME
+    multi = xr.concat(padded, dim="TIME", join="outer")
+    multi = multi.assign_coords(TIME=("TIME", np.array(times,
+                                                        dtype="datetime64[ns]")))
+
+    # Restore TIME_SCAN as a coordinate (now shaped TIME, scan_count)
+    if "TIME_SCAN" in multi.data_vars:
+        multi = multi.set_coords("TIME_SCAN")
+
+    # Add STATION coordinate if any cast had one
+    if any(s is not None for s in stations):
+        multi = multi.assign_coords(
+            STATION=("TIME", [s if s is not None else "" for s in stations])
+        )
+
+    # Carry over attrs from first cast (instrument info etc.)
+    # Cast-specific attrs (station, n_scans etc.) are dropped
+    shared_attrs = {
+        k: v for k, v in datasets[0].attrs.items()
+        if k in ("instrument_family", "instrument_name", "software_version",
+                 "xmlcon_instrument", "xmlcon_device_type", "parsed_by",
+                 "cruise_name", "ship", "operator")
+    }
+    shared_attrs["n_casts"] = len(datasets)
+    shared_attrs["max_scan_count"] = max_scans
+    multi.attrs = shared_attrs
+
+    if verbose:
+        size_bytes = sum(v.nbytes for v in multi.data_vars.values())
+        if size_bytes >= 1e9:
+            size_str = f"{size_bytes/1e9:.1f} GB"
+        else:
+            size_str = f"{size_bytes/1e6:.0f} MB"
+        print(f"Loaded {len(datasets)} cast(s) → "
+              f"TIME={len(datasets)}, scan_count={max_scans} ({size_str})")
+
+    return multi
+
+
+def assign_cast_time(
+    ds: xr.Dataset,
+    method: str = "start",
+) -> xr.Dataset:
+    """
+    Assign a scalar TIME coordinate to each cast in a multi-cast Dataset.
+
+    TIME_SCAN contains per-scan timestamps along the scan_count dimension.
+    This function derives a single representative timestamp per cast and
+    assigns it as the TIME coordinate along the TIME dimension.
+
+    Call this after processing steps (loop edit, in-water mask) so that
+    TIME reflects the actual in-water data rather than deck time.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Multi-cast Dataset with dims (TIME, scan_count) and TIME_SCAN
+        coordinate. Typically produced by parse_hex_dir() followed by
+        processing steps.
+    method : str
+        How to compute the per-cast timestamp:
+        - 'start'  : first non-NaT TIME_SCAN value (default)
+        - 'mean'   : mean of all non-NaT TIME_SCAN values
+        - 'median' : median of all non-NaT TIME_SCAN values
+
+    Returns
+    -------
+    xr.Dataset
+        Dataset with TIME coordinate updated in-place along the TIME dim.
+
+    Examples
+    --------
+    >>> ds = parse_hex_dir('raw/')
+    >>> ds = in_water_mask(ds)
+    >>> ds = assign_cast_time(ds, method='start')
+    """
+    if "TIME_SCAN" not in ds.coords:
+        raise ValueError(
+            "TIME_SCAN coordinate not found. "
+            "parse_hex_dir() produces TIME_SCAN; has it been dropped?"
+        )
+
+    time_scan = ds.TIME_SCAN.values  # shape: (TIME, scan_count)
+    n_casts = time_scan.shape[0]
+    cast_times = np.full(n_casts, np.datetime64("NaT"), dtype="datetime64[ns]")
+
+    for i in range(n_casts):
+        row = time_scan[i]
+        valid = row[~np.isnat(row)]
+        if len(valid) == 0:
+            continue
+        if method == "start":
+            cast_times[i] = valid[0]
+        elif method == "mean":
+            cast_times[i] = np.datetime64(
+                int(valid.astype("int64").mean()), "ns")
+        elif method == "median":
+            cast_times[i] = np.datetime64(
+                int(np.median(valid.astype("int64"))), "ns")
+        else:
+            raise ValueError(
+                f"Unknown method '{method}'. Use 'start', 'mean', or 'median'."
+            )
+
+    return ds.assign_coords(TIME=("TIME", cast_times))
 # ---------------------------------------------------------------------------
 
 def _build_time_coord(
@@ -245,39 +517,45 @@ def _build_time_coord(
     family: str,
 ) -> np.ndarray | None:
     """
-    Build a numpy datetime64 array for the TIME coordinate.
+    Build a numpy datetime64 array for the TIME_SCAN coordinate.
 
     Priority:
     1. Per-scan timestamps from the hex stream (most accurate).
     2. Reconstructed from upload_time and sample_interval_seconds.
-    3. None — caller omits the TIME coordinate.
+    3. None — caller omits the TIME_SCAN coordinate.
     """
     # Option 1: per-scan timestamps in the stream
     if scan_times and any(t is not None for t in scan_times):
         valid = [(i, t) for i, t in enumerate(scan_times) if t is not None]
+
+        def _to_dt64(t):
+            try:
+                return np.datetime64(t, "ns")
+            except Exception:
+                return np.datetime64("NaT")
+
         if len(valid) == n_scans:
-            # All scans have timestamps — convert directly
-            return np.array([np.datetime64(t, "ns") for t in scan_times])
+            arr = np.array([_to_dt64(t) for t in scan_times])
+            if not np.all(np.isnat(arr)):
+                return arr
         else:
-            # Partial timestamps — use first valid as anchor + interpolate
+            # Partial timestamps — interpolate from first valid
             warnings.warn(
                 f"Only {len(valid)} of {n_scans} scans have embedded timestamps. "
                 f"Interpolating time from first valid timestamp.",
                 stacklevel=4,
             )
             first_idx, first_time = valid[0]
-            # Determine sample interval
             dt_s = _get_sample_interval(hex_header, xmlcon_config, family)
-            if dt_s is None:
-                # Can't interpolate without interval — fall through
-                pass
-            else:
-                base = np.datetime64(first_time, "ns")
-                offsets = np.array(
-                    [(i - first_idx) * dt_s * 1e9 for i in range(n_scans)],
-                    dtype="timedelta64[ns]",
-                )
-                return base + offsets
+            if dt_s is not None:
+                try:
+                    base = _to_dt64(first_time)
+                    if not np.isnat(base):
+                        offsets = (np.arange(n_scans, dtype="float64")
+                                   - first_idx) * dt_s * 1e9
+                        return base + offsets.astype("timedelta64[ns]")
+                except Exception:
+                    pass
 
     # Option 2: reconstruct from upload_time and sample interval
     upload_time = hex_header.get("upload_time")

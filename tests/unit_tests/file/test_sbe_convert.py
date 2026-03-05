@@ -142,7 +142,7 @@ class TestSta0119Parse:
         assert ds_0119 is not None
 
     def test_expected_variables_present(self, ds_0119):
-        for var in ("TEMP", "TEMP2", "PRES", "CNDC", "CNDC2"):
+        for var in ("TEMP1", "TEMP2", "PRES", "CNDC1", "CNDC2"):
             assert var in ds_0119, f"{var} missing from dataset"
 
     def test_no_surface_par(self, ds_0119):
@@ -153,15 +153,14 @@ class TestSta0119Parse:
         assert len(ds_0119.scan) > 0
 
     def test_scan_times_present(self, ds_0119):
-        assert "TIME" in ds_0119 or "scan_time" in ds_0119.coords or \
-               ds_0119.TIME is not None or "TIME" in ds_0119.coords
+        assert "TIME_SCAN" in ds_0119.coords
 
 
 class TestSta0119PhysicalRanges:
     """Converted values are physically plausible for an Arctic cast."""
 
     def test_temp_range(self, ds_0119):
-        t = ds_0119.TEMP.values
+        t = ds_0119.TEMP1.values
         finite = t[np.isfinite(t)]
         assert finite.min() > -3.0,  "TEMP below absolute seawater minimum"
         assert finite.max() < 10.0,  "TEMP implausibly high for Arctic"
@@ -173,14 +172,14 @@ class TestSta0119PhysicalRanges:
         assert finite.max() < 800.0, "Max pressure exceeds cast depth"
 
     def test_cndc_range(self, ds_0119):
-        c = ds_0119.CNDC.values
+        c = ds_0119.CNDC1.values
         finite = c[np.isfinite(c)]
         assert finite.max() > 2.0,   "CNDC too low for seawater"
         assert finite.max() < 4.0,   "CNDC too high for seawater"
 
     def test_primary_secondary_temp_agree(self, ds_0119):
         """Primary and secondary T should agree within 0.1°C in water."""
-        t1 = ds_0119.TEMP.values
+        t1 = ds_0119.TEMP1.values
         t2 = ds_0119.TEMP2.values
         in_water = ds_0119.PRES.values > 2
         if in_water.sum() < 10:
@@ -189,7 +188,7 @@ class TestSta0119PhysicalRanges:
         assert np.nanmedian(diff) < 0.05
 
     def test_primary_secondary_cndc_agree(self, ds_0119):
-        c1 = ds_0119.CNDC.values
+        c1 = ds_0119.CNDC1.values
         c2 = ds_0119.CNDC2.values
         in_water = ds_0119.PRES.values > 2
         if in_water.sum() < 10:
@@ -220,7 +219,7 @@ class TestSta0119CNVComparison:
         cnv_temp = np.where(arr[:, 12] > -9e-28, arr[:, 12], np.nan)
 
         our_pres = ds_0119.PRES.values
-        our_temp = ds_0119.TEMP.values
+        our_temp = ds_0119.TEMP1.values
         binned = self._bin_to_cnv_pres(our_pres, our_temp, cnv_pres)
 
         mask = np.isfinite(cnv_temp) & np.isfinite(binned)
@@ -237,7 +236,7 @@ class TestSta0119CNVComparison:
         cnv_cndc = np.where(arr[:, 3] > -9e-28, arr[:, 3], np.nan)
 
         our_pres = ds_0119.PRES.values
-        our_cndc = ds_0119.CNDC.values
+        our_cndc = ds_0119.CNDC1.values
         binned = self._bin_to_cnv_pres(our_pres, our_cndc, cnv_pres)
 
         mask = np.isfinite(cnv_cndc) & np.isfinite(binned)
@@ -259,9 +258,9 @@ class TestSta0243Parse:
         assert ds_0243 is not None
 
     def test_core_variables_present(self, ds_0243):
-        for var in ("TEMP", "TEMP2", "PRES", "CNDC", "CNDC2",
-                    "DOXY", "DOXY2", "CHLA", "CDOM", "TRANSMITTANCE",
-                    "ALT", "SPAR"):
+        for var in ("TEMP1", "TEMP2", "PRES", "CNDC1", "CNDC2",
+                    "DOXY1_instr", "DOXY2_instr", "CHLA1_fluorescence",
+                    "CDOM1_instr", "TRANS1", "ALTI", "SPAR"):
             assert var in ds_0243, f"{var} missing"
 
     def test_spar_present(self, ds_0243):
@@ -289,14 +288,14 @@ class TestSta0243Parse:
 
     def test_transmittance_range(self, ds_0243):
         """CStar transmittance should be 0-100%."""
-        t = ds_0243.TRANSMITTANCE.values
+        t = ds_0243.TRANS1.values
         finite = t[np.isfinite(t)]
         assert finite.min() >= -1.0,   "Transmittance below -1%"
         assert finite.max() <= 101.0,  "Transmittance above 101%"
 
     def test_doxy_range(self, ds_0243):
         """Oxygen should be in plausible range (including deck values)."""
-        d = ds_0243.DOXY.values
+        d = ds_0243.DOXY1_instr.values
         finite = d[np.isfinite(d)]
         assert finite.min() > 0,    "Negative oxygen"
         assert finite.max() < 15.0, "Oxygen > 15 ml/l implausible"
@@ -326,14 +325,14 @@ class TestSta0520Parse:
         assert p.max() > 0, "No positive pressure values found"
 
     def test_core_variables_present(self, ds_0520):
-        for var in ("TEMP", "TEMP2", "PRES", "CNDC", "CNDC2", "DOXY"):
+        for var in ("TEMP1", "TEMP2", "PRES", "CNDC1", "CNDC2", "DOXY1_instr"):
             assert var in ds_0520, f"{var} missing"
 
 
 class TestSta0520PhysicalRanges:
 
     def test_temp_range(self, ds_0520):
-        t = ds_0520.TEMP.values
+        t = ds_0520.TEMP1.values
         finite = t[np.isfinite(t)]
         assert finite.min() > -3.0
         assert finite.max() < 10.0
@@ -341,7 +340,7 @@ class TestSta0520PhysicalRanges:
     def test_cndc_deep_reasonable(self, ds_0520):
         """Deep water conductivity should be in seawater range."""
         pres = ds_0520.PRES.values
-        cndc = ds_0520.CNDC.values
+        cndc = ds_0520.CNDC1.values
         deep = pres > 500
         if deep.sum() > 0:
             deep_cndc = cndc[deep]
@@ -349,7 +348,7 @@ class TestSta0520PhysicalRanges:
             assert np.nanmax(deep_cndc) < 4.0, "Deep CNDC too high"
 
     def test_doxy_range(self, ds_0520):
-        d = ds_0520.DOXY.values
+        d = ds_0520.DOXY1_instr.values
         finite = d[np.isfinite(d)]
         assert finite.min() > 0
         assert finite.max() < 15.0
@@ -373,7 +372,7 @@ class TestSta0520CNVComparison:
         cnv_temp = np.where(arr[:, 1] > -9e-28, arr[:, 1], np.nan)
 
         our_pres = ds_0520.PRES.values
-        our_temp = ds_0520.TEMP.values
+        our_temp = ds_0520.TEMP1.values
         binned = self._bin_to_cnv_pres(our_pres, our_temp, cnv_pres)
 
         mask = np.isfinite(cnv_temp) & np.isfinite(binned)
@@ -388,7 +387,7 @@ class TestSta0520CNVComparison:
         cnv_cndc = np.where(arr[:, 3] > -9e-28, arr[:, 3], np.nan)
 
         our_pres = ds_0520.PRES.values
-        our_cndc = ds_0520.CNDC.values
+        our_cndc = ds_0520.CNDC1.values
         binned = self._bin_to_cnv_pres(our_pres, our_cndc, cnv_pres)
 
         mask = np.isfinite(cnv_cndc) & np.isfinite(binned)
@@ -403,7 +402,7 @@ class TestSta0520CNVComparison:
         cnv_trans = np.where(arr[:, 8] > -9e-28, arr[:, 8], np.nan)
 
         our_pres = ds_0520.PRES.values
-        our_trans = ds_0520.TRANSMITTANCE.values
+        our_trans = ds_0520.TRANS1.values
         binned = self._bin_to_cnv_pres(our_pres, our_trans, cnv_pres)
 
         mask = np.isfinite(cnv_trans) & np.isfinite(binned)
@@ -418,7 +417,7 @@ class TestSta0520CNVComparison:
         cnv_doxy = np.where(arr[:, 12] > -9e-28, arr[:, 12], np.nan)
 
         our_pres = ds_0520.PRES.values
-        our_doxy = ds_0520.DOXY.values
+        our_doxy = ds_0520.DOXY1_instr.values
         binned = self._bin_to_cnv_pres(our_pres, our_doxy, cnv_pres)
 
         mask = np.isfinite(cnv_doxy) & np.isfinite(binned)
@@ -453,7 +452,7 @@ class TestCrossDataset:
     def test_units_present(self, ds_fixture, request):
         """All physical variables have a units attribute."""
         ds = request.getfixturevalue(ds_fixture)
-        for var in ("TEMP", "PRES", "CNDC"):
+        for var in ("TEMP1", "PRES", "CNDC1"):
             assert "units" in ds[var].attrs, f"{var} missing units attr"
 
     @pytest.mark.parametrize("ds_fixture", ["ds_0119", "ds_0243", "ds_0520"])
@@ -473,7 +472,7 @@ class TestCrossDataset:
     def test_primary_secondary_temp_same_length(self, ds_fixture, request):
         """TEMP and TEMP2 must have the same number of scans."""
         ds = request.getfixturevalue(ds_fixture)
-        assert len(ds.TEMP) == len(ds.TEMP2)
+        assert len(ds.TEMP1) == len(ds.TEMP2)
 
 
 # ---------------------------------------------------------------------------
@@ -538,3 +537,70 @@ class TestGuardConditions:
             assert "PRES" in ds_0520
             p = ds_0520.PRES.values
             assert np.isfinite(p).any(), "PRES has no finite values after offset"
+
+
+# ---------------------------------------------------------------------------
+# parse_hex_dir — multi-cast loading
+# ---------------------------------------------------------------------------
+
+class TestParseHexDir:
+    """parse_hex_dir loads multiple casts into a padded multi-cast Dataset."""
+
+    @pytest.fixture(scope="class")
+    def ds_dir(self):
+        from kval.file.sbe_hex import parse_hex_dir
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return parse_hex_dir(TEST_DATA, verbose=False)
+
+    def test_returns_dataset(self, ds_dir):
+        import xarray as xr
+        assert isinstance(ds_dir, xr.Dataset)
+
+    def test_dims(self, ds_dir):
+        assert "TIME" in ds_dir.dims
+        assert "scan_count" in ds_dir.dims
+        assert ds_dir.sizes["TIME"] == 3  # Sta0119, Sta0243, Sta0520
+
+    def test_time_coord(self, ds_dir):
+        assert "TIME" in ds_dir.coords
+        assert not np.all(np.isnat(ds_dir.TIME.values))
+
+    def test_station_coord(self, ds_dir):
+        assert "STATION" in ds_dir.coords
+        assert ds_dir.sizes["TIME"] == len(ds_dir.STATION)
+
+    def test_time_scan_present(self, ds_dir):
+        """TIME_SCAN should be present as per-scan timestamps."""
+        assert "TIME_SCAN" in ds_dir.coords
+
+    def test_core_variables_present(self, ds_dir):
+        for var in ("TEMP1", "TEMP2", "PRES", "CNDC1", "CNDC2"):
+            assert var in ds_dir, f"{var} missing from multi-cast dataset"
+
+    def test_padding_is_nan(self, ds_dir):
+        """Shorter casts should be NaN-padded at the end, or all same length."""
+        # Find cast lengths from TIME_SCAN (NaT = padding)
+        if "TIME_SCAN" not in ds_dir.coords:
+            pytest.skip("TIME_SCAN not present")
+        ts = ds_dir.TIME_SCAN.values  # (TIME, scan_count)
+        cast_lengths = [(~np.isnat(ts[i])).sum() for i in range(ts.shape[0])]
+        max_len = ds_dir.sizes["scan_count"]
+        if all(l == max_len for l in cast_lengths):
+            # All same length — no padding to check, that's fine
+            pytest.skip("All test casts have equal length; padding not exercised")
+        # Find a cast shorter than max and verify NaN padding
+        idx = next(i for i, l in enumerate(cast_lengths) if l < max_len)
+        n = cast_lengths[idx]
+        t = ds_dir.TEMP1.isel(TIME=idx).values
+        assert np.isnan(t[n]), "Expected NaN padding after cast end"
+        assert not np.isnan(t[n - 1]), "Expected real data before cast end"
+
+    def test_raw_names_flag(self):
+        """parse_hex with raw_names=True keeps internal variable names."""
+        from kval.file.sbe_hex import parse_hex
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            ds_raw = parse_hex(HEX_0119, XML_0119, raw_names=True)
+        assert "temperature_primary_raw" in ds_raw.data_vars
+        assert "TEMP1" not in ds_raw.data_vars
