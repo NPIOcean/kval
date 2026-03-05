@@ -399,6 +399,12 @@ def _convert_voltage_sensors(ds: xr.Dataset, sensors: list) -> xr.Dataset:
                 f"  Raw voltage kept as '{field_name}'.",
                 stacklevel=3,
             )
+            ds[field_name].attrs.update({
+                "units": "V",
+                "long_name": f"Raw voltage channel {volt_idx} ({sensor_type})",
+                "sensor_type": sensor_type,
+                "volt_channel": volt_idx,
+            })
             continue
 
         if converted is None:
@@ -409,6 +415,12 @@ def _convert_voltage_sensors(ds: xr.Dataset, sensors: list) -> xr.Dataset:
                 f"  Raw voltage kept as '{field_name}'.",
                 stacklevel=3,
             )
+            ds[field_name].attrs.update({
+                "units": "V",
+                "long_name": f"Raw voltage channel {volt_idx} ({sensor_type})",
+                "sensor_type": sensor_type,
+                "volt_channel": volt_idx,
+            })
             continue
 
 

@@ -1,0 +1,19 @@
+conda-forge/linux-64                                        Using cache
+conda-forge/noarch                                          Using cache
+
+Pinned packages:
+
+  - python=3.13
+
+
+Transaction
+
+  Prefix: /home/oyvindf/miniforge3/envs/oyv
+
+  All requested packages already installed
+
+
+Transaction starting
+
+Transaction finished
+

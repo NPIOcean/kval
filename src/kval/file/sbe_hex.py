@@ -429,6 +429,9 @@ def parse_hex_dir(
     shared_attrs["max_scan_count"] = max_scans
     multi.attrs = shared_attrs
 
+    # Sort by cast time so casts are always in chronological order
+    multi = multi.sortby("TIME")
+
     if verbose:
         size_bytes = sum(v.nbytes for v in multi.data_vars.values())
         if size_bytes >= 1e9:

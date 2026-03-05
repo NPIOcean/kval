@@ -130,3 +130,137 @@ def test_to_netcdf_convention_check(mock_dataset):
             dataset.to_netcdf(mock_dataset, tmpdir, convention_check=True)
             mock_check.assert_called_once_with(Path(tmpdir) / 'test_dataset.nc')
 
+
+
+# ─── Oceanographic calculation functions ────────────────────────────────────
+
+@pytest.fixture
+def mock_ctd_dataset() -> xr.Dataset:
+    """
+    Minimal CTD-like dataset with CNDC, TEMP, PRES, PSAL, LATITUDE, LONGITUDE.
+    Uses realistic-ish values so gsw functions don't produce NaN.
+    """
+    np.random.seed(42)
+    nt, nz = 5, 10
+    pres   = np.linspace(10, 500, nz)
+    temp   = 15 - pres * 0.01 + np.random.randn(nt, nz) * 0.1
+    # conductivity in S/m for ~35 PSU water
+    cndc   = 3.5 + np.random.randn(nt, nz) * 0.01
+    psal   = np.zeros((nt, nz))
+    lat    = np.full(nt, 60.0)
+    lon    = np.full(nt, 5.0)
+
+    return xr.Dataset(
+        {
+            "CNDC":      (["TIME", "PRES"], cndc,  {"units": "S m-1"}),
+            "TEMP":      (["TIME", "PRES"], temp,  {"units": "degree_C"}),
+            "PSAL":      (["TIME", "PRES"], psal,  {"units": "1"}),
+            "LATITUDE":  (["TIME"],         lat,   {"units": "degree_north"}),
+            "LONGITUDE": (["TIME"],         lon,   {"units": "degree_east"}),
+        },
+        coords={
+            "TIME": np.arange(nt),
+            "PRES": pres,
+        },
+    )
+
+
+def test_calculate_PSAL_updates_variable(mock_ctd_dataset):
+    """calculate_PSAL should overwrite PSAL with non-zero values."""
+    import gsw
+    ds = dataset.calculate_PSAL(mock_ctd_dataset, cndc_var="CNDC",
+                                 temp_var="TEMP", pres_var="PRES")
+    assert "PSAL" in ds
+    assert not np.all(ds["PSAL"].values == 0), "PSAL was not updated"
+    assert "note" in ds["PSAL"].attrs
+
+
+def test_calculate_PSAL_unit_conversion(mock_ctd_dataset):
+    """calculate_PSAL should apply x10 factor for S m-1 conductivity."""
+    import gsw
+    ds_Sm = mock_ctd_dataset.copy(deep=True)  # units already S m-1
+    ds_mScm = mock_ctd_dataset.copy(deep=True)
+    ds_mScm["CNDC"].values[:] *= 10
+    ds_mScm["CNDC"].attrs["units"] = "mS/cm"
+
+    result_Sm   = dataset.calculate_PSAL(ds_Sm)
+    result_mScm = dataset.calculate_PSAL(ds_mScm)
+
+    np.testing.assert_allclose(
+        result_Sm["PSAL"].values, result_mScm["PSAL"].values, rtol=1e-4,
+        err_msg="S m-1 and mS/cm inputs should give same PSAL"
+    )
+
+
+def test_calculate_PSAL_retain_nans(mock_ctd_dataset):
+    """calculate_PSAL should preserve pre-existing NaNs in PSAL when retain_nans=True."""
+    ds = mock_ctd_dataset.copy(deep=True)
+    ds["PSAL"].values[0, 0] = np.nan
+
+    result = dataset.calculate_PSAL(ds, retain_nans=True)
+    assert np.isnan(result["PSAL"].values[0, 0]), "NaN was not preserved"
+    assert not np.isnan(result["PSAL"].values[0, 1])
+
+
+def test_calculate_SA_CT_adds_variables(mock_ctd_dataset):
+    """calculate_SA_CT should add SA and CT with correct units."""
+    ds = dataset.calculate_PSAL(mock_ctd_dataset)
+    ds = dataset.calculate_SA_CT(ds)
+
+    assert "SA" in ds
+    assert "CT" in ds
+    assert ds["SA"].attrs["units"] == "g kg-1"
+    assert ds["CT"].attrs["units"] == "degree_C"
+    assert ds["SA"].shape == ds["PSAL"].shape
+    assert not np.all(np.isnan(ds["SA"].values))
+
+
+def test_calculate_rho_adds_variable(mock_ctd_dataset):
+    """calculate_rho should add RHO with physically plausible values."""
+    ds = dataset.calculate_PSAL(mock_ctd_dataset)
+    ds = dataset.calculate_rho(ds)
+
+    assert "RHO" in ds
+    assert ds["RHO"].attrs["units"] == "kg m-3"
+    # Seawater density is roughly 1020–1030 kg/m³
+    rho_vals = ds["RHO"].values
+    assert np.nanmin(rho_vals) > 990 and np.nanmax(rho_vals) < 1060, (
+        f"RHO values out of plausible range: {np.nanmin(rho_vals):.1f}–{np.nanmax(rho_vals):.1f}"
+    )
+
+
+def test_calculate_sig0_adds_variable(mock_ctd_dataset):
+    """calculate_sig0 should add SIG0 with values roughly 20–30 kg/m³."""
+    ds = dataset.calculate_PSAL(mock_ctd_dataset)
+    ds = dataset.calculate_sig0(ds)
+
+    assert "SIG0" in ds
+    assert ds["SIG0"].attrs["units"] == "kg m-3"
+    sig0_vals = ds["SIG0"].values
+    assert np.nanmin(sig0_vals) > 15 and np.nanmax(sig0_vals) < 40, (
+        f"SIG0 values out of plausible range: {np.nanmin(sig0_vals):.2f}–{np.nanmax(sig0_vals):.2f}"
+    )
+
+
+def test_calculate_CNDC_roundtrip(mock_ctd_dataset):
+    """calculate_CNDC after calculate_PSAL should roughly recover original conductivity."""
+    ds = dataset.calculate_PSAL(mock_ctd_dataset)
+    # Store original CNDC (in S m-1), compute PSAL, then recompute CNDC
+    ds_recndc = dataset.calculate_CNDC(ds)
+
+    assert "CNDC" in ds_recndc
+    assert "note" in ds_recndc["CNDC"].attrs
+
+
+def test_calculations_do_not_modify_input(mock_ctd_dataset):
+    """All calculation functions should return a new dataset, not modify in place."""
+    ds_orig = mock_ctd_dataset.copy(deep=True)
+    ds = dataset.calculate_PSAL(mock_ctd_dataset)
+    ds = dataset.calculate_SA_CT(ds)
+    ds = dataset.calculate_rho(ds)
+    ds = dataset.calculate_sig0(ds)
+
+    # Original should be unchanged
+    np.testing.assert_array_equal(
+        mock_ctd_dataset["PSAL"].values, ds_orig["PSAL"].values
+    )

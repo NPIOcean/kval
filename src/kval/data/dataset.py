@@ -254,3 +254,233 @@ def to_netcdf(
     if convention_check:
         print('Running convention checker:')
         check_conventions.check_file(file_path)
+
+#### OCEANOGRAPHIC CALCULATIONS
+
+
+def calculate_PSAL(
+    ds: xr.Dataset,
+    cndc_var: str = "CNDC",
+    temp_var: str = "TEMP",
+    pres_var: str = "PRES",
+    psal_var: str = "PSAL",
+    retain_nans: bool = True,
+) -> xr.Dataset:
+    """
+    (Re)calculate Practical Salinity (PSAL) from conductivity, temperature,
+    and pressure using the GSW-Python module.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+    cndc_var, temp_var, pres_var, psal_var : str
+        Variable names. Defaults: 'CNDC', 'TEMP', 'PRES', 'PSAL'.
+    retain_nans : bool
+        If PSAL already exists, retain its NaN mask. Default True.
+
+    Returns
+    -------
+    xr.Dataset
+        Dataset with recalculated PSAL.
+    """
+    import gsw
+
+    ds = ds.copy(deep=True)
+
+    CNDC_ = ds[cndc_var].copy()
+    if 'units' in CNDC_.attrs and CNDC_.units == 'S m-1':
+        print('Detected S m-1 unit - applying an x10 factor to CNDC.')
+        CNDC_.values *= 10
+
+    PSAL = gsw.SP_from_C(CNDC_.values, ds[temp_var].values, ds[pres_var].values)
+
+    if retain_nans and psal_var in ds:
+        PSAL = np.where(np.isnan(ds[psal_var]), np.nan, PSAL)
+
+    if psal_var in ds:
+        ds[psal_var][:] = PSAL
+    else:
+        ds[psal_var] = (ds[cndc_var].dims, PSAL, {'units': '1'})
+        if ('sensor_calibration_date' in ds[temp_var].attrs
+                and 'sensor_calibration_date' in ds[cndc_var].attrs):
+            ds[psal_var].attrs['sensor_calibration_date'] = (
+                f'{ds[temp_var].sensor_calibration_date} (TEMP), '
+                f'{ds[cndc_var].sensor_calibration_date} (CNDC)')
+
+    ds[psal_var].attrs['note'] = (
+        f'Computed from {cndc_var}, {temp_var}, {pres_var} '
+        'using the Python gsw module.')
+
+    return ds
+
+
+def calculate_SA_CT(
+    ds: xr.Dataset,
+    cndc_var: str = "CNDC",
+    temp_var: str = "TEMP",
+    pres_var: str = "PRES",
+    psal_var: str = "PSAL",
+) -> xr.Dataset:
+    """
+    Calculate Absolute Salinity (SA) and Conservative Temperature (CT)
+    using the GSW-Python module.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+    cndc_var, temp_var, pres_var, psal_var : str
+        Variable names. Defaults: 'CNDC', 'TEMP', 'PRES', 'PSAL'.
+
+    Returns
+    -------
+    xr.Dataset
+        Dataset with SA and CT added.
+    """
+    import gsw
+
+    ds = ds.copy(deep=True)
+
+    SA = gsw.SA_from_SP(ds[psal_var], ds[pres_var], ds.LONGITUDE, ds.LATITUDE)
+    CT = gsw.CT_from_t(SA, ds[temp_var], ds[pres_var])
+
+    ds['SA'] = (ds[psal_var].dims, SA.values,
+                {'units': 'g kg-1',
+                 'standard_name': 'sea_water_absolute_salinity',
+                 'long_name': 'Absolute Salinity'})
+    ds['CT'] = (ds[psal_var].dims, CT.values,
+                {'units': 'degree_C',
+                 'standard_name': 'sea_water_conservative_temperature',
+                 'long_name': 'Conservative Temperature'})
+
+    for varname in ['CT', 'SA']:
+        ds[varname].attrs['note'] = (
+            f'Computed from {cndc_var}, {temp_var}, {pres_var} '
+            'using the Python gsw module.')
+
+    return ds
+
+
+def calculate_rho(
+    ds: xr.Dataset,
+    cndc_var: str = "CNDC",
+    temp_var: str = "TEMP",
+    pres_var: str = "PRES",
+    psal_var: str = "PSAL",
+) -> xr.Dataset:
+    """
+    Calculate in-situ seawater density (RHO) using the GSW-Python module.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+    cndc_var, temp_var, pres_var, psal_var : str
+        Variable names. Defaults: 'CNDC', 'TEMP', 'PRES', 'PSAL'.
+
+    Returns
+    -------
+    xr.Dataset
+        Dataset with RHO added.
+    """
+    import gsw
+
+    ds = ds.copy(deep=True)
+
+    SA = gsw.SA_from_SP(ds[psal_var], ds[pres_var], ds.LONGITUDE, ds.LATITUDE)
+    CT = gsw.CT_from_t(SA, ds[temp_var], ds[pres_var])
+    RHO = gsw.rho(SA, CT, ds[pres_var])
+
+    ds['RHO'] = (ds[psal_var].dims, RHO.values,
+                 {'units': 'kg m-3',
+                  'standard_name': 'sea_water_density',
+                  'long_name': 'In-situ seawater density',
+                  'note': (f'Computed from {cndc_var}, {temp_var}, {pres_var} '
+                           'using the Python gsw module.')})
+    return ds
+
+
+def calculate_sig0(
+    ds: xr.Dataset,
+    temp_var: str = "TEMP",
+    pres_var: str = "PRES",
+    psal_var: str = "PSAL",
+) -> xr.Dataset:
+    """
+    Calculate potential density anomaly (SIG0) using the GSW-Python module.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+    temp_var, pres_var, psal_var : str
+        Variable names. Defaults: 'TEMP', 'PRES', 'PSAL'.
+
+    Returns
+    -------
+    xr.Dataset
+        Dataset with SIG0 added.
+    """
+    import gsw
+
+    ds = ds.copy(deep=True)
+
+    SA = gsw.SA_from_SP(ds[psal_var], ds[pres_var], ds.LONGITUDE, ds.LATITUDE)
+    CT = gsw.CT_from_t(SA, ds[temp_var], ds[pres_var])
+    SIG0 = gsw.sigma0(SA, CT)
+
+    ds['SIG0'] = (ds[psal_var].dims, SIG0.values,
+                  {'units': 'kg m-3',
+                   'standard_name': 'sea_water_sigma_theta',
+                   'long_name': 'Potential density minus 1000 kg m-3',
+                   'note': (f'Computed from {temp_var}, {pres_var} '
+                            'using the Python gsw module.')})
+    return ds
+
+
+def calculate_CNDC(
+    ds: xr.Dataset,
+    cndc_var: str = "CNDC",
+    temp_var: str = "TEMP",
+    pres_var: str = "PRES",
+    psal_var: str = "PSAL",
+    retain_nans: bool = True,
+) -> xr.Dataset:
+    """
+    (Re)calculate Conductivity (CNDC) from practical salinity, temperature,
+    and pressure using the GSW-Python module.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+    cndc_var, temp_var, pres_var, psal_var : str
+        Variable names. Defaults: 'CNDC', 'TEMP', 'PRES', 'PSAL'.
+    retain_nans : bool
+        If CNDC already exists, retain its NaN mask. Default True.
+
+    Returns
+    -------
+    xr.Dataset
+        Dataset with recalculated CNDC.
+    """
+    import gsw
+
+    ds = ds.copy(deep=True)
+
+    CNDC = gsw.C_from_SP(ds[psal_var].values, ds[temp_var].values, ds[pres_var].values)
+
+    if retain_nans and cndc_var in ds:
+        CNDC = np.where(np.isnan(ds[cndc_var]), np.nan, CNDC)
+
+    if cndc_var in ds:
+        ds[cndc_var][:] = CNDC
+    else:
+        ds[cndc_var] = (ds[psal_var].dims, CNDC, {'units': 'mS/cm'})
+        if ('sensor_calibration_date' in ds[temp_var].attrs
+                and 'sensor_calibration_date' in ds[psal_var].attrs):
+            ds[cndc_var].attrs['sensor_calibration_date'] = (
+                f'{ds[temp_var].sensor_calibration_date} (TEMP), '
+                f'{ds[psal_var].sensor_calibration_date} (PSAL)')
+
+    ds[cndc_var].attrs['note'] = (
+        f'Computed from {psal_var}, {temp_var}, {pres_var} '
+        'using the Python gsw module.')
+
+    return ds
