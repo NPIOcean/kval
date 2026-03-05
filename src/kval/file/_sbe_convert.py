@@ -505,6 +505,14 @@ def _convert_surface_par(ds: xr.Dataset, sensors: list) -> xr.Dataset:
         cf = float(c.get("ConversionFactor", 1.0))
         rm = float(c.get("RatioMultiplier", 1.0))
         result = cf * raw * rm
+        # If all values are identical the sensor was not connected — output NaN
+        if np.all(result == result[0]):
+            warnings.warn(
+                "\nSPAR sensor output is constant — sensor may not be connected. "
+                "Setting SPAR to NaN.",
+                stacklevel=3,
+            )
+            result = np.full_like(result, np.nan)
         attrs = {**_base_attrs(spar_sensor), "units": "microE m-2 s-1",
                  "long_name": "Surface photosynthetically available radiation"}
     else:
