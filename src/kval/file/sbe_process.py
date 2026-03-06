@@ -1089,15 +1089,9 @@ def bin_profiles(
         # bin_average returns mean pressure per bin which varies slightly from
         # the centre. We preserve the true mean as PRES_mean and use the clean
         # grid for the coordinate so the output Dataset has a regular axis.
-        half = bin_size / 2.0
-        bin_centres = np.round(
-            (binned[bin_var] - half) / bin_size
-        ) * bin_size + half
         binned["PRES_mean"] = binned[bin_var].values
-        binned[bin_var] = bin_centres
-
-        # Drop duplicate bin centres (can occur at surface with irregular bins)
-        binned = binned.drop_duplicates(subset=[bin_var], keep="first")
+        binned[bin_var] = np.floor(binned[bin_var].values / bin_size) * bin_size + bin_size
+        binned = binned.groupby(bin_var, as_index=False).mean()
 
         binned_casts.append(binned)
 
@@ -1155,11 +1149,11 @@ def bin_profiles(
     coords = {
         bin_var: (bin_var, pres_arr,
                   ds[bin_var].attrs if bin_var in ds else {}),
-        "TIME": ("TIME", ds.TIME.values),
+        "TIME": ("TIME", ds.TIME.values, ds.TIME.attrs),
         **pos_coords,
     }
     if "STATION" in ds.coords:
-        coords["STATION"] = ("TIME", ds.STATION.values)
+        coords["STATION"] = ("TIME", ds.STATION.values, ds.STATION.attrs)
 
     out = xr.Dataset(out_vars, coords=coords)
     out.attrs = {k: v for k, v in ds.attrs.items()}

@@ -404,9 +404,14 @@ def parse_hex_dir(
 
     # Concatenate — use a dummy integer dimension, then assign TIME
     multi = xr.concat(padded, dim="TIME", join="outer")
-    multi = multi.assign_coords(TIME=("TIME", np.array(times,
-                                                        dtype="datetime64[ns]")))
 
+    times_float = (np.array(times, dtype="datetime64[ns]").astype("int64")
+                / 86_400e9)  # nanoseconds → days
+    multi = multi.assign_coords(TIME=("TIME", times_float))
+    multi["TIME"].attrs.update({
+        "units":     "days since 1970-01-01",
+        "long_name": "cast start time",
+    })
     # Restore TIME_SCAN as a coordinate (now shaped TIME, scan_count)
     if "TIME_SCAN" in multi.data_vars:
         multi = multi.set_coords("TIME_SCAN")
