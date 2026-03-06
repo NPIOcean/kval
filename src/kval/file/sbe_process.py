@@ -350,7 +350,22 @@ def low_pass_filter(
             arr = ds[var].values[i, valid]
             if not np.issubdtype(arr.dtype, np.floating):
                 continue
-            filtered = proc.low_pass_filter(arr, time_constant, dt)
+            # IIR filter propagates NaN forward — interpolate across NaNs
+            # before filtering, then restore them afterwards
+            nan_mask = ~np.isfinite(arr)
+            if nan_mask.any():
+                if nan_mask.all():
+                    continue  # nothing to filter
+                arr_filled = arr.copy()
+                xp = np.where(~nan_mask)[0]
+                fp = arr[~nan_mask]
+                arr_filled[nan_mask] = np.interp(
+                    np.where(nan_mask)[0], xp, fp)
+            else:
+                arr_filled = arr
+            filtered = proc.low_pass_filter(arr_filled, time_constant, dt)
+            # Restore NaNs
+            filtered[nan_mask] = np.nan
             vals = ds[var].values.copy()
             vals[i, valid] = filtered
             ds[var] = xr.DataArray(vals, dims=ds[var].dims, attrs=ds[var].attrs)
