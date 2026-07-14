@@ -90,31 +90,39 @@ def start_end_times_cftime_to_duration(
     return formatted_difference
 
 
-def seconds_to_ISO8601(seconds: int) -> str:
+def seconds_to_ISO8601(seconds: float) -> str:
     """
-    Takes an integer number of seconds (e.g. a sampling rate) and
+    Takes a number of seconds (e.g. a sampling rate) and
     returns a ISO8601 string (P[YYYY]-[MM]-[DD]T[hh]:[mm]:[ss]).
     """
-    seconds = int(seconds)
-    seconds_residual = 0
-    if seconds > 86400 - 1:
+    if seconds >= 86400:
         days = int(seconds // 86400)
         seconds_residual = seconds - days * 86400
     else:
         days = 0
         seconds_residual = seconds
-    if seconds_residual > 24 * 60 - 1:
-        hours = int(seconds_residual // (3600))
+
+    if seconds_residual >= 3600:
+        hours = int(seconds_residual // 3600)
         seconds_residual = seconds_residual - hours * 3600
     else:
         hours = 0
-    if seconds_residual > 59:
-        minutes = int(seconds_residual // (60))
+
+    if seconds_residual >= 60:
+        minutes = int(seconds_residual // 60)
         seconds_residual = seconds_residual - minutes * 60
     else:
         minutes = 0
+
+    # Only show fractional seconds if the residual actually has a
+    # fractional part; otherwise format as a plain integer.
+    if seconds_residual == int(seconds_residual):
+        seconds_str = f"{int(seconds_residual):02}"
+    else:
+        seconds_str = f"{seconds_residual:05.2f}"
+
     iso_str = (
-        f"P0000-00-{days:02}T{hours:02}:{minutes:02}:{seconds_residual:02}"
+        f"P0000-00-{days:02}T{hours:02}:{minutes:02}:{seconds_str}"
     )
     return iso_str
 
