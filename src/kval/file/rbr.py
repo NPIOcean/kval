@@ -59,110 +59,8 @@ def read_rsk(file: str, keep_total_pres: bool = False) -> xr.Dataset:
             rskdata.derivesalinity()
         if rskdata.channelexists("pressure"):
             rskdata.deriveseapressure()
-            p_atm = _extract_patm(rskdata)
 
-        # Load data into a pandas DataFrame
-        df_rsk = pd.DataFrame(rskdata.data)
-
-        # Convert timestamp from datetime64[ms] to datetime64[ns]
-        # (to squash a warning going from pd to xr; no practical implications)
-        df_rsk["timestamp"] = df_rsk["timestamp"].astype("datetime64[ns]")
-
-        # Set timestamp as the index (coordinate variable)
-        df_rsk.set_index("timestamp", inplace=True)
-
-        # Create an xarray Dataset from the pandas DataFrame
-        ds_rsk = xr.Dataset.from_dataframe(df_rsk)
-
-        # Retrieve channel names and units
-        rsk_channel_names, rsk_channel_units = rskdata.getchannelnamesandunits(
-            []
-        )
-
-        # Add instrument metadata
-        ds_rsk.attrs["instrument_model"] = rskdata.instrument.model
-        ds_rsk.attrs["instrument_serial_number"] = rskdata.instrument.serialID
-
-        # Sampling scheme and time coverage resolution
-        # (Stored a bit strangely in the rskdata object. Times often in ms.)
-        if type(rskdata.scheduleInfo) == pyrsktools.datatypes.ContinuousInfo:
-            time_res_seconds = rskdata.scheduleInfo.samplingPeriod / 1000
-            sampling_str = (f'Continuous sampling - one measurement every'
-                            f' {time_res_seconds/60} min')
-        if type(rskdata.scheduleInfo) == pyrsktools.datatypes.AverageInfo:
-            time_res_seconds = rskdata.scheduleInfo.repetitionPeriod / 1000
-            sampling_str = (
-                f'One average of {rskdata.scheduleInfo.samplingCount} samples '
-                f'collected at {rskdata.scheduleInfo.samplingPeriod/1000} sec '
-                f'intervals stored for every {time_res_seconds/60} min.')
-
-        ds_rsk.attrs["time_coverage_resolution"] = time.seconds_to_ISO8601(
-            time_res_seconds
-        )
-        ds_rsk.attrs["sampling_details"] = sampling_str
-
-
-        # Add calibration dates:
-        cal_dates = _build_cal_dates(rskdata)
-        for varnm, cdate in cal_dates.items():
-            if varnm in ds_rsk:
-                ds_rsk[varnm].attrs["sensor_calibration_date"] = cdate
-
-        # Add some variable-custom metadata
-        if "sea_pressure" in ds_rsk:
-            # Atmospheric pressure used in PRES calculation
-            ds_rsk["sea_pressure"].attrs[
-                "assumed_atmospheric_pressure_dbar"
-            ] = p_atm
-            # Calibration data of pressure sensor
-            ds_rsk["sea_pressure"].attrs[
-                "sensor_calibration_date"
-            ] = ds_rsk.pressure.sensor_calibration_date
-
-        if "salinity" in ds_rsk:
-            # Calibration data of T/C sensors
-            ds_rsk["salinity"].attrs["sensor_calibration_date"] = (
-                f"{ds_rsk.temperature.sensor_calibration_date} (TEMP), "
-                f"{ds_rsk.conductivity.sensor_calibration_date} (CNDC),"
-            )
-
-        # Drop the total pressure if we have sea pressure
-        # (and have not set keep_total_pres=True)
-        if keep_total_pres is False and "sea_pressure" in ds_rsk:
-            ds_rsk = ds_rsk.drop_vars("pressure")
-
-        # Modify units according to preferred formatting
-        # (mS/cm -> mS cm-1, °C -> degC, etc..)
-        updated_units = [
-            RBR_units_map.get(unit, unit) for unit in rsk_channel_units
-        ]
-
-        # Map RBR names to updated units
-        map_var_units = dict(zip(rsk_channel_names, updated_units))
-
-        # Set units of each variable
-        for key, unit in map_var_units.items():
-            if key in ds_rsk:
-                ds_rsk[key].attrs["units"] = unit
-
-        # Rename the timestamp dimension to TIME
-        ds_rsk = ds_rsk.rename_dims({"timestamp": "TIME"})
-
-        # Update variable names according to conventions
-        # (salinity -> PSAL, sea_pressure -> PRES, etc):
-        # Filter out variables not present in the dataset
-        filtered_RBR_name_map = {
-            old_name: new_name
-            for old_name, new_name in RBR_name_map.items()
-            if old_name in ds_rsk.variables or old_name in ds_rsk.coords
-        }
-        # Change names
-        ds_rsk = ds_rsk.rename_vars(filtered_RBR_name_map)
-
-        # Convert TIME to Python epoch format and update attributes
-        ds_rsk["TIME"] = ("TIME", date2num(ds_rsk["TIME"].values))
-        ds_rsk["TIME"].attrs["units"] = "days since 1970-01-01"
-        ds_rsk["TIME"].attrs["axis"] = "T"
+        ds_rsk = rsk_to_xr(rskdata, keep_total_pres=keep_total_pres)
 
         # Add a history attribute with some basic info
         first_date = num2date(ds_rsk.TIME.min()).strftime("%Y-%m-%d")
@@ -177,11 +75,158 @@ def read_rsk(file: str, keep_total_pres: bool = False) -> xr.Dataset:
             " using pyRSKtools+kval."
         )
 
-        ds_rsk.attrs["source_file"] = os.path.basename(
-            rskdata.filename
+        return ds_rsk
+
+
+def rsk_to_xr(rskdata, keep_total_pres: bool = False) -> xr.Dataset:
+    """
+    Convert an already-loaded pyrsktools RSK object into an xarray Dataset,
+    preserving available metadata and converting units and variable names
+    according to specified conventions.
+
+    Unlike read_rsk(), this does not open a file or call readdata() /
+    derivesalinity() / deriveseapressure() -- it assumes rskdata.data is
+    already populated with whatever channels are desired. This allows it
+    to be called on a per-profile RSK object produced by slicing/copying
+    an already-read RSK, as well as on a freshly-read one.
+
+    Parameters:
+    ----------
+    rskdata : pyrsktools.RSK
+        An RSK object with .data already populated.
+    keep_total_pres : bool
+        Retain the full pressure if sea pressure is present.
+        Default is False.
+
+    Returns:
+    -------
+    xr.Dataset
+    """
+    p_atm = None
+    if rskdata.channelexists("pressure"):
+        p_atm = _extract_patm(rskdata)
+
+    # Load data into a pandas DataFrame
+    df_rsk = pd.DataFrame(rskdata.data)
+
+    # Convert timestamp from datetime64[ms] to datetime64[ns]
+    # (to squash a warning going from pd to xr; no practical implications)
+    df_rsk["timestamp"] = df_rsk["timestamp"].astype("datetime64[ns]")
+
+    # Set timestamp as the index (coordinate variable)
+    df_rsk.set_index("timestamp", inplace=True)
+
+    # Create an xarray Dataset from the pandas DataFrame
+    ds_rsk = xr.Dataset.from_dataframe(df_rsk)
+
+    # Retrieve channel names and units
+    rsk_channel_names, rsk_channel_units = rskdata.getchannelnamesandunits([])
+
+    # Add instrument metadata
+    ds_rsk.attrs["instrument_model"] = rskdata.instrument.model
+    ds_rsk.attrs["instrument_serial_number"] = rskdata.instrument.serialID
+
+    # Sampling scheme and time coverage resolution
+    # (Stored a bit strangely in the rskdata object. Times often in ms.)
+    if type(rskdata.scheduleInfo) == pyrsktools.datatypes.ContinuousInfo:
+        time_res_seconds = rskdata.scheduleInfo.samplingPeriod / 1000
+        sampling_str = (
+            f"Continuous sampling - one measurement every "
+            f"{_format_seconds(time_res_seconds)}"
+        )
+    if type(rskdata.scheduleInfo) == pyrsktools.datatypes.AverageInfo:
+        time_res_seconds = rskdata.scheduleInfo.repetitionPeriod / 1000
+        sampling_period_seconds = rskdata.scheduleInfo.samplingPeriod / 1000
+        sampling_str = (
+            f"One average of {rskdata.scheduleInfo.samplingCount} samples "
+            f"collected at {_format_seconds(sampling_period_seconds)} "
+            f"intervals stored for every {_format_seconds(time_res_seconds)}."
         )
 
-        return ds_rsk
+    ds_rsk.attrs["time_coverage_resolution"] = time.seconds_to_ISO8601(
+        time_res_seconds
+    )
+    ds_rsk.attrs["sampling_details"] = sampling_str
+
+    # Add calibration dates:
+    cal_dates = _build_cal_dates(rskdata)
+    for varnm, cdate in cal_dates.items():
+        if varnm in ds_rsk:
+            ds_rsk[varnm].attrs["sensor_calibration_date"] = cdate
+
+    # Add some variable-custom metadata
+    if "sea_pressure" in ds_rsk:
+        # Atmospheric pressure used in PRES calculation
+        ds_rsk["sea_pressure"].attrs[
+            "assumed_atmospheric_pressure_dbar"
+        ] = p_atm
+        # Calibration data of pressure sensor
+        ds_rsk["sea_pressure"].attrs[
+            "sensor_calibration_date"
+        ] = ds_rsk.pressure.sensor_calibration_date
+
+    if "salinity" in ds_rsk:
+        # Calibration data of T/C sensors
+        ds_rsk["salinity"].attrs["sensor_calibration_date"] = (
+            f"{ds_rsk.temperature.sensor_calibration_date} (TEMP), "
+            f"{ds_rsk.conductivity.sensor_calibration_date} (CNDC),"
+        )
+
+    # Drop the total pressure if we have sea pressure
+    # (and have not set keep_total_pres=True)
+    if keep_total_pres is False and "sea_pressure" in ds_rsk:
+        ds_rsk = ds_rsk.drop_vars("pressure")
+
+    # Modify units according to preferred formatting
+    # (mS/cm -> mS cm-1, °C -> degC, etc..)
+    updated_units = [
+        RBR_units_map.get(unit, unit) for unit in rsk_channel_units
+    ]
+
+    # Map RBR names to updated units
+    map_var_units = dict(zip(rsk_channel_names, updated_units))
+
+    # Set units of each variable
+    for key, unit in map_var_units.items():
+        if key in ds_rsk:
+            ds_rsk[key].attrs["units"] = unit
+
+    # Rename the timestamp dimension to TIME
+    ds_rsk = ds_rsk.rename_dims({"timestamp": "TIME"})
+
+    # Update variable names according to conventions
+    # (salinity -> PSAL, sea_pressure -> PRES, etc):
+    # Filter out variables not present in the dataset
+    filtered_RBR_name_map = {
+        old_name: new_name
+        for old_name, new_name in RBR_name_map.items()
+        if old_name in ds_rsk.variables or old_name in ds_rsk.coords
+    }
+    # Change names
+    ds_rsk = ds_rsk.rename_vars(filtered_RBR_name_map)
+
+    # Convert TIME to Python epoch format and update attributes
+    ds_rsk["TIME"] = ("TIME", date2num(ds_rsk["TIME"].values))
+    ds_rsk["TIME"].attrs["units"] = "days since 1970-01-01"
+    ds_rsk["TIME"].attrs["axis"] = "T"
+
+    ds_rsk.attrs["source_file"] = os.path.basename(rskdata.filename)
+
+    return ds_rsk
+
+
+def _format_seconds(seconds: float) -> str:
+    """
+    Format a duration in seconds as a human-readable string, choosing
+    sec/min/hours depending on magnitude to avoid awkward long decimals
+    (e.g. avoids "0.008333333333333333 min" for a 0.5 sec sampling period).
+    """
+    if seconds < 60:
+        return f"{seconds:g} sec"
+    elif seconds < 3600:
+        return f"{seconds / 60:g} min"
+    else:
+        return f"{seconds / 3600:g} hours"
 
 
 def _build_cal_dates(rskdata):
