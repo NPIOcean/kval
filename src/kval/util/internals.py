@@ -4,22 +4,26 @@ import warnings
 
 def is_notebook():
     """
-    Check if the current environment is a Jupyter notebook.
+    Check if the current environment is a Jupyter notebook (or another
+    kernel-backed IPython front-end, e.g. JupyterLab, VS Code, Colab).
 
     Returns:
-        bool: True if the code is running in a Jupyter notebook or
-              Jupyter QtConsole, False otherwise.
+        bool: True if running in a kernel-backed IPython environment,
+              False otherwise (e.g. plain terminal IPython or script).
     """
     try:
-        shell = get_ipython().__class__.__name__
-        if shell == "ZMQInteractiveShell":
-            return True  # Jupyter notebook or Jupyter QtConsole
-        elif shell == "TerminalInteractiveShell":
-            return False  # Terminal running IPython
-        else:
-            return False  # Other type (probably standard Python interpreter)
+        shell = get_ipython()
     except NameError:
-        return False  # Probably standard Python interpreter
+        return False  # Standard Python interpreter, no IPython at all
+
+    if shell is None:
+        return False
+
+    # Kernel-backed shells (Jupyter Notebook/Lab, VS Code, Colab,
+    # qtconsole) expose a `.kernel` attribute; plain terminal IPython
+    # does not.
+    return hasattr(shell, 'kernel')
+
 
 
 def check_interactive():
