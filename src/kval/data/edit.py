@@ -17,7 +17,8 @@ from kval.util import internals, index, time
 
 
 def remove_points_profile(ds: xr.Dataset, varnm: str, TIME_index: int,
-                          remove_inds) -> xr.Dataset:
+                          remove_inds, 
+                          deep_copy = True) -> xr.Dataset:
     """
     Remove specified points from a profile in the dataset by setting them to NaN.
 
@@ -35,7 +36,8 @@ def remove_points_profile(ds: xr.Dataset, varnm: str, TIME_index: int,
     - ds: xarray.Dataset
       The dataset with specified points removed (set to NaN).
     """
-    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+    if deep_copy:
+        ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     # Convert remove_inds to a list if it's not already
     remove_inds = np.asarray(remove_inds)
@@ -53,7 +55,8 @@ def remove_points_profile(ds: xr.Dataset, varnm: str, TIME_index: int,
 
 
 def remove_points_timeseries(ds: xr.Dataset, varnm: str,
-                             remove_inds, time_var='TIME') -> xr.Dataset:
+                             remove_inds, time_var='TIME',
+                             deep_copy = True) -> xr.Dataset:
     """
     Remove specified points from a time series in the dataset by setting them to NaN.
 
@@ -70,7 +73,8 @@ def remove_points_timeseries(ds: xr.Dataset, varnm: str,
       The dataset with specified points removed (set to NaN).
     """
 
-    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+    if deep_copy:
+        ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     # Handle case where no points are to be removed
     if not remove_inds:

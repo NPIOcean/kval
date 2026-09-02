@@ -46,7 +46,7 @@ class hand_remove_points:
         self.TIME_index = TIME_index
 
         self.varnm = varnm
-        self.d = d.copy(deep=True)
+        self.d = d
 
         self.var_data = d.isel(TIME=TIME_index)[varnm]
         if 'STATION' in d.keys():
@@ -255,7 +255,8 @@ class hand_remove_points:
          #                           np.nan, self.d[self.varnm].loc[time_loc])
 
         self.remove_inds = np.where(self.remove_bool)[0]
-        self.d = edit.remove_points_profile(self.d, self.varnm, self.TIME_index, self.remove_inds)
+        self.d = edit.remove_points_profile(self.d, self.varnm, self.TIME_index, self.remove_inds, 
+                                            deep_copy = False)
 
         # If we have a PROCESSING field:
         if hasattr(self.d, 'PROCESSING'):

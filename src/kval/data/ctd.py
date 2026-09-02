@@ -988,7 +988,8 @@ def hand_remove_points(
     corresponding buttons for actions.
     """
 
-    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+    # Deliberately skipå this - we need to change3 this object in place.
+    #ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     hand_remove = ctd_edit.hand_remove_points(ds, variable, TIME_index)
     ds = hand_remove.d

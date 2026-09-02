@@ -816,7 +816,8 @@ def threshold_pick(ds: xr.Dataset) -> xr.Dataset:
     py_comment=("Reject {varnm} values at specific points"),
 )
 def remove_points(
-    ds: xr.Dataset, varnm: str, remove_inds, time_var="TIME"
+    ds: xr.Dataset, varnm: str, remove_inds, time_var="TIME",
+    deep_copy = True,
 ) -> xr.Dataset:
     """
     Remove specified points from a time series in the dataset by setting them
@@ -834,11 +835,12 @@ def remove_points(
     - ds: xarray.Dataset
       The dataset with specified points removed (set to NaN).
     """
-
-    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+    if deep_copy:
+        ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     ds = edit.remove_points_timeseries(
-        ds=ds, varnm=varnm, remove_inds=remove_inds, time_var=time_var
+        ds=ds, varnm=varnm, remove_inds=remove_inds, time_var=time_var,
+        deep_copy = deep_copy
     )
 
     return ds
@@ -878,7 +880,8 @@ def hand_remove_points(
     corresponding buttons for actions.
     """
 
-    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+    # ds = ds.copy(deep=True) # Note: deliberately not doing this - 
+    # we need this to be the same object that we are returning
 
     if not variable_edit:
         variable_edit = variable
@@ -1662,7 +1665,7 @@ def drop_vars_pick(ds: xr.Dataset) -> xr.Dataset:
     ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     edit_obj = edit.drop_vars_pick(ds, moored=True)
-    return edit_obj.D
+    return edit_obj.ds
 
 
 # Standardize metadata
