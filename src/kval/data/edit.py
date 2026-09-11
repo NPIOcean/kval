@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 import xarray as xr
 import ipywidgets as widgets
 from IPython.display import display, clear_output
-from kval.data import ctd, moored
 from kval.calc.number import order_of_magnitude
 from kval.util import internals, index, time
 import pandas as pd
@@ -664,9 +663,11 @@ class drop_vars_pick:
             # For a mooring dataset:
             if self.moored:
             # Otherwise assume CTD dataset
+                from kval.data import moored
                 ds_dropped = moored.drop_variables(
                   self.ds, drop = self.selected_options)
             else:
+                from kval.data import ctd
                 ds_dropped = ctd.drop_variables(
                   self.ds, drop = self.selected_options)
 

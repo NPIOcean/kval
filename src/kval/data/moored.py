@@ -60,6 +60,8 @@ import warnings
 
 # Want to be able to use these functions directly..
 from kval.data.dataset import  to_netcdf, add_latlon
+from kval.data.edit import threshold, offset, linear_drift
+from kval.util.xr_funcs import time_average
 
 if internals.is_notebook():
     from IPython.display import display
