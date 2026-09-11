@@ -20,7 +20,7 @@ def mock_dataset() -> xr.Dataset:
 
     # Create data for STATION(TIME) and OCEAN(TIME)
     station_data = [f'st{stnum:02.0f}' for stnum in np.arange(1, Nt + 1)]
-    ocean_data = ['Atlantic', 'Arctic', 'Pacific', 'Mediterranean', 'Southern', 
+    ocean_data = ['Atlantic', 'Arctic', 'Pacific', 'Mediterranean', 'Southern',
                  'Baltic', 'Indian', 'Caribbean', 'Weddell', 'Ross']
 
     # Create data for ZONE(PRES)
@@ -51,10 +51,10 @@ def mock_dataset() -> xr.Dataset:
         'units': 'degC',
         'long_name': 'Test Temperature'
     }
-    
+
     return ds
 
-    
+
 ### Testing the pick() function
 
 def test_pick_single_TIME(mock_dataset):
@@ -99,25 +99,29 @@ def test_pick_invalid_dimension(mock_dataset):
     with pytest.raises(ValueError):
         xr_funcs.pick(mock_dataset, TEMP=15)
 
+def test_pick_nonexistent_variable(mock_dataset):
+    with pytest.raises(ValueError, match="not found in the dataset"):
+        xr_funcs.pick(mock_dataset, NOT_A_VAR='x')
+
 def test_pick_multiple_conditions(mock_dataset):
     # Use multiple conditions: both STATION and ZONE
-    result = xr_funcs.pick(mock_dataset, 
-                           STATION=['st02', 'st03', 'st05'], 
+    result = xr_funcs.pick(mock_dataset,
+                           STATION=['st02', 'st03', 'st05'],
                            ZONE=['epipelagic', 'bathypelagic'])
-    
+
     # Check that only the entries that match both conditions are present
     assert result.sizes['TIME'] == 3  # Only one TIME index should match the condition
     assert result.sizes['PRES'] == 2  # Only one PRES index should match the condition
-    
+
     # Verify the results
     assert 'epipelagic' in result.ZONE.values
     assert 'bathypelagic' in result.ZONE.values
     assert 'st02' in result.STATION.values
     assert 'st03' in result.STATION.values
     assert 'st05' in result.STATION.values
-    assert 'st01' not in result.STATION.values    
+    assert 'st01' not in result.STATION.values
     assert 'abyssopelagic' not in result.ZONE.values
-    
+
     # Check if `TIME` dimension is correctly filtered
     assert len(result.TIME) == 3
     assert pd.Timestamp('2024-01-02') in result.TIME
@@ -129,12 +133,58 @@ def test_pick_multiple_conditions(mock_dataset):
     assert (result.PRES.values == [100, 2000]).all()
 
 
+### Testing the rename_attr() function
+
+def test_rename_attr_global(mock_dataset):
+    xr_funcs.rename_attr(mock_dataset, 'author', 'creator', verbose=False)
+    assert mock_dataset.attrs['creator'] == 'Test Author'
+    assert 'author' not in mock_dataset.attrs
+
+def test_rename_attr_variable(mock_dataset):
+    xr_funcs.rename_attr(mock_dataset['TEMP'], 'units', 'unit', verbose=False)
+    assert mock_dataset['TEMP'].attrs['unit'] == 'degC'
+    assert 'units' not in mock_dataset['TEMP'].attrs
+
+def test_rename_attr_missing_prints_message(mock_dataset, capsys):
+    xr_funcs.rename_attr(mock_dataset, 'nonexistent', 'new_name', verbose=True)
+    captured = capsys.readouterr()
+    assert 'Could not rename' in captured.out
+    assert 'new_name' not in mock_dataset.attrs
+
+def test_rename_attr_silent_when_verbose_false(mock_dataset, capsys):
+    xr_funcs.rename_attr(mock_dataset, 'nonexistent', 'new_name', verbose=False)
+    captured = capsys.readouterr()
+    assert captured.out == ''
+
+
+### Testing the add_attrs_from_dict() function
+
+def test_add_attrs_from_dict_basic(mock_dataset):
+    xr_funcs.add_attrs_from_dict(mock_dataset, {'project': 'kval', 'institution': 'X'})
+    assert mock_dataset.attrs['project'] == 'kval'
+    assert mock_dataset.attrs['institution'] == 'X'
+
+def test_add_attrs_from_dict_override_true_default(mock_dataset):
+    xr_funcs.add_attrs_from_dict(mock_dataset, {'author': 'New Author'})
+    assert mock_dataset.attrs['author'] == 'New Author'
+
+def test_add_attrs_from_dict_override_false_preserves_existing(mock_dataset):
+    xr_funcs.add_attrs_from_dict(
+        mock_dataset, {'author': 'New Author', 'project': 'kval'}, override=False)
+    assert mock_dataset.attrs['author'] == 'Test Author'  # unchanged
+    assert mock_dataset.attrs['project'] == 'kval'  # new key still added
+
+def test_add_attrs_from_dict_on_variable(mock_dataset):
+    xr_funcs.add_attrs_from_dict(mock_dataset['TEMP'], {'valid_min': -2})
+    assert mock_dataset['TEMP'].attrs['valid_min'] == -2
+
+
 ### Testing the swap_var_coord() function
 
 def test_swap_var_coord_basic(mock_dataset):
     # Test basic swapping of TIME with STATION
     result = xr_funcs.swap_var_coord(mock_dataset, coordinate='TIME', variable='STATION')
-    
+
     # Check that STATION is now a coordinate and TIME is a variable
     assert 'STATION' in result.coords
     assert 'TIME' in result.variables and 'TIME' not in result.coords
@@ -143,7 +193,7 @@ def test_swap_var_coord_basic(mock_dataset):
 def test_swap_var_coord_with_drop(mock_dataset):
     # Test swapping with dropping the original coordinate
     result = xr_funcs.swap_var_coord(mock_dataset, coordinate='TIME', variable='STATION', drop_original=True)
-    
+
     # Check that STATION is now a coordinate and TIME is completely removed
     assert 'STATION' in result.coords
     assert 'TIME' not in result.variables
@@ -162,7 +212,7 @@ def test_swap_var_coord_invalid_variable(mock_dataset):
 def test_swap_var_coord_no_drop(mock_dataset):
     # Test swapping without dropping the original coordinate
     result = xr_funcs.swap_var_coord(mock_dataset, coordinate='PRES', variable='ZONE', drop_original=False)
-    
+
     # Check that ZONE is now a coordinate and PRES is still in the dataset
     assert 'ZONE' in result.coords
     assert 'PRES' in result.variables and 'PRES' not in result.coords
@@ -173,7 +223,7 @@ def test_swap_var_coord_preserve_data(mock_dataset):
     temp_before = mock_dataset['TEMP'].values
     result = xr_funcs.swap_var_coord(mock_dataset, coordinate='PRES', variable='ZONE')
     temp_after = result['TEMP'].values
-    
+
     # Ensure data integrity is preserved after swapping
     np.testing.assert_array_equal(temp_before, temp_after)
 
@@ -181,10 +231,33 @@ def test_swap_var_coord_restore(mock_dataset):
     # Swap and then restore the original coordinate to test idempotence
     result = xr_funcs.swap_var_coord(mock_dataset, coordinate='TIME', variable='STATION')
     result = xr_funcs.swap_var_coord(result, coordinate='STATION', variable='TIME')
-    
+
     # Check that the restored dataset matches the original dimensions and coordinates
     assert list(result.dims) == ['TIME', 'PRES']
     assert 'TIME' in result.coords
     assert 'STATION' in result.variables and 'STATION' not in result.coords
     assert mock_dataset.equals(result)
 
+
+### Testing the promote_cf_coordinates() function
+
+def test_promote_cf_coordinates_basic(mock_dataset):
+    mock_dataset['TEMP'].attrs['coordinates'] = 'STATION OCEAN'
+    result = xr_funcs.promote_cf_coordinates(mock_dataset)
+    assert 'STATION' in result.coords
+    assert 'OCEAN' in result.coords
+    assert 'TEMP' not in result.coords
+
+def test_promote_cf_coordinates_no_coordinates_attr_is_noop(mock_dataset):
+    result = xr_funcs.promote_cf_coordinates(mock_dataset)
+    assert 'STATION' not in result.coords
+    assert 'OCEAN' not in result.coords
+
+def test_promote_cf_coordinates_ignores_nonexistent_names(mock_dataset):
+    """A 'coordinates' attribute referencing a variable that doesn't exist
+    in the dataset should be silently ignored, not raise."""
+    mock_dataset['TEMP'].attrs['coordinates'] = 'STATION NOT_A_REAL_VAR'
+    result = xr_funcs.promote_cf_coordinates(mock_dataset)
+    assert 'STATION' in result.coords
+    assert 'NOT_A_REAL_VAR' not in result.coords
+    assert 'NOT_A_REAL_VAR' not in result.variables

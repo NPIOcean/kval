@@ -67,17 +67,22 @@ def pick(ds, squeeze=True, **conditions):
     ...     }
     ... )
     >>> pick(ds, STATION='st02')
+    # A single match squeezes away the TIME dimension entirely by default
+    # (squeeze=True), since it has length 1; TIME becomes a scalar coordinate
+    # rather than a dimension. Use squeeze=False to keep it as TIME: 1.
     <xarray.Dataset>
-    Dimensions:  (TIME: 1, PRES: 5)
+    Dimensions:  (PRES: 5)
     Coordinates:
-      * TIME     (TIME) datetime64[ns] 2024-01-02
+        TIME     datetime64[ns] 2024-01-02
       * PRES     (PRES) float64 1e+03 875.0 750.0 625.0 500.0
     Data variables:
-        TEMP     (TIME, PRES) float64 14.5 15.3 12.7 17.6 8.67
-        OCEAN    (TIME) <U13 'Arctic'
-        STATION  (TIME) <U3 'st02'
+        TEMP     (PRES) float64 14.5 15.3 12.7 17.6 8.67
+        OCEAN    <U13 'Arctic'
+        STATION  <U3 'st02'
 
     >>> pick(ds, STATION=['st02', 'st03'])
+    # Multiple matches keep TIME as a real (length > 1) dimension, so
+    # squeezing has no effect here.
     <xarray.Dataset>
     Dimensions:  (TIME: 2, PRES: 5)
     Coordinates:
@@ -258,8 +263,6 @@ def swap_var_coord(
     return ds
 
 
-
-
 def promote_cf_coordinates(ds):
     """
     Promote all variables listed in any variable's 'coordinates' attribute
@@ -278,3 +281,116 @@ def promote_cf_coordinates(ds):
         ds = ds.set_coords(to_promote)
 
     return ds
+
+def time_average(
+    ds: xr.Dataset,
+    interval: str = '1D',
+    label: str = 'center',
+    origin: str | None = None,
+    time_dim: str = 'TIME',
+    **resample_kwargs,
+) -> xr.Dataset:
+    """
+    Average an xarray Dataset along a time dimension over a specified interval.
+
+    Only numeric data variables with a `time_dim` dimension are averaged;
+    non-numeric variables with a `time_dim` dimension (e.g. string variables
+    like STATION) are dropped, since a mean is not well-defined for them.
+    Variables without a `time_dim` dimension at all (e.g. ZONE(PRES)) are
+    preserved unchanged and unbroadcast.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input dataset with a time dimension coordinate.
+    interval : str, default='1D'
+        Averaging interval, as a pandas offset alias (e.g. '1D', '6h', '30min').
+    label : {'center', 'left', 'right'}, default='center'
+        Where to place the timestamp for each averaging bin:
+        - 'center': the midpoint of the bin (only valid for fixed-duration
+          intervals; raises an error for calendar-based intervals like 'ME'
+          or 'YE', since those don't have a fixed duration to center within).
+        - 'left': the start of the bin (xarray's default resample behavior).
+        - 'right': the end of the bin.
+    origin : str, optional
+        A timestamp (e.g. '2020-01-01 00:00') at which to anchor the bin
+        edges, if you want bins to start at a specific time rather than the
+        default alignment. Passed through to xr.Dataset.resample. Only has
+        an effect for fixed-frequency ("Tick-like") intervals (e.g. '1D',
+        '6h'); it is silently ignored by xarray for calendar-based intervals
+        (e.g. 'ME', 'YE').
+    time_dim : str, default='TIME'
+        Name of the time dimension/coordinate to resample along.
+    **resample_kwargs
+        Additional keyword arguments passed through to xr.Dataset.resample
+        (e.g. `closed`).
+
+    Returns
+    -------
+    xr.Dataset
+        Dataset averaged over the specified interval along `time_dim`.
+        Non-numeric variables with a `time_dim` dimension are dropped (see
+        printed message); variables without `time_dim` are preserved as-is.
+
+    Raises
+    ------
+    ValueError
+        If `time_dim` is not a dimension in the dataset, if `label` is not
+        one of 'center', 'left', 'right', or if label='center' is used with
+        a calendar-based (non-fixed-duration) interval.
+    """
+    if time_dim not in ds.dims:
+        raise ValueError(f"'{time_dim}' is not a dimension in the dataset")
+    if label not in ('center', 'left', 'right'):
+        raise ValueError("label must be one of 'center', 'left', or 'right'")
+
+    # xarray's resample only natively supports 'left'/'right' labeling;
+    # for 'center' we resample as 'left' and shift the result afterward
+    resample_label = 'left' if label == 'center' else label
+
+    resample_kwargs_full = dict(label=resample_label)
+    if origin is not None:
+        resample_kwargs_full['origin'] = origin
+    resample_kwargs_full.update(resample_kwargs)
+
+    # Split off variables that don't depend on time_dim at all -- xarray's
+    # resample().mean() otherwise broadcasts them across the new time bins
+    # (e.g. ZONE(PRES) becomes ZONE(TIME, PRES)), which is not desired.
+    time_indep_vars = [v for v in ds.data_vars if time_dim not in ds[v].dims]
+    ds_time_indep = ds[time_indep_vars]
+
+    # Non-numeric variables with a time_dim dimension can't be meaningfully
+    # averaged (e.g. STATION strings) -- drop them and say so.
+    dropped_vars = [
+        v for v in ds.data_vars
+        if time_dim in ds[v].dims and not np.issubdtype(ds[v].dtype, np.number)
+    ]
+    ds_numeric = ds.drop_vars(dropped_vars + time_indep_vars)
+
+    ds_out = ds_numeric.resample(
+        {time_dim: interval}, **resample_kwargs_full
+    ).mean()
+
+    # Re-merge the time-independent variables, preserved exactly as they were
+    ds_out = ds_out.merge(ds_time_indep)
+
+    if label == 'center':
+        try:
+            offset = pd.Timedelta(interval) / 2
+        except ValueError as e:
+            raise ValueError(
+                f"Could not center timestamps for interval '{interval}': "
+                f"{e}. Calendar-based intervals (e.g. months, years) don't "
+                "have a fixed duration, so centering is not well-defined -- "
+                "use label='left' or label='right' instead."
+            )
+        ds_out = ds_out.assign_coords(
+            {time_dim: ds_out[time_dim].values + offset}
+        )
+
+    if dropped_vars:
+        print(f"time_average: dropped non-numeric {time_dim}-dependent "
+              f"variable(s) {dropped_vars} (mean is not defined for "
+              "non-numeric data)")
+
+    return ds_out
