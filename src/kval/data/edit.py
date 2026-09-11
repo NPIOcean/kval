@@ -873,7 +873,7 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
             # Count non-nan values in the dataset
             count_valid_before = int(ds[variable].count())
 
-            ds_thr = threshold(ds=ds.opy(deep=True), variable = variable,
+            ds_thr = threshold(ds=ds.copy(deep=True), variable = variable,
                         max_val = max_value, min_val = min_value)
             ds[variable] = ds_thr[variable]
             if 'PROCESSING' in ds:

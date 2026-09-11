@@ -36,6 +36,7 @@ for other moored sensors.
 
 import xarray as xr
 import numpy as np
+import pandas as pd
 
 import os
 import gsw
@@ -58,7 +59,7 @@ from kval.metadata.check_conventions import check_file_with_button
 import warnings
 
 # Want to be able to use these functions directly..
-from kval.data.dataset import  to_netcdf
+from kval.data.dataset import  to_netcdf, add_latlon
 
 if internals.is_notebook():
     from IPython.display import display
@@ -88,7 +89,10 @@ def load_moored(
         The loaded dataset.
     """
     # Check file type and return an error if invalid
-    if file.endswith(".rsk"):
+    if file.endswith(".nc"):
+        ds = load_nc(file)
+        return ds
+    elif file.endswith(".rsk"):
         instr_type = "RBR"
     elif file.endswith(".cnv"):
         instr_type = "SBE"
@@ -96,6 +100,7 @@ def load_moored(
         instr_type = "SBE_csv"
     elif file.endswith(".asc"):
         instr_type = "SBE_asc"
+
     else:
         raise ValueError(
             f"Unable to load moored instrument {os.path.basename(file)}.\n"
@@ -157,6 +162,17 @@ ds = data.moored.load_moored(
 
     return ds
 
+
+def load_nc(
+    file: str,
+    decode_cf = False
+) -> xr.Dataset:
+    '''
+    Wrapper for loading nc file.
+    '''
+    ds = xr.open_dataset(file, decode_cf=decode_cf)
+
+    return ds
 
 # Chop record
 # Note: We do the recording to PROCESSING inside the function, not in the
@@ -405,7 +421,7 @@ def chop_by_time(
     # Decode CF-compliant time if TIME is numerical
     if isinstance(ds.TIME.values[0], float):
         time_units = ds.TIME.units
-        ds = xr.decode_cf(ds)
+        ds = xr.decode_cf(ds, decode_timedelta=True)
     else:
         time_units = None
 
@@ -557,10 +573,6 @@ def despike_rolling(
 
 
     return ds
-
-
-
-# Adjust for clock drift
 @record_processing(
     "",
     py_comment=(
@@ -571,19 +583,33 @@ def adjust_time_for_drift(
     seconds: float = 0,
     minutes: float = 0,
     hours: float = 0,
-    days: float = 0
+    days: float = 0,
+    start_time: str = None,
+    end_time: str = None,
 ) -> xr.Dataset:
     """
     Adjust the TIME coordinate of an xarray Dataset to correct for instrument clock drift.
 
-    The offset can be specified in seconds, minutes, hours, or days.  
-    Negative drift values indicate the instrument lags true time (offset is added),  
+    Applies a linear drift correction in time: zero correction at start_time,
+    ramping linearly (in elapsed time, not sample index) to the full specified
+    offset at end_time. This is robust to gaps or uneven sampling intervals.
+
+    By default, start_time and end_time are the first and last TIME values in
+    the dataset (i.e., the drift ramps from 0 at deployment to the full offset
+    at recovery). If explicitly specified, TIME values outside the
+    [start_time, end_time] window are extrapolated linearly at the same drift
+    rate, rather than clamped.
+
+    The offset can be specified in seconds, minutes, hours, or days.
+    Negative drift values indicate the instrument lags true time (offset is added),
     positive values indicate the instrument leads true time (offset is subtracted).
 
     Parameters
     ----------
     ds : xr.Dataset
-        Input dataset with a TIME coordinate.
+        Input dataset with a TIME coordinate. TIME must be numeric (not
+        datetime64) with a "days since..." units attribute, and must be
+        sorted in non-decreasing order.
     seconds : float, default=0
         Clock drift in seconds.
     minutes : float, default=0
@@ -592,14 +618,21 @@ def adjust_time_for_drift(
         Clock drift in hours.
     days : float, default=0
         Clock drift in days.
+    start_time : str, optional
+        Timestamp at which the drift correction is zero, e.g. '2020-01-02 00:33'.
+        Defaults to the first TIME value if not specified.
+    end_time : str, optional
+        Timestamp at which the drift correction equals the full specified
+        offset, e.g. '2020-01-15 08:00'. Defaults to the last TIME value if
+        not specified.
 
     Returns
     -------
     xr.Dataset
         A new dataset with the adjusted TIME coordinate.
     """
-    
-    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+
+    ds = ds.copy(deep=True)  # Make sure we're not modifying the input ds
 
     # Convert all drift values to seconds
     total_drift_seconds = (
@@ -618,24 +651,77 @@ def adjust_time_for_drift(
                       ' to be specified -> Doing nothing', UserWarning)
         return ds
 
-    # Get the TIME coordinate
-    time = ds.coords['TIME'].values
-    drift_adjustments_sec = (
-        np.arange(len(time)) / (len(time)-1))*total_drift_seconds
-
-
-    # Check if TIME is in numerical format (days since epoch)
-    if 'DAYS SINCE' in ds.TIME.units.upper():
-        adjusted_time = time - drift_adjustments_sec / 86400
-    else:
+    # Check TIME units before touching values
+    if 'units' not in ds.TIME.attrs:
+        raise Exception('Could not add drift because TIME has no "units" '
+                        'attribute (expected numerical "Days since..")')
+    units_str = ds.TIME.attrs['units']
+    if 'DAYS SINCE' not in units_str.upper():
         raise Exception('Could not add drift because TIME is non-numerical'
                         ' or has unknown units (should be "Days since..")')
 
+    # Get the TIME coordinate as float; fail loudly if that's not possible
+    try:
+        time = ds.coords['TIME'].values.astype(float)
+    except (TypeError, ValueError) as e:
+        raise Exception('Could not add drift because TIME values could not '
+                        f'be cast to float: {e}')
+
+    # Nothing to do (and time[-1]/time[0] below would raise) on empty TIME
+    if len(time) == 0:
+        warnings.warn('TIME coordinate is empty -> Doing nothing', UserWarning)
+        return ds
+
+    # Drift correction assumes TIME is non-decreasing from deployment
+    # (index 0) to recovery (index -1). Duplicate timestamps are allowed;
+    # reversed/out-of-order TIME is not.
+    if not np.all(np.diff(time) >= 0):
+        raise Exception('Could not add drift because TIME is not sorted in '
+                        'non-decreasing order')
+
+    # Resolve the reference date from the "days since <ref>" units string,
+    # needed to convert start_time/end_time strings into the same numeric
+    # scale as the TIME coordinate
+    ref_date_str = units_str.upper().split('DAYS SINCE')[-1].strip()
+    try:
+        ref_date = pd.Timestamp(ref_date_str)
+    except (ValueError, TypeError) as e:
+        raise Exception('Could not parse reference date from TIME units '
+                        f'"{units_str}": {e}')
+
+    def _time_str_to_num(time_str, label):
+        try:
+            dt = pd.Timestamp(time_str)
+        except (ValueError, TypeError) as e:
+            raise Exception(f'Could not parse {label}="{time_str}" as a '
+                            f'timestamp (expected e.g. "2020-01-02 00:33"): {e}')
+        return (dt - ref_date).total_seconds() / 86400  # convert to days
+
+    start_num = _time_str_to_num(start_time, 'start_time') if start_time is not None else time[0]
+    end_num = _time_str_to_num(end_time, 'end_time') if end_time is not None else time[-1]
+
+    # Need a nonzero span to define a fractional position within it
+    anchor_span = end_num - start_num
+    if anchor_span == 0:
+        raise Exception('Could not add drift because start_time and end_time '
+                        '(or first/last TIME values) are identical')
+
+    # Fractional position of each TIME point relative to [start_num, end_num],
+    # linear in elapsed time (not sample index). Points outside this window
+    # (if start_time/end_time were set explicitly) extrapolate linearly.
+    frac_elapsed = (time - start_num) / anchor_span
+    drift_adjustments_sec = frac_elapsed * total_drift_seconds
+    adjusted_time = time - drift_adjustments_sec / 86400
+
     # Update the TIME coordinate in the dataset
     time_attrs = ds['TIME'].attrs
-    time_attrs['comment'] = (
+    drift_comment = (
         f'Adjusted for observed clock drift ({drift_operation} '
         f'from 0 to {abs(total_drift_seconds)} sec)')
+    if 'comment' in time_attrs and time_attrs['comment']:
+        time_attrs['comment'] = time_attrs['comment'] + '; ' + drift_comment
+    else:
+        time_attrs['comment'] = drift_comment
     ds['TIME'] = ('TIME', adjusted_time, time_attrs)
 
     if "PROCESSING" in ds:
@@ -1805,7 +1891,7 @@ def plot(ds: xr.Dataset) -> None:
     ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     # Make sure we have datetime TIME
-    ds_cf = xr.decode_cf(ds)
+    ds_cf = xr.decode_cf(ds, decode_timedelta=True)
 
     _moored_tools.inspect_time_series(ds_cf)
 

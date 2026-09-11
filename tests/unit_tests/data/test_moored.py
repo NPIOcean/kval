@@ -423,3 +423,229 @@ def test_chop_by_time_no_times(sample_dataset_chopbytime):
     result = chop_by_time(sample_dataset_chopbytime)
 
     assert result.equals(sample_dataset_chopbytime), "The dataset should remain unchanged when no start_time and end_time are provided."
+
+
+## Soime tests of the timea djoustment function..
+
+@pytest.fixture
+def sample_dataset_drift_uneven():
+    """Dataset with gaps/uneven spacing in TIME, to test that drift
+    correction is linear in elapsed time rather than sample index."""
+    # Uneven spacing: gaps between points 1 and 2
+    time_values = np.array([0.0, 1.0, 5.0, 6.0])  # days
+    data = np.random.rand(4)
+    ds = xr.Dataset({'data_var': ('TIME', data)})
+    ds.coords['TIME'] = ('TIME', time_values)
+    ds['TIME'].attrs['units'] = 'days since 1970-01-01'
+    return ds
+
+
+@pytest.fixture
+def sample_dataset_drift_unsorted():
+    """Dataset with TIME out of order."""
+    time_values = np.array([0.0, 2.0, 1.0, 3.0])
+    data = np.random.rand(4)
+    ds = xr.Dataset({'data_var': ('TIME', data)})
+    ds.coords['TIME'] = ('TIME', time_values)
+    ds['TIME'].attrs['units'] = 'days since 1970-01-01'
+    return ds
+
+
+@pytest.fixture
+def sample_dataset_drift_single_time():
+    """Dataset with only one (or duplicate) TIME value."""
+    time_values = np.array([5.0, 5.0])
+    data = np.random.rand(2)
+    ds = xr.Dataset({'data_var': ('TIME', data)})
+    ds.coords['TIME'] = ('TIME', time_values)
+    ds['TIME'].attrs['units'] = 'days since 1970-01-01'
+    return ds
+
+
+@pytest.fixture
+def sample_dataset_drift_no_units():
+    """Dataset with TIME missing the 'units' attribute entirely."""
+    time_values = np.arange(0, 10)
+    data = np.random.rand(10)
+    ds = xr.Dataset({'data_var': ('TIME', data)})
+    ds.coords['TIME'] = ('TIME', time_values)
+    return ds
+
+
+def test_adjust_time_for_drift_uneven_spacing(sample_dataset_drift_uneven):
+    """Drift correction should scale with elapsed TIME, not sample index --
+    the midpoint here (index 1) is NOT at the midpoint in time, so the
+    correction at index 1 should reflect that."""
+    total_drift = 60  # seconds
+    ds = adjust_time_for_drift(sample_dataset_drift_uneven, seconds=total_drift)
+
+    orig_time = sample_dataset_drift_uneven['TIME'].values
+    span = orig_time[-1] - orig_time[0]  # 6.0 days
+
+    for i in range(len(orig_time)):
+        frac = (orig_time[i] - orig_time[0]) / span
+        expected = orig_time[i] - (frac * total_drift) / 86400
+        assert ds['TIME'].values[i] == pytest.approx(expected, rel=1e-6)
+
+    # Explicitly confirm index-1 correction does NOT match a naive
+    # index-based (1/3 of total) calculation, since elapsed time to
+    # index 1 is only 1/6 of the total span, not 1/3
+    naive_index_based = orig_time[1] - ((1 / 3) * total_drift) / 86400
+    assert ds['TIME'].values[1] != pytest.approx(naive_index_based, rel=1e-6)
+
+
+def test_adjust_time_for_drift_missing_units_raises(sample_dataset_drift_no_units):
+    """TIME with no 'units' attribute should raise a clear error."""
+    with pytest.raises(Exception, match='has no "units" attribute'):
+        adjust_time_for_drift(sample_dataset_drift_no_units, seconds=10)
+
+
+def test_adjust_time_for_drift_appends_existing_comment(sample_dataset_drift):
+    """If TIME already has a comment, the drift note should be appended,
+    not overwrite it."""
+    sample_dataset_drift['TIME'].attrs['comment'] = 'Pre-existing comment'
+    ds = adjust_time_for_drift(sample_dataset_drift, seconds=30)
+    assert 'Pre-existing comment' in ds['TIME'].attrs['comment']
+    assert 'Adjusted for observed clock drift' in ds['TIME'].attrs['comment']
+
+
+def test_adjust_time_for_drift_unsorted_raises(sample_dataset_drift_unsorted):
+    with pytest.raises(Exception, match="not sorted in non-decreasing order"):
+        adjust_time_for_drift(sample_dataset_drift_unsorted, seconds=10)
+
+def test_adjust_time_for_drift_zero_span_raises(sample_dataset_drift_single_time):
+    with pytest.raises(Exception, match="are identical"):
+        adjust_time_for_drift(sample_dataset_drift_single_time, seconds=10)
+
+
+@pytest.fixture
+def sample_dataset_drift_datetime_units():
+    """Dataset with TIME as days-since-epoch floats, spanning several days,
+    for testing custom start_time/end_time."""
+    # 6 points, daily, starting 2020-01-01
+    time_values = np.array([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])  # days since 2020-01-01
+    data = np.random.rand(6)
+    ds = xr.Dataset({'data_var': ('TIME', data)})
+    ds.coords['TIME'] = ('TIME', time_values)
+    ds['TIME'].attrs['units'] = 'days since 2020-01-01'
+    return ds
+
+
+def test_adjust_time_for_drift_custom_start_end_within_range(
+        sample_dataset_drift_datetime_units):
+    """start_time/end_time set to the 2nd and 5th points (not the actual
+    first/last TIME values) -- drift should be 0 at start_time, full offset
+    at end_time, and linearly interpolated/extrapolated elsewhere."""
+    total_drift = 120  # seconds
+
+    ds = adjust_time_for_drift(
+        sample_dataset_drift_datetime_units,
+        seconds=total_drift,
+        start_time='2020-01-02 00:00',  # = TIME index 1 (1.0 days)
+        end_time='2020-01-05 00:00',    # = TIME index 4 (4.0 days)
+    )
+
+    orig_time = sample_dataset_drift_datetime_units['TIME'].values
+    start_num, end_num = 1.0, 4.0
+    span = end_num - start_num  # 3.0 days
+
+    for i in range(len(orig_time)):
+        frac = (orig_time[i] - start_num) / span
+        expected = orig_time[i] - (frac * total_drift) / 86400
+        assert ds['TIME'].values[i] == pytest.approx(expected, rel=1e-6)
+
+    # Sanity: drift at start_time (index 1) should be exactly zero, i.e.
+    # TIME unchanged there
+    assert ds['TIME'].values[1] == pytest.approx(orig_time[1], abs=1e-9)
+
+    # Sanity: drift at end_time (index 4) should be the full offset
+    assert ds['TIME'].values[4] == pytest.approx(
+        orig_time[4] - total_drift / 86400, rel=1e-6)
+
+
+def test_adjust_time_for_drift_extrapolates_outside_window(
+        sample_dataset_drift_datetime_units):
+    """Points before start_time or after end_time should extrapolate
+    linearly at the same drift rate, not clamp to 0 or the full offset."""
+    total_drift = 120  # seconds
+
+    ds = adjust_time_for_drift(
+        sample_dataset_drift_datetime_units,
+        seconds=total_drift,
+        start_time='2020-01-02 00:00',  # index 1
+        end_time='2020-01-05 00:00',    # index 4
+    )
+
+    orig_time = sample_dataset_drift_datetime_units['TIME'].values
+    start_num, end_num = 1.0, 4.0
+    span = end_num - start_num
+
+    # index 0 is before start_time -> frac should be negative (extrapolated
+    # backward), not clamped to 0
+    frac_0 = (orig_time[0] - start_num) / span
+    assert frac_0 < 0
+    expected_0 = orig_time[0] - (frac_0 * total_drift) / 86400
+    assert ds['TIME'].values[0] == pytest.approx(expected_0, rel=1e-6)
+    assert ds['TIME'].values[0] != pytest.approx(orig_time[0], abs=1e-9)  # not zero drift
+
+    # index 5 is after end_time -> frac should exceed 1 (extrapolated
+    # forward), not clamped to the full offset
+    frac_5 = (orig_time[5] - start_num) / span
+    assert frac_5 > 1
+    expected_5 = orig_time[5] - (frac_5 * total_drift) / 86400
+    assert ds['TIME'].values[5] == pytest.approx(expected_5, rel=1e-6)
+
+
+def test_adjust_time_for_drift_default_start_end_matches_first_last(
+        sample_dataset_drift_datetime_units):
+    """With no start_time/end_time given, behavior should match using the
+    first/last TIME values directly (i.e. same as before this feature)."""
+    total_drift = 90
+
+    ds_explicit = adjust_time_for_drift(
+        sample_dataset_drift_datetime_units.copy(deep=True),
+        seconds=total_drift,
+        start_time='2020-01-01 00:00',  # = first TIME value
+        end_time='2020-01-06 00:00',    # = last TIME value
+    )
+    ds_default = adjust_time_for_drift(
+        sample_dataset_drift_datetime_units.copy(deep=True),
+        seconds=total_drift,
+    )
+
+    np.testing.assert_allclose(
+        ds_explicit['TIME'].values, ds_default['TIME'].values, rtol=1e-6)
+
+
+def test_adjust_time_for_drift_bad_start_time_string_raises(
+        sample_dataset_drift_datetime_units):
+    """An unparseable start_time string should raise a clear error."""
+    with pytest.raises(Exception, match='Could not parse start_time'):
+        adjust_time_for_drift(
+            sample_dataset_drift_datetime_units,
+            seconds=10,
+            start_time='not a real timestamp',
+        )
+
+
+def test_adjust_time_for_drift_bad_end_time_string_raises(
+        sample_dataset_drift_datetime_units):
+    """An unparseable end_time string should raise a clear error."""
+    with pytest.raises(Exception, match='Could not parse end_time'):
+        adjust_time_for_drift(
+            sample_dataset_drift_datetime_units,
+            seconds=10,
+            end_time='also not a timestamp',
+        )
+
+
+def test_adjust_time_for_drift_identical_start_end_raises(
+        sample_dataset_drift_datetime_units):
+    """start_time == end_time should raise (zero anchor span)."""
+    with pytest.raises(Exception, match='are identical'):
+        adjust_time_for_drift(
+            sample_dataset_drift_datetime_units,
+            seconds=10,
+            start_time='2020-01-02 00:00',
+            end_time='2020-01-02 00:00',
+        )
