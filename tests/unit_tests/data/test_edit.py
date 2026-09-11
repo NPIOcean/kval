@@ -397,3 +397,109 @@ def test_replace_errors(ds_1d):
         edit.replace(ds, var_target='TEMP1', var_source='NO')
     with pytest.raises(TypeError):
         edit.replace(ds, var_target='TEMP1', var_source='TEMP2', use_values='bad')
+
+
+def test_linear_drift_extrapolate_vs_clamp(mock_dataset):
+    """Test that extrapolate=True continues the linear ramp outside
+    [start_date, end_date], while the default (False) clamps."""
+    time_vals = mock_dataset.TIME.values
+    start_date = str(time_vals[2])[:10]  # 3rd timestamp
+    end_date = str(time_vals[6])[:10]    # 7th timestamp
+
+    ds_clamped = edit.linear_drift(
+        mock_dataset, 'TEMP', end_val=5, start_val=2,
+        start_date=start_date, end_date=end_date, extrapolate=False)
+    ds_extrap = edit.linear_drift(
+        mock_dataset, 'TEMP', end_val=5, start_val=2,
+        start_date=start_date, end_date=end_date, extrapolate=True)
+
+    # Before start_date: clamped should equal start_val exactly;
+    # extrapolated should be below start_val (continuing the ramp backward)
+    diff_clamped_0 = (ds_clamped['TEMP'].values[0, 0] - mock_dataset['TEMP'].values[0, 0])
+    diff_extrap_0 = (ds_extrap['TEMP'].values[0, 0] - mock_dataset['TEMP'].values[0, 0])
+    assert diff_clamped_0 == pytest.approx(2, abs=1e-6)
+    assert diff_extrap_0 < 2
+
+    # After end_date: clamped should equal end_val exactly;
+    # extrapolated should be above end_val (continuing the ramp forward)
+    diff_clamped_last = (ds_clamped['TEMP'].values[-1, 0] - mock_dataset['TEMP'].values[-1, 0])
+    diff_extrap_last = (ds_extrap['TEMP'].values[-1, 0] - mock_dataset['TEMP'].values[-1, 0])
+    assert diff_clamped_last == pytest.approx(5, abs=1e-6)
+    assert diff_extrap_last > 5
+
+
+def test_linear_drift_factor_default_start_val_no_zeroing(mock_dataset):
+    """Regression test: factor=True with no start_val given should default
+    to 1 (no-op), not 0 -- values before start_date must NOT be zeroed."""
+    time_vals = mock_dataset.TIME.values
+    start_date = str(time_vals[3])[:10]
+
+    ds_out = edit.linear_drift(
+        mock_dataset, 'TEMP', end_val=1.5, factor=True, start_date=start_date)
+
+    # Points before start_date should be unchanged, not multiplied by 0
+    np.testing.assert_almost_equal(
+        ds_out['TEMP'].values[0, :], mock_dataset['TEMP'].values[0, :], decimal=5)
+
+
+def test_linear_drift_missing_variable(mock_dataset):
+    """Test that a nonexistent variable raises a clear error."""
+    with pytest.raises(Exception, match='not found'):
+        edit.linear_drift(mock_dataset, 'NOT_A_VAR', end_val=5)
+
+
+def test_linear_drift_unsorted_time_raises(mock_dataset):
+    """Test that unsorted TIME raises rather than silently producing
+    nonsense drift values."""
+    ds_bad = mock_dataset.copy(deep=True)
+    shuffled = ds_bad.TIME.values.copy()
+    shuffled[[0, 1]] = shuffled[[1, 0]]  # swap first two -> out of order
+    ds_bad = ds_bad.assign_coords(TIME=shuffled)
+
+    with pytest.raises(Exception, match='non-decreasing'):
+        edit.linear_drift(ds_bad, 'TEMP', end_val=5)
+
+
+def test_linear_drift_identical_start_end_date_raises(mock_dataset):
+    """Test that identical start_date/end_date raises rather than
+    dividing by zero."""
+    time_vals = mock_dataset.TIME.values
+    same_date = str(time_vals[3])[:10]
+
+    with pytest.raises(Exception, match='identical'):
+        edit.linear_drift(
+            mock_dataset, 'TEMP', end_val=5,
+            start_date=same_date, end_date=same_date)
+
+
+# --- Numeric TIME (with units attribute) fixture, separate from mock_dataset
+# which uses datetime64 TIME ---
+
+@pytest.fixture
+def mock_dataset_numeric_time():
+    """Dataset with TIME as float days-since-epoch, to test the numeric+units
+    code path (as opposed to mock_dataset's datetime64 TIME)."""
+    Nt = 10
+    time_vals = np.arange(Nt, dtype=float)  # days since 2024-01-01
+    temp_data = 15 + np.zeros((Nt, 2))
+    ds = xr.Dataset(
+        {'TEMP': (['TIME', 'PRES'], temp_data)},
+        coords={'TIME': time_vals, 'PRES': [100, 500]},
+    )
+    ds['TIME'].attrs['units'] = 'days since 2024-01-01'
+    return ds
+
+
+def test_linear_drift_numeric_time_with_units(mock_dataset_numeric_time):
+    """Test linear_drift on numeric (non-datetime64) TIME with a
+    'days since ...' units attribute, using custom start/end dates."""
+    ds_out = edit.linear_drift(
+        mock_dataset_numeric_time, 'TEMP', end_val=3, start_val=0,
+        start_date='2024-01-02', end_date='2024-01-08')
+
+    t = mock_dataset_numeric_time.TIME.values
+    frac = np.clip((t - 1.0) / 6.0, 0, 1)  # start=day1, end=day7
+    expected_diff = frac * 3
+
+    actual_diff = ds_out['TEMP'].values[:, 0] - mock_dataset_numeric_time['TEMP'].values[:, 0]
+    np.testing.assert_almost_equal(actual_diff, expected_diff, decimal=5)

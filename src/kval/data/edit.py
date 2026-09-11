@@ -14,6 +14,7 @@ from IPython.display import display, clear_output
 from kval.data import ctd, moored
 from kval.calc.number import order_of_magnitude
 from kval.util import internals, index, time
+import pandas as pd
 
 
 def remove_points_profile(ds: xr.Dataset, varnm: str, TIME_index: int,
@@ -305,17 +306,16 @@ def replace(
 
     return ds_new
 
-
 def linear_drift(
     ds: xr.Dataset,
     variable: str,
     end_val: float,
     factor: bool = False,
-    start_val: float = 0,
+    start_val: float | None = None,
     start_date: str | None = None,
-    end_date: str | None = None
+    end_date: str | None = None,
+    extrapolate: bool = False,
 ) -> xr.Dataset:
-    
     """
     Apply a linearly increasing drift (offset or factor) to a variable in the
     dataset.
@@ -325,12 +325,19 @@ def linear_drift(
     or applied as a multiplicative factor, depending on the `factor` argument.
 
     - If `factor` is False (default), the drift is an additive offset that
-      starts at `start_val` and increases to `end_val`.
+      starts at `start_val` (default 0) and increases to `end_val`.
     - If `factor` is True, the drift is a multiplicative factor that starts at
-      `start_val` and increases to `end_val`.
+      `start_val` (default 1, i.e. no change) and increases to `end_val`.
 
     The drift is applied between `start_date` and `end_date` (if provided), or
-    over the entire time range of the dataset.
+    over the entire time range of the dataset. Outside this window, behavior
+    is controlled by `extrapolate`: if False (default), the drift is clamped
+    to `start_val`/`end_val`; if True, the same linear rate is extrapolated.
+
+    Works with TIME as either numpy datetime64 or numeric ("<units> since
+    <ref>", e.g. "days since 1970-01-01") -- in the latter case, start_date
+    and end_date are converted to the same numeric scale using the TIME
+    units attribute.
 
     Args:
         ds (xr.Dataset):
@@ -345,101 +352,134 @@ def linear_drift(
             If True, the drift is applied as a multiplicative factor.
             Otherwise, it's an additive offset. Default is False (additive).
         start_val (float, optional):
-            The starting value of the drift. Default is 0.
+            The starting value of the drift. Defaults to 0 for additive
+            (factor=False) or 1 for multiplicative (factor=True) drift.
         start_date (str, optional):
-            The starting date for applying the drift in 'YYYY-MM-DD' format. If
-            None, the drift starts at the first time value in the dataset.
-            Default is None.
+            The starting date for applying the drift. If None, the drift
+            starts at the first time value in the dataset. Default is None.
         end_date (str, optional):
-            The ending date for applying the drift in 'YYYY-MM-DD' format. If
-            None, the drift ends at the last time value in the dataset. Default
-            is None.
+            The ending date for applying the drift. If None, the drift ends
+            at the last time value in the dataset. Default is None.
+        extrapolate (bool, optional):
+            If True, the linear drift rate is extrapolated outside
+            [start_date, end_date] rather than clamped to start_val/end_val.
+            Default is False (clamp).
 
     Returns:
         xr.Dataset: A new dataset with the drift applied to the specified
         variable.
-
     """
 
-    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+    ds = ds.copy(deep=True)  # Make sure we're not modifying the input ds
 
-    # Convert string dates to numpy datetime64 objects
-    if start_date:
-        start_date = np.datetime64(start_date)
-    if end_date:
-        end_date = np.datetime64(end_date)
+    # --- Validation ---
+    if 'TIME' not in ds.coords:
+        raise Exception('Could not apply drift: dataset has no TIME coordinate')
+    if variable not in ds:
+        raise Exception(f'Could not apply drift: variable "{variable}" not found in dataset')
+    if ds.sizes.get('TIME', 0) == 0:
+        warnings.warn('TIME coordinate is empty -> Doing nothing', UserWarning)
+        return ds
 
-    # Step 1: Calculate `drift_val`, an array of values increasing linearly
-    # from `start_val` at `start_date` (or time series start) to `end_val` at
-    # `end_date` (or time series end)
-    t_end = ds.TIME.values[-1]
-    t_start = ds.TIME.values[0]
-    ind_start, ind_end = None, None
+    time_vals = ds.TIME.values
+    if not np.all(np.diff(time_vals) >= 0):
+        raise Exception('Could not apply drift: TIME is not sorted in '
+                        'non-decreasing order')
 
-    # Initialize `drift_val` with zeros
-    drift_val = np.zeros(ds.sizes['TIME'])
+    # Default start_val depends on drift type: 1 (no-op) for factor,
+    # 0 (no-op) for additive
+    if start_val is None:
+        start_val = 1.0 if factor else 0.0
 
-    # Modify if we have start and end dates
-    if start_date:
-        ind_start = index.closest_index_time(ds, start_date)
-        t_start = ds.TIME.values[ind_start]
-    if end_date:
-        ind_end = index.closest_index_time(ds, end_date) + 1
+    # --- Resolve start_date/end_date to the same scale as TIME ---
+    is_datetime = np.issubdtype(time_vals.dtype, np.datetime64)
 
-        # Clamp ind_end to the maximum index of TIME
-        ind_end = min(ind_end + 1, ds.sizes['TIME'])
-        t_end = ds.TIME.values[ind_end - 1]  # Get the last valid time value
+    def _parse_date(date_str, label):
+        if is_datetime:
+            try:
+                return np.datetime64(date_str)
+            except ValueError as e:
+                raise Exception(f'Could not parse {label}="{date_str}" as a '
+                                f'datetime64: {e}')
+        else:
+            if 'units' not in ds.TIME.attrs:
+                raise Exception('Could not apply drift: TIME is numeric but '
+                                'has no "units" attribute needed to '
+                                f'interpret {label}')
+            try:
+                # Use xarray's own CF decoding so this matches whatever
+                # decode_cf would have produced, then re-encode the target
+                # date on the same numeric scale
+                ref_units = ds.TIME.attrs['units']
+                calendar = ds.TIME.attrs.get('calendar', 'standard')
+                dt = pd.Timestamp(date_str)
+                encoded = xr.coding.times.encode_cf_datetime(
+                    np.array([dt.to_datetime64()]), units=ref_units, calendar=calendar
+                )[0]
+                return float(encoded[0])
+            except Exception as e:
+                raise Exception(f'Could not parse {label}="{date_str}" using '
+                                f'TIME units "{ds.TIME.attrs.get("units")}": {e}')
 
+    t_start = time_vals[0]
+    t_end = time_vals[-1]
+    if start_date is not None:
+        t_start = _parse_date(start_date, 'start_date')
+    if end_date is not None:
+        t_end = _parse_date(end_date, 'end_date')
 
-    # Set the slice for linear drift
-    drift_slice = slice(ind_start, ind_end)
+    span = t_end - t_start
+    span_val = span / np.timedelta64(1, 's') if is_datetime else span
+    if span_val == 0:
+        raise Exception('Could not apply drift: start_date and end_date '
+                        '(or first/last TIME values) are identical')
 
-    # Populate the section of `drift_val` with linearly drifting values
-    drift_val[drift_slice] = (
-        start_val + (ds.TIME.values[drift_slice] - t_start)
-        / (t_end - t_start) * (end_val - start_val)
-    )
+    # --- Compute drift_val over the full TIME array ---
+    if is_datetime:
+        elapsed = (time_vals - t_start) / np.timedelta64(1, 's')
+        span_for_frac = span / np.timedelta64(1, 's')
+    else:
+        elapsed = time_vals - t_start
+        span_for_frac = span
 
-    # Handle before and after the drift
-    if start_date:
-        drift_val[:ind_start] = start_val
-    if end_date:
-        drift_val[ind_end:] = end_val
+    frac = elapsed / span_for_frac  # 0 at start, 1 at end; <0 or >1 outside window
 
-    # Step 2: Apply `drift_val` to the variable
-    ds_out = ds.copy(deep=True)
+    if not extrapolate:
+        frac = np.clip(frac, 0, 1)
 
-    # Align drift_val with the shape of the variable using xarray broadcasting
+    drift_val = start_val + frac * (end_val - start_val)
+
+    # --- Apply drift_val to the variable ---
+    ds_out = ds
     variable_data = ds[variable]
 
-    # Create an array that matches the dimensions of the variable but aligns
-    # TIME
     drift_val_aligned = xr.DataArray(
         drift_val, coords={'TIME': ds['TIME']}, dims=['TIME'])
 
     if factor:
-        ds_out[variable] *= drift_val_aligned
+        ds_out[variable] = ds_out[variable] * drift_val_aligned
         drift_type = 'factor'
     else:
-        ds_out[variable] += drift_val_aligned
+        ds_out[variable] = ds_out[variable] + drift_val_aligned
         drift_type = 'offset'
 
     # Add or update comment attribute
-    # (assumes that we have known time units)
     if 'units' in ds_out.TIME.attrs:
-        start_str = time.convert_timenum_to_datestring(t_start, ds_out.TIME.units)
-        end_str = time.convert_timenum_to_datestring(t_end, ds_out.TIME.units)
+        start_str = time.convert_timenum_to_datestring(t_start, ds_out.TIME.units) if not is_datetime else str(t_start)
+        end_str = time.convert_timenum_to_datestring(t_end, ds_out.TIME.units) if not is_datetime else str(t_end)
+    else:
+        start_str, end_str = str(t_start), str(t_end)
 
-        new_comment = (f'Applied drift {drift_type} linearly increasing from {start_val} '
-                    f'to {end_val} from {start_str} to {end_str}.')
+    edge_mode = 'extrapolated' if extrapolate else 'clamped'
+    new_comment = (f'Applied drift {drift_type} linearly increasing from {start_val} '
+                f'to {end_val} from {start_str} to {end_str} ({edge_mode} outside window).')
 
-        if 'comment' in variable_data.attrs:
-            ds_out[variable].attrs['comment'] += f' {new_comment}'
-        else:
-            ds_out[variable].attrs['comment'] = new_comment
+    if 'comment' in variable_data.attrs and variable_data.attrs['comment']:
+        ds_out[variable].attrs['comment'] = variable_data.attrs['comment'] + f' {new_comment}'
+    else:
+        ds_out[variable].attrs['comment'] = new_comment
 
     return ds_out
-
 
 
 def drop_variables(
