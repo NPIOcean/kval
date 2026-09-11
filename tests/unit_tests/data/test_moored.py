@@ -3,7 +3,7 @@ import xarray as xr
 import requests
 from pathlib import Path
 import gsw
-from kval.data.moored import load_moored, assign_pressure, drop_variables, calculate_PSAL, adjust_time_for_drift, chop_by_time
+from kval.data.moored import load_moored, assign_pressure, drop_variables, calculate_PSAL, adjust_time_for_drift, chop_by_time, combine_datasets
 from unittest import mock
 import numpy as np
 import re
@@ -649,3 +649,103 @@ def test_adjust_time_for_drift_identical_start_end_raises(
             start_time='2020-01-02 00:00',
             end_time='2020-01-02 00:00',
         )
+
+
+#### Test combine_datasets
+
+@pytest.fixture
+def ds_instr1_combine():
+    """Higher-frequency instrument (every 2h), has TEMP and PRES."""
+    t = pd.date_range('2024-01-01 00:00', periods=10, freq='2h')
+    ds = xr.Dataset(
+        {
+            'TEMP': ('TIME', np.linspace(10, 12, len(t))),
+            'PRES': ('TIME', np.linspace(100, 105, len(t))),
+        },
+        coords={'TIME': t},
+        attrs={'instrument_serial_number': '12345', 'mooring_name': 'M1'},
+    )
+    ds['TEMP'].attrs = {'units': 'degC'}
+    ds['PRES'].attrs = {'units': 'dbar'}
+    return ds
+
+
+@pytest.fixture
+def ds_instr2_combine():
+    """Lower-frequency instrument (every 3h), different start/end, has
+    TEMP only (no PRES)."""
+    t = pd.date_range('2024-01-01 01:00', periods=8, freq='3h')
+    ds = xr.Dataset(
+        {'TEMP': ('TIME', np.linspace(9, 11, len(t)))},
+        coords={'TIME': t},
+        attrs={'instrument_serial_number': '67890', 'mooring_name': 'M1'},
+    )
+    ds['TEMP'].attrs = {'units': 'degC'}
+    return ds
+
+
+def test_combine_datasets_basic_shape(ds_instr1_combine, ds_instr2_combine):
+    """Combined dataset should have an INSTR dim of length 2 and TEMP
+    stacked as (INSTR, TIME)."""
+    out = combine_datasets(ds_instr1_combine, ds_instr2_combine, interval='1h')
+    assert out.sizes['INSTR'] == 2
+    assert out['TEMP'].dims == ('INSTR', 'TIME')
+
+
+def test_combine_datasets_auto_labels_from_serial_number(ds_instr1_combine, ds_instr2_combine):
+    out = combine_datasets(ds_instr1_combine, ds_instr2_combine, interval='1h')
+    assert list(out.INSTR.values) == ['12345', '67890']
+
+
+def test_combine_datasets_default_method_leaves_sampling_gaps_nan(ds_instr1_combine, ds_instr2_combine):
+    """ds_instr1 samples every 2h starting at 00:00, so on an hourly grid
+    (default method='time_average') the 01:00 bin has no sample -> NaN."""
+    out = combine_datasets(ds_instr1_combine, ds_instr2_combine, interval='1h')
+    val = out['TEMP'].sel(INSTR='12345', TIME='2024-01-01 01:00').item()
+    assert np.isnan(val)
+
+
+def test_combine_datasets_interpolate_fills_sampling_gaps(ds_instr1_combine, ds_instr2_combine):
+    """The same slot should be filled under method='interpolate', since it
+    has real neighboring samples."""
+    out = combine_datasets(ds_instr1_combine, ds_instr2_combine, interval='1h', method='interpolate')
+    val = out['TEMP'].sel(INSTR='12345', TIME='2024-01-01 01:00').item()
+    assert not np.isnan(val)
+
+
+def test_combine_datasets_missing_variable_is_nan_for_other_instrument(ds_instr1_combine, ds_instr2_combine):
+    """PRES only exists in ds_instr1 -> should be all-NaN for ds_instr2."""
+    out = combine_datasets(ds_instr1_combine, ds_instr2_combine, interval='1h')
+    assert np.all(np.isnan(out['PRES'].sel(INSTR='67890').values))
+    assert not np.all(np.isnan(out['PRES'].sel(INSTR='12345').values))
+
+
+def test_combine_datasets_shared_attr_kept_even_if_var_missing_elsewhere(ds_instr1_combine, ds_instr2_combine):
+    """PRES.units should stay a shared attribute even though only one of
+    the two instruments has a PRES variable."""
+    out = combine_datasets(ds_instr1_combine, ds_instr2_combine, interval='1h')
+    assert out['PRES'].attrs.get('units') == 'dbar'
+    assert 'PRES_units' not in out.coords
+
+
+def test_combine_datasets_shared_global_attr_kept(ds_instr1_combine, ds_instr2_combine):
+    out = combine_datasets(ds_instr1_combine, ds_instr2_combine, interval='1h')
+    assert out.attrs.get('mooring_name') == 'M1'
+    assert 'instrument_serial_number' in out.coords  # differs -> per-instrument coord
+
+
+def test_combine_datasets_explicit_instr_names(ds_instr1_combine, ds_instr2_combine):
+    out = combine_datasets(
+        ds_instr1_combine, ds_instr2_combine, interval='1h',
+        instr_names=['upper', 'lower'])
+    assert list(out.INSTR.values) == ['upper', 'lower']
+
+
+def test_combine_datasets_too_few_datasets_raises(ds_instr1_combine):
+    with pytest.raises(ValueError, match='at least 2'):
+        combine_datasets(ds_instr1_combine, interval='1h')
+
+
+def test_combine_datasets_invalid_method_raises(ds_instr1_combine, ds_instr2_combine):
+    with pytest.raises(ValueError, match='method must be'):
+        combine_datasets(ds_instr1_combine, ds_instr2_combine, interval='1h', method='bogus')

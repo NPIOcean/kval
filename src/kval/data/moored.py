@@ -2067,3 +2067,274 @@ def get_median_depth(ds: xr.Dataset, lat: float = None, decimals: int = 1) -> fl
     median_depth = np.round(-gsw.z_from_p(median_pres, lat), decimals)
 
     return median_depth
+
+
+
+
+
+
+def _split_attrs(var_attr_sets, all_labels):
+    """
+    var_attr_sets: list of (label, attrs_dict) for instruments that are
+    ELIGIBLE for this attribute (e.g. instruments that have the variable
+    at all, for variable-level attrs; all instruments, for global attrs).
+    all_labels: full list of INSTR labels (used to build the per-instrument
+    coordinate arrays, including ineligible instruments as None).
+ 
+    An attribute is "shared" if every ELIGIBLE instrument specifies it and
+    they all agree -- instruments that don't have the variable at all do
+    NOT count against sharing (e.g. PRES.units can be 'dbar' even if only
+    one of several instruments has a PRES variable).
+ 
+    Returns (shared_attrs, per_instr_attrs):
+    - shared_attrs: {attr_key: value} for attrs that are consistent across
+      all eligible instruments.
+    - per_instr_attrs: {attr_key: [values in all_labels order]} for attrs
+      that vary (or aren't specified by every eligible instrument); value
+      is None for instruments that are ineligible or don't specify the key.
+    """
+    keys = set()
+    for _, attrs in var_attr_sets:
+        keys.update(attrs.keys())
+ 
+    label_to_attrs = {label: attrs for label, attrs in var_attr_sets}
+    eligible_labels = [label for label, _ in var_attr_sets]
+ 
+    shared = {}
+    per_instr = {}
+    for key in sorted(keys):
+        eligible_values = [label_to_attrs[lbl].get(key, None) for lbl in eligible_labels]
+        non_none_eligible = [v for v in eligible_values if v is not None]
+        if (len(non_none_eligible) == len(eligible_labels)
+                and all(v == non_none_eligible[0] for v in non_none_eligible)):
+            shared[key] = non_none_eligible[0]
+        else:
+            per_instr[key] = [
+                label_to_attrs.get(lbl, {}).get(key, None) for lbl in all_labels
+            ]
+    return shared, per_instr
+ 
+ 
+def combine_datasets(
+    *datasets: xr.Dataset,
+    interval: str,
+    method: str = 'time_average',
+    instr_dim: str = 'INSTR',
+    instr_names: list = None,
+    time_dim: str = 'TIME',
+) -> xr.Dataset:
+    """
+    Combine multiple xarray Datasets (e.g. different instruments on a
+    mooring) onto a single common TIME grid, stacked along a new
+    dimension (`instr_dim`, default 'INSTR').
+ 
+    Each dataset is put onto a common regular TIME grid, anchored to the
+    same origin across all datasets so grid points line up exactly. Two
+    methods are available (`method`):
+    - 'time_average' (default): each grid point is the mean of samples
+      falling in [t, t + interval) -- see `kval.util.xr_funcs.time_average`.
+      If a dataset has no sample in a given interval (e.g. its own
+      sampling rate is coarser than `interval`), that point is NaN.
+    - 'interpolate': each grid point is linearly interpolated from the
+      dataset's own samples. Outside a dataset's own time range, values
+      are NaN (no extrapolation).
+ 
+    Either way, a variable missing from some datasets, or a dataset not
+    covering part of the combined time range, results in NaN entries for
+    those instruments/times. Each numeric TIME-dependent variable becomes
+    2D (INSTR, TIME); scalar (non-TIME) numeric variables (e.g. LATITUDE)
+    become 1D (INSTR,). Non-numeric TIME-dependent variables can't be
+    averaged or interpolated and are dropped (reported via print, once
+    per dataset that has one).
+ 
+    Metadata handling: for both global (dataset-level) and variable-level
+    attributes, a value that is identical across every instrument that
+    actually has the variable is kept as a shared attribute -- instruments
+    lacking the variable entirely don't count against sharing (e.g. a
+    PRES.units of 'dbar' stays shared even if only one instrument has
+    PRES). Otherwise, the attribute becomes a new coordinate variable
+    along `instr_dim`:
+    - Global attrs that vary -> coordinate named after the attr key
+      itself (e.g. 'instrument_serial_number').
+    - Variable-level attrs that vary -> coordinate named
+      '{variable}_{attr_key}' (e.g. 'TEMP_sensor_calibration_date').
+ 
+    Parameters
+    ----------
+    *datasets : xr.Dataset
+        Two or more datasets to combine. Each must have a `time_dim`
+        coordinate, either datetime64 or numeric with a "<units> since
+        <ref>" units attribute.
+    interval : str
+        Spacing of the common TIME grid, as a pandas frequency string
+        (e.g. '1h', '30min', '1D'). No default -- must be chosen based on
+        the data being combined. Must be a fixed-duration interval (not
+        calendar-based like 'M'/'Y').
+    method : {'time_average', 'interpolate'}, default='time_average'
+        How to put each dataset onto the common grid; see above.
+    instr_dim : str, default='INSTR'
+        Name of the new dimension along which datasets are stacked.
+    instr_names : list of str, optional
+        Labels for each dataset along `instr_dim`, in the same order as
+        `datasets`. Must be unique. If not given, labels are auto-detected
+        from each dataset's 'instrument_serial_number' global attribute,
+        falling back to an integer index for any dataset lacking it.
+    time_dim : str, default='TIME'
+        Name of the time dimension/coordinate in the input datasets.
+ 
+    Returns
+    -------
+    xr.Dataset
+        Combined dataset with dimensions (`instr_dim`, `time_dim`) for
+        TIME-dependent variables and (`instr_dim`,) for scalar variables.
+ 
+    Raises
+    ------
+    ValueError
+        If fewer than 2 datasets are given, if `instr_names` has the wrong
+        length or contains duplicates, if any dataset lacks `time_dim`, or
+        if numeric TIME has no 'units' attribute.
+    """
+    if len(datasets) < 2:
+        raise ValueError("combine_datasets requires at least 2 datasets")
+    if method not in ('time_average', 'interpolate'):
+        raise ValueError("method must be 'time_average' or 'interpolate'")
+ 
+    n = len(datasets)
+ 
+    # --- Resolve instrument labels ---
+    if instr_names is not None:
+        if len(instr_names) != n:
+            raise ValueError(
+                f"instr_names has {len(instr_names)} entries but "
+                f"{n} datasets were provided")
+        labels = list(instr_names)
+    else:
+        labels = []
+        for i, ds in enumerate(datasets):
+            serial = ds.attrs.get('instrument_serial_number')
+            labels.append(str(serial) if serial is not None else i)
+ 
+    if len(set(labels)) != len(labels):
+        raise ValueError(f"INSTR labels must be unique, got: {labels}")
+ 
+    # --- Decode TIME to datetime64 for each dataset ---
+    decoded = []
+    for ds in datasets:
+        if time_dim not in ds.coords:
+            raise ValueError(f"Dataset missing '{time_dim}' coordinate")
+        tvals = ds[time_dim].values
+        if np.issubdtype(tvals.dtype, np.datetime64):
+            decoded.append(ds)
+        else:
+            if 'units' not in ds[time_dim].attrs:
+                raise ValueError(
+                    f"Dataset {time_dim} is numeric but has no 'units' "
+                    "attribute needed to decode to datetime")
+            decoded.append(xr.decode_cf(ds, decode_timedelta=True))
+ 
+    # --- Common origin, so all datasets land on exactly the same grid ---
+    global_min = min(ds[time_dim].values.min() for ds in decoded)
+    global_max = max(ds[time_dim].values.max() for ds in decoded)
+    origin = pd.Timestamp(global_min)
+ 
+    # Common TIME grid, spanning the combined range. Each grid point is
+    # either a bin start (method='time_average', label='left') or a
+    # direct interpolation point (method='interpolate') -- using the same
+    # grid point convention for both keeps the two methods' outputs
+    # directly comparable for the same `interval`.
+    common_time = pd.date_range(
+        start=origin, end=pd.Timestamp(global_max), freq=interval)
+ 
+    averaged = []
+    if method == 'time_average':
+        for ds in decoded:
+            ds_avg = time_average(
+                ds, interval=interval, label='left', origin=origin,
+                time_dim=time_dim)
+            ds_avg = ds_avg.reindex({time_dim: common_time})
+            averaged.append(ds_avg)
+    else:  # method == 'interpolate'
+        for ds in decoded:
+            # Match time_average's handling of non-numeric TIME-dependent
+            # variables: they can't be interpolated either, so drop them
+            # (reporting it, same as time_average does).
+            dropped_vars = [
+                v for v in ds.data_vars
+                if time_dim in ds[v].dims and not np.issubdtype(ds[v].dtype, np.number)
+            ]
+            time_indep_vars = [v for v in ds.data_vars if time_dim not in ds[v].dims]
+            time_dep_vars = [
+                v for v in ds.data_vars
+                if time_dim in ds[v].dims and v not in dropped_vars
+            ]
+            ds_interp = ds[time_dep_vars].interp({time_dim: common_time})
+            ds_interp = ds_interp.merge(ds[time_indep_vars])
+            if dropped_vars:
+                print(f"combine_datasets: dropped non-numeric {time_dim}-"
+                      f"dependent variable(s) {dropped_vars} (cannot "
+                      "interpolate non-numeric data)")
+            averaged.append(ds_interp)
+ 
+    # --- Identify variable groups across all (averaged) datasets ---
+    time_vars = set()
+    scalar_vars = set()
+    for ds in averaged:
+        for v in ds.data_vars:
+            is_time_dep = time_dim in ds[v].dims
+            if is_time_dep:
+                time_vars.add(v)
+            elif np.issubdtype(ds[v].dtype, np.number):
+                scalar_vars.add(v)
+            # non-numeric, non-time-dependent variables: rare for mooring
+            # instrument metadata; not handled, silently skipped
+ 
+    data_vars_out = {}
+    coords_out = {instr_dim: labels, time_dim: common_time}
+ 
+    # --- TIME-dependent (already time-averaged) variables: stack ---
+    for var in sorted(time_vars):
+        arr = np.full((n, len(common_time)), np.nan)
+        var_attr_sets = []
+        for i, ds in enumerate(averaged):
+            if var in ds and time_dim in ds[var].dims:
+                da = ds[var]
+                arr[i, :] = da.values
+                # attrs come from the *original* (pre-averaging) dataset,
+                # since resample/mean doesn't necessarily preserve them
+                orig_attrs = dict(decoded[i][var].attrs) if var in decoded[i] else {}
+                var_attr_sets.append((labels[i], orig_attrs))
+ 
+        shared_attrs, per_instr_attrs = _split_attrs(var_attr_sets, labels)
+        data_vars_out[var] = ((instr_dim, time_dim), arr, shared_attrs)
+        for attr_key, per_instr_vals in per_instr_attrs.items():
+            coord_name = f'{var}_{attr_key}'
+            coords_out[coord_name] = (instr_dim, per_instr_vals)
+ 
+    # --- Scalar (non-TIME) numeric variables: stack along INSTR only ---
+    for var in sorted(scalar_vars):
+        arr = np.full(n, np.nan)
+        var_attr_sets = []
+        for i, ds in enumerate(averaged):
+            if var in ds and time_dim not in ds[var].dims:
+                val = ds[var].values
+                arr[i] = val.item() if np.ndim(val) == 0 else val
+                var_attr_sets.append((labels[i], dict(ds[var].attrs)))
+ 
+        shared_attrs, per_instr_attrs = _split_attrs(var_attr_sets, labels)
+        data_vars_out[var] = ((instr_dim,), arr, shared_attrs)
+        for attr_key, per_instr_vals in per_instr_attrs.items():
+            coord_name = f'{var}_{attr_key}'
+            coords_out[coord_name] = (instr_dim, per_instr_vals)
+ 
+    # --- Global attrs: shared vs per-instrument (every dataset is
+    # "eligible" here, so this reduces to requiring all datasets to agree) ---
+    global_attr_sets = [(labels[i], dict(decoded[i].attrs)) for i in range(n)]
+    combined_global_attrs, per_instr_global = _split_attrs(global_attr_sets, labels)
+    for attr_key, per_instr_vals in per_instr_global.items():
+        coords_out[attr_key] = (instr_dim, per_instr_vals)
+ 
+    ds_out = xr.Dataset(data_vars_out, coords=coords_out, attrs=combined_global_attrs)
+ 
+    return ds_out
+ 
