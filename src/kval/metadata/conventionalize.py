@@ -521,7 +521,7 @@ def add_standard_glob_attrs_ctd(ds, override=False, org=False):
 def add_standard_glob_attrs_moor(ds, override=False, org=None):
     """
     Adds standard global variables for a CTD dataset as specified in
-    oceanograpy.data.nc_format.standard_attrs_global_moored.
+    kval.data.nc_format.standard_attrs_global_moored.
 
     override: governs whether to override any global attributes that
     are already present (typically not advised..)
