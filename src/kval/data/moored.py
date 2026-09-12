@@ -50,7 +50,6 @@ from scipy import signal
 from kval.file import sbe, rbr, matfile
 from kval.data import dataset, edit
 from kval.data.moored_tools import _moored_tools
-from kval.data.moored_tools._moored_decorator import record_processing
 
 from kval.util import internals, index, time
 from kval.signal import despike, filt
@@ -479,13 +478,7 @@ def chop_by_time(
 
 
 # Despike
-@record_processing(
-    "",
-    py_comment=(
-        "Find/reject {var_name} outliers (points exceeding {window_size}-"
-        "pt rolling {filter_type} by>{n_std} SDs."
-    ),
-)
+
 def despike_rolling(
     ds: xr.Dataset,
     var_name: str,
@@ -575,11 +568,7 @@ def despike_rolling(
 
 
     return ds
-@record_processing(
-    "",
-    py_comment=(
-        "Adjust for clock drift"
-    ))
+
 def adjust_time_for_drift(
     ds: xr.Dataset,
     seconds: float = 0,
@@ -736,13 +725,6 @@ def adjust_time_for_drift(
 
 
 # Filtering
-@record_processing(
-    "Ran a {window_size}-point rolling {filter_type} filter "
-    "on the variable {var_name}.",
-    py_comment=(
-        "Run a {window_size}-point rolling {filter_type} filter " "on {var_name}"
-    ),
-)
 def rolling_mean(
     ds: xr.Dataset,
     var_name: str,
@@ -808,13 +790,6 @@ def rolling_mean(
 
 
 # Threshold edit
-@record_processing(
-    "Rejected values of {var_name} outside the range ({min_val}, {max_val})",
-    py_comment=(
-        "Rejecting values of {var_name} outside the range "
-        "({min_val}, {max_val}):"
-    ),
-)
 def threshold(
     ds: xr.Dataset,
     var_name: str,
@@ -898,11 +873,6 @@ def threshold_pick(ds: xr.Dataset) -> xr.Dataset:
 
 
 # Remove points by index
-@record_processing(
-    "Rejecting (setting to NaN) the following time indices from"
-    " {varnm}:\n{remove_inds}.",
-    py_comment=("Reject {varnm} values at specific points"),
-)
 def remove_points(
     ds: xr.Dataset, varnm: str, remove_inds, time_var="TIME",
     deep_copy = True,
@@ -982,10 +952,6 @@ def hand_remove_points(
 
 
 # Recalculate sal
-@record_processing(
-    "(Re)calculated PSAL using the GSW-Python module.",
-    py_comment="(Re)calculating PSAL",
-)
 def calculate_PSAL(
     ds: xr.Dataset,
     cndc_var: str = "CNDC",
@@ -1069,10 +1035,6 @@ def calculate_PSAL(
 
 
 # Recalculate SA & CT
-@record_processing(
-    "Calculated TEOS-10 variables SA, CT using the GSW-Python module.",
-    py_comment="Calculating SA, CT",
-)
 def calculate_SA_CT(
     ds: xr.Dataset,
     cndc_var: str = "CNDC",
@@ -1137,10 +1099,6 @@ def calculate_SA_CT(
 
 
 # Recalculate RHO
-@record_processing(
-    "Calculated RHO using the GSW-Python module.",
-    py_comment="Calculating RHO",
-)
 def calculate_rho(
     ds: xr.Dataset,
     cndc_var: str = "CNDC",
@@ -1201,10 +1159,6 @@ def calculate_rho(
 
 
 # Recalculate sigma0
-@record_processing(
-    "Calculated sigma0 using the GSW-Python module.",
-    py_comment="Calculating RHO",
-)
 def calculate_sig0(
     ds: xr.Dataset,
     temp_var: str = "TEMP",
@@ -1259,10 +1213,6 @@ def calculate_sig0(
 
 
 # Recalculate cndc
-@record_processing(
-    "(Re)calculated CNDC using the GSW-Python module.",
-    py_comment="(Re)calculating CNDC",
-)
 def calculate_CNDC(
     ds: xr.Dataset,
     cndc_var: str = "CNDC",
@@ -1534,10 +1484,6 @@ def assign_pressure(
 
 
 # Recalculate sal
-@record_processing(
-    "Applied an offset to {variable} linearly changing from {start_val} to {end_val}.",
-    py_comment="Apply linear drift to {variable}",
-)
 def linear_drift_offset(
     ds: xr.Dataset,
     variable: str,
@@ -1604,10 +1550,6 @@ def linear_drift_offset(
 
 
 # Recalculate sal
-@record_processing(
-    "Applied an correctional factor to {variable} linearly changing from {start_val} to {end_val}.",
-    py_comment="Apply linear drift to {variable}",
-)
 def linear_drift_factor(
     ds: xr.Dataset,
     variable: str,
@@ -1674,10 +1616,6 @@ def linear_drift_factor(
 
 
 # Drop variables
-@record_processing("", py_comment="Dropping some variables")
-# Note: Doing PROCESSING.post_processing record keeping within the
-# drop_variables() function because we want to access the *dropped* list.
-
 def drop_variables(
     ds: xr.Dataset,
     drop: list[str] | None = None,
@@ -1756,12 +1694,7 @@ def drop_vars_pick(ds: xr.Dataset) -> xr.Dataset:
     return edit_obj.ds
 
 
-# Standardize metadata
-# (note necessary to record?)
-#@record_processing(
-#    "Applied automatic standardization of metadata.",
-#    py_comment="Applying standard metadata (global+variable attributes):",
-#)
+
 def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
     """
     Various modifications to the metadata to standardize the dataset for
@@ -1899,11 +1832,6 @@ def plot(ds: xr.Dataset) -> None:
 
 
 # Standardize metadata
-@record_processing(
-    "",
-    py_comment=("Recompute PSAL, drop PSAL values where CNDC spikes "
-                "during stable TEMP. ")
-)
 def adjust_PSAL_from_CNDC_TEMP(
         ds: xr.Dataset,
         window: int = None,

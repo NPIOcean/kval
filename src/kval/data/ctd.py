@@ -45,7 +45,6 @@ import xarray as xr
 from kval.data.ship_ctd_tools import _ctd_tools as tools
 from kval.data.ship_ctd_tools import _ctd_visualize as viz
 from kval.data.ship_ctd_tools import _ctd_edit as ctd_edit
-from kval.data.ship_ctd_tools._ctd_decorator import record_processing
 from kval.file import matfile
 from kval.data import dataset, edit
 from kval.util import time, xr_funcs
@@ -153,13 +152,6 @@ ds = data.ctd.ctds_from_cnv_dir(
     return ds
 
 
-@record_processing(
-    "Created CTD dataset from CNV list: {cnv_list}. Station info from "
-    "filenames: {station_from_filename}. Time warnings: {time_warnings}. "
-    "Start time from NMEA: {start_time_NMEA}. "
-    "Processing variable: {processing_variable}.",
-    "Loaded and combined CNV files from list into a single dataset.",
-)
 def ctds_from_cnv_list(
     cnv_list: list[str],
     station_from_filename: bool = False,
@@ -235,14 +227,6 @@ def ctds_from_cnv_list(
     return ds
 
 
-@record_processing(
-    (
-        "Created CTD dataset from BTL files in directory '{path}'. Station "
-        "info from filenames: {station_from_filename}. Start time from NMEA: "
-        "{start_time_NMEA}. Time adjust from NMEA: {time_adjust_NMEA}."
-    ),
-    "Loaded and combined BTL files from directory into a single dataset.",
-)
 def dataset_from_btl_dir(
     path: str | Path,
     station_from_filename: bool = False,
@@ -417,11 +401,6 @@ def to_csv(ds: xr.Dataset, outfile: str) -> None:
 # MODIFYING DATA
 
 
-@record_processing(
-    "Rejected values of {variable} outside the range ({min_val}, {max_val})",
-    py_comment="Rejecting values of {variable} outside the range "
-    "({min_val}, {max_val}):",
-)
 def threshold(
     ds: xr.Dataset,
     variable: str,
@@ -462,10 +441,6 @@ def threshold(
     return ds
 
 
-@record_processing(
-    "Applied offset ={offset} to the variable {variable}.",
-    py_comment="Applied offset {offset} to variable {variable}:",
-)
 def offset(ds: xr.Dataset, variable: str, offset: float) -> xr.Dataset:
     """
     Apply a fixed offset to a variable in an xarray Dataset.
@@ -500,12 +475,6 @@ def offset(ds: xr.Dataset, variable: str, offset: float) -> xr.Dataset:
 
 # APPLYING CORRECTIONS ETC
 
-
-@record_processing(
-    "Applied a calibration to chlorophyll: "
-    "{chl_name_out} = {A} * {chl_name_in} + {B}.",
-    py_comment="Applying chlorophyll calibration based on fit to lab values:",
-)
 def calibrate_chl(
     ds: xr.Dataset,
     A: float,
@@ -620,10 +589,6 @@ def calibrate_chl(
 # MODIFYING METADATA
 
 
-@record_processing(
-    "Applied automatic standardization of metadata.",
-    py_comment="Applying standard metadata (global+variable attributes):",
-)
 def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
     """
     Standardize and enrich metadata in a CTD xarray Dataset.
@@ -673,7 +638,6 @@ def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
 
 # Note: Doing PROCESSING.post_processing record keeping within the
 # drop_variables() function because we want to access the *dropped* list.
-@record_processing("", py_comment="Dropping some variables")
 def drop_variables(
     ds: xr.Dataset,
     retain: list[str] | bool | None = None,
