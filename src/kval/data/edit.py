@@ -522,8 +522,7 @@ def drop_variables(
 
     Notes
     -----
-    This function also updates the `PROCESSING.attrs["post_processing"]`
-    field, if present, with a record of dropped variables.
+
 
     Examples
     --------
@@ -563,10 +562,6 @@ def drop_variables(
         drop_str = f"Dropped variables from the Dataset: {dropped}."
         if verbose:
             print(drop_str)
-        if "PROCESSING" in ds:
-            ds["PROCESSING"].attrs["post_processing"] = (
-                ds["PROCESSING"].attrs.get("post_processing", "") + f"{drop_str}\n"
-            )
 
     return ds
 
@@ -670,9 +665,6 @@ class drop_vars_pick:
                 from kval.data import ctd
                 ds_dropped = ctd.drop_variables(
                   self.ds, drop = self.selected_options)
-
-            if 'PROCESSING' in ds_dropped:
-                self.ds['PROCESSING'] = ds_dropped.PROCESSING
 
             for key in self.selected_options:
                 del self.ds[key]
@@ -917,9 +909,7 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
             ds_thr = threshold(ds=ds.copy(deep=True), variable = variable,
                         max_val = max_value, min_val = min_value)
             ds[variable] = ds_thr[variable]
-            if 'PROCESSING' in ds:
-                ds['PROCESSING'] = ds_thr['PROCESSING']
-                print(ds_thr['PROCESSING'])
+
             # Count non-nan values in the dataset
             count_valid_after = int(ds[variable].count())
 

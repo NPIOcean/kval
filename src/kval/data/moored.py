@@ -50,7 +50,6 @@ from scipy import signal
 from kval.file import sbe, rbr, matfile
 from kval.data import dataset, edit
 from kval.data.moored_tools import _moored_tools
-from kval.data.moored_tools._moored_decorator import record_processing
 
 from kval.util import internals, index, time
 from kval.signal import despike, filt
@@ -124,44 +123,6 @@ def load_moored(
     if lon:
         ds["LONGITUDE"] = ((), lon)
 
-    # Add PROCESSING variable with useful metadata
-    # ( + remove some excessive global attributes)
-    if processing_variable:
-        ds = dataset.add_processing_history_var_moored(
-            ds,
-        )
-        # Add a source_file attribute (and remove from the global attrs)
-        if 'source_file' in ds.attrs:
-            ds.PROCESSING.attrs["source_file"] = ds.source_file
-
-        # Remove some unwanted global atributes
-        for attr_name in [
-            "source_file",
-            "filename",
-            "SBE_flags_applied",
-            "SBE_processing_date",
-        ]:
-            if attr_name in ds.attrs:
-                del ds.attrs[attr_name]
-
-        # For SBE: Move the SBE_processing attribute to PROCESSING.
-        if instr_type == "SBE" and "SBE_processing" in ds.attrs:
-            ds.PROCESSING.attrs["SBE_processing"] = ds.SBE_processing
-            del ds.attrs["SBE_processing"]
-
-        # Add python scipt snipped to reproduce this operation
-        ds.PROCESSING.attrs[
-            "python_script"
-        ] += f"""from kval import data
-data_dir = "./" # Directory containing `filename` (MUST BE SET BY THE USER!)
-filename = "{os.path.basename(file)}"
-
-# Load file into an xarray Dataset:
-ds = data.moored.load_moored(
-    data_dir + filename,
-    processing_variable={processing_variable})
-    """
-
     return ds
 
 
@@ -176,9 +137,7 @@ def load_nc(
 
     return ds
 
-# Chop record
-# Note: We do the recording to PROCESSING inside the function, not in the
-# decorator. (Too complex otherwise)
+
 def chop_deck(
     ds: xr.Dataset,
     variable: str = "PRES",
@@ -345,32 +304,6 @@ def chop_deck(
         print(f"Chopping to index: {indices}")
         print(net_str)
 
-    # Record to PROCESSING metadata variable
-    if "PROCESSING" in ds:
-
-        if keep_slice.start is None and keep_slice.stop is not None:
-            start_end_str = "end"
-            indices_str = f"None, {keep_slice.stop-1}"
-        elif keep_slice.start is not None and keep_slice.stop is None:
-            start_end_str = "start"
-            indices_str = f"{keep_slice.start}, None"
-        elif keep_slice.start is not None and keep_slice.stop is not None:
-            start_end_str = "start and end"
-            indices_str = f"{keep_slice.start}, {keep_slice.stop-1}"
-
-        if keep_slice.start is None and keep_slice.stop is None:
-            pass
-        else:
-            ds["PROCESSING"].attrs["post_processing"] += (
-                f"Chopped {L0 - L1} samples at the {start_end_str} "
-                "of the time series.\n"
-            )
-
-            ds["PROCESSING"].attrs["python_script"] += (
-                f"\n\n# Chopping away samples from the {start_end_str}"
-                " of the time series\n"
-                f"ds = data.moored.chop_deck(ds, indices = [{indices_str}])"
-            )
 
     return ds
 
@@ -454,17 +387,6 @@ def chop_by_time(
         )
         print(chop_info)
 
-    # Record to PROCESSING metadata (if the variable exists)
-    if "PROCESSING" in ds_chopped:
-        ds_chopped["PROCESSING"].attrs["post_processing"] += (
-            f"Chopped dataset to time range {start_time or 'start'}"
-            f" to {end_time or 'end'} ({L0} samples -> {L1} samples).\n"
-        )
-        ds_chopped["PROCESSING"].attrs["python_script"] += (
-            f"\n\n# Chopping dataset by time range\n"
-            f"ds = data.moored.chop_by_time(ds, start_time='{start_time}', "
-            f"end_time='{end_time}')"
-        )
 
     # If initial TIME was numerical: Convert back to numerical format
     if time_units:
@@ -479,13 +401,7 @@ def chop_by_time(
 
 
 # Despike
-@record_processing(
-    "",
-    py_comment=(
-        "Find/reject {var_name} outliers (points exceeding {window_size}-"
-        "pt rolling {filter_type} by>{n_std} SDs."
-    ),
-)
+
 def despike_rolling(
     ds: xr.Dataset,
     var_name: str,
@@ -555,15 +471,7 @@ def despike_rolling(
         verbose,
     )
 
-    n_removed = np.sum(is_outside_criterion).item()
-    if "PROCESSING" in ds:
-        ds.PROCESSING.attrs["post_processing"] += (
-            f"Edited out spikes {var_name} using a rolling window criterion. "
-            f"Values exceeding the {window_size}-point rolling {filter_type} "
-            f"by more than {n_std} (rolling) standard deviations were "
-            f"interpreted as outliers and masked (found {n_removed} "
-            "outliers)."
-        )
+    #n_removed = np.sum(is_outside_criterion).item()
 
 
     var_comment = (f"Despiking: Values exceeding the {window_size}-point rolling {filter_type} by more than {n_std} (rolling) standard deviations have been removed.")
@@ -575,11 +483,7 @@ def despike_rolling(
 
 
     return ds
-@record_processing(
-    "",
-    py_comment=(
-        "Adjust for clock drift"
-    ))
+
 def adjust_time_for_drift(
     ds: xr.Dataset,
     seconds: float = 0,
@@ -726,23 +630,10 @@ def adjust_time_for_drift(
         time_attrs['comment'] = drift_comment
     ds['TIME'] = ('TIME', adjusted_time, time_attrs)
 
-    if "PROCESSING" in ds:
-        ds.PROCESSING.attrs["post_processing"] += (
-            f"Adjusted for clock offset: {drift_operation}"
-            f" from 0 to {abs(total_drift_seconds)} s assuming linear drift."
-        )
-
     return ds
 
 
 # Filtering
-@record_processing(
-    "Ran a {window_size}-point rolling {filter_type} filter "
-    "on the variable {var_name}.",
-    py_comment=(
-        "Run a {window_size}-point rolling {filter_type} filter " "on {var_name}"
-    ),
-)
 def rolling_mean(
     ds: xr.Dataset,
     var_name: str,
@@ -808,13 +699,6 @@ def rolling_mean(
 
 
 # Threshold edit
-@record_processing(
-    "Rejected values of {var_name} outside the range ({min_val}, {max_val})",
-    py_comment=(
-        "Rejecting values of {var_name} outside the range "
-        "({min_val}, {max_val}):"
-    ),
-)
 def threshold(
     ds: xr.Dataset,
     var_name: str,
@@ -898,11 +782,6 @@ def threshold_pick(ds: xr.Dataset) -> xr.Dataset:
 
 
 # Remove points by index
-@record_processing(
-    "Rejecting (setting to NaN) the following time indices from"
-    " {varnm}:\n{remove_inds}.",
-    py_comment=("Reject {varnm} values at specific points"),
-)
 def remove_points(
     ds: xr.Dataset, varnm: str, remove_inds, time_var="TIME",
     deep_copy = True,
@@ -982,10 +861,6 @@ def hand_remove_points(
 
 
 # Recalculate sal
-@record_processing(
-    "(Re)calculated PSAL using the GSW-Python module.",
-    py_comment="(Re)calculating PSAL",
-)
 def calculate_PSAL(
     ds: xr.Dataset,
     cndc_var: str = "CNDC",
@@ -1069,10 +944,6 @@ def calculate_PSAL(
 
 
 # Recalculate SA & CT
-@record_processing(
-    "Calculated TEOS-10 variables SA, CT using the GSW-Python module.",
-    py_comment="Calculating SA, CT",
-)
 def calculate_SA_CT(
     ds: xr.Dataset,
     cndc_var: str = "CNDC",
@@ -1137,10 +1008,6 @@ def calculate_SA_CT(
 
 
 # Recalculate RHO
-@record_processing(
-    "Calculated RHO using the GSW-Python module.",
-    py_comment="Calculating RHO",
-)
 def calculate_rho(
     ds: xr.Dataset,
     cndc_var: str = "CNDC",
@@ -1201,10 +1068,6 @@ def calculate_rho(
 
 
 # Recalculate sigma0
-@record_processing(
-    "Calculated sigma0 using the GSW-Python module.",
-    py_comment="Calculating RHO",
-)
 def calculate_sig0(
     ds: xr.Dataset,
     temp_var: str = "TEMP",
@@ -1259,10 +1122,6 @@ def calculate_sig0(
 
 
 # Recalculate cndc
-@record_processing(
-    "(Re)calculated CNDC using the GSW-Python module.",
-    py_comment="(Re)calculating CNDC",
-)
 def calculate_CNDC(
     ds: xr.Dataset,
     cndc_var: str = "CNDC",
@@ -1534,10 +1393,6 @@ def assign_pressure(
 
 
 # Recalculate sal
-@record_processing(
-    "Applied an offset to {variable} linearly changing from {start_val} to {end_val}.",
-    py_comment="Apply linear drift to {variable}",
-)
 def linear_drift_offset(
     ds: xr.Dataset,
     variable: str,
@@ -1604,10 +1459,6 @@ def linear_drift_offset(
 
 
 # Recalculate sal
-@record_processing(
-    "Applied an correctional factor to {variable} linearly changing from {start_val} to {end_val}.",
-    py_comment="Apply linear drift to {variable}",
-)
 def linear_drift_factor(
     ds: xr.Dataset,
     variable: str,
@@ -1674,10 +1525,6 @@ def linear_drift_factor(
 
 
 # Drop variables
-@record_processing("", py_comment="Dropping some variables")
-# Note: Doing PROCESSING.post_processing record keeping within the
-# drop_variables() function because we want to access the *dropped* list.
-
 def drop_variables(
     ds: xr.Dataset,
     drop: list[str] | None = None,
@@ -1756,12 +1603,7 @@ def drop_vars_pick(ds: xr.Dataset) -> xr.Dataset:
     return edit_obj.ds
 
 
-# Standardize metadata
-# (note necessary to record?)
-#@record_processing(
-#    "Applied automatic standardization of metadata.",
-#    py_comment="Applying standard metadata (global+variable attributes):",
-#)
+
 def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
     """
     Various modifications to the metadata to standardize the dataset for
@@ -1843,9 +1685,6 @@ def to_mat(ds: xr.Dataset, outfile: str, simplify: bool = False) -> None:
 
     ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
-    # Drop the empty PROCESSING variable (doesn't work well with MATLAB)
-    ds_wo_proc = drop_variables(ds, drop="PROCESSING")
-
     # Also transposing dimensions to PRES, TIME for ease of plotting etc in
     # MATLAB.
     matfile.xr_to_mat(ds_wo_proc.transpose(), outfile, simplify=simplify)
@@ -1899,11 +1738,6 @@ def plot(ds: xr.Dataset) -> None:
 
 
 # Standardize metadata
-@record_processing(
-    "",
-    py_comment=("Recompute PSAL, drop PSAL values where CNDC spikes "
-                "during stable TEMP. ")
-)
 def adjust_PSAL_from_CNDC_TEMP(
         ds: xr.Dataset,
         window: int = None,
@@ -1996,8 +1830,6 @@ def adjust_PSAL_from_CNDC_TEMP(
         ds1.PSAL.attrs['comment'] += f'\n\n{comment}'
     else:
         ds1.PSAL.attrs['comment'] = comment
-
-    ds1.PROCESSING.attrs['post_processing'] += post_proc_comment
 
 
     if plot:

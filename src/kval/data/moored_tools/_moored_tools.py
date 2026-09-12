@@ -301,7 +301,7 @@ class hand_remove_points:
 
         self.ds = moored.remove_points(
             self.ds, self.varnm_edit, self.remove_inds, deep_copy = False)
-        # If we have a PROCESSING field:
+
         # Count how many points we removed
         self.points_removed = np.sum(self.remove_bool)
 

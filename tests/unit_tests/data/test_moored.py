@@ -73,9 +73,6 @@ def test_load_moored_rbr(file_name, setup_files):
 
     # Perform basic checks on the returned xarray.Dataset
     assert isinstance(ds, xr.Dataset), f"Expected xarray.Dataset, got {type(ds)}"
-    assert "PROCESSING" in ds, "PROCESSING variable is missing from the dataset"
-    assert "python_script" in ds.PROCESSING.attrs, "python_script attribute is missing from PROCESSING variable"
-    assert ds.PROCESSING.attrs["python_script"].strip(), "python_script attribute should not be empty"
 
     # Additional checks can be added here as needed
 
@@ -91,9 +88,6 @@ def test_load_moored_sbe37(setup_files):
 
     # Perform basic checks on the returned xarray.Dataset
     assert isinstance(ds, xr.Dataset), f"Expected xarray.Dataset, got {type(ds)}"
-    assert "PROCESSING" in ds, "PROCESSING variable is missing from the dataset"
-    assert "python_script" in ds.PROCESSING.attrs, "python_script attribute is missing from PROCESSING variable"
-    assert ds.PROCESSING.attrs["python_script"].strip(), "python_script attribute should not be empty"
 
 
 # Test assign_pressure
