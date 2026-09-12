@@ -1,44 +1,6 @@
 """
 kval.ctd
 
-
-
-
---------------------------------------------------------------
-A note about maintaining a metadata record of processing steps
---------------------------------------------------------------
-A note about this note: Not sure whether to retain this functionality.
-It's a good idea, but makes it much harder to maintain.
-Not doing any harm, but shoudl probably aim to remove this in the future.
---------------------------------------------------------------
-
-
-We want to maintain a record in the file metadata of all operations
-that modify the file in significant ways.
-
-This is done by populating the variable attributes of the
-PROCESSING variable of the dataset. Specifically:
-
-- *ds.PROCESSING.post_processing* should contain an algorithmic
-  description of steps that were applied. Should be human readable
-  but contain all necessary details to reproduce the processing step.
-- *ds.PROCESSING.python_script* should contain a python script
-  reproducing the processing procedure. In cases where data are changed
-  based on interactive user input (e.g. hand selecting points), the
-  corresponding line of code in ds.PROCESSING.python_script should be
-  a call to a corresponding non-interactive function performing the exact
-  equivalent modifications to the data.
-
-The preferred method of updating the these metadata attributes is using
-the decorator function defined at the start of the script. The decorator
-is defined below in record_processing(). An example of how it is used can
-be found above the function metadata_auto().
-
-In cases with interactive input, it is not always feasible to use the
-decorator approach. In such cases, it may be necessary to update
-ds.PROCESSING.post_processing and ds.PROCESSING.python_script
-more directly.
-
 """
 
 import xarray as xr
@@ -57,11 +19,9 @@ from typing import List, Optional, Union
 import numpy as np
 from pathlib import Path
 
-
 # Want to be able to use these functions directly..
 from kval.data.dataset import to_netcdf
 
-# DECORATOR TO PRESERVE PROCESSING STEPS IN METADATA
 
 
 # LOADING AND SAVING DATA
@@ -124,31 +84,6 @@ def ctds_from_cnv_dir(
 
     ds = tools.join_cruise(profile_datasets, verbose=verbose)
 
-    # Add PROCESSING variable
-    if processing_variable:
-        ds = dataset.add_processing_history_var_ctd(
-            ds, source_file=np.sort(cnv_files)
-        )
-        ds.attrs["history"] = ds.history.replace(
-            '"SBE_processing"', '"PROCESSING.SBE_processing"'
-        )
-
-        # Add python scipt snipped to reproduce this operation
-        ds.PROCESSING.attrs[
-            "python_script"
-        ] += f"""from kval import data
-
-# Path to directory containing *source_file* (MUST BE SET BY THE USER!)
-cnv_dir = "./"
-
-# Load all .cnv files and join together into a single xarray Dataset:
-ds = data.ctd.ctds_from_cnv_dir(
-    cnv_dir,
-    station_from_filename={station_from_filename},
-    start_time_NMEA={start_time_NMEA},
-    processing_variable={processing_variable}
-    )"""
-
     return ds
 
 
@@ -201,28 +136,6 @@ def ctds_from_cnv_list(
         remove_duplicates=remove_duplicates,
     )
     ds = tools.join_cruise(profile_datasets, verbose=verbose)
-
-    # Add PROCESSING variable
-    if processing_variable:
-        ds = dataset.add_processing_history_var_ctd(
-            ds, source_file=np.sort(cnv_list)
-        )
-        ds.attrs["history"] = ds.history.replace(
-            '"SBE_processing"', '"PROCESSING.SBE_processing"'
-        )
-
-        # Add python script snippet to reproduce this operation
-        ds.PROCESSING.attrs["python_script"] += (
-            "from kval import data\n"
-            "cnv_list = [{files}] # A list of strings specifying paths to all"
-            " files in *source_file*.\n\n"
-            "# Load all .cnv files and join together into a single xarray"
-            " Dataset:\n"
-            "ds = data.ctd.ctds_from_cnv_list(cnv_list,\n"
-            f"    station_from_filename={station_from_filename},\n"
-            f"    start_time_NMEA={start_time_NMEA},\n"
-            f"    processing_variable={processing_variable})"
-        )
 
     return ds
 
@@ -325,17 +238,11 @@ def to_mat(ds: xr.Dataset, outfile: str, simplify: bool = False) -> None:
     >>> to_mat(ds, 'output_matfile', simplify=True)
     """
 
-    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
-
-    # Drop the empty PROCESSING variable (doesn't work well with MATLAB)
-    if "PROCESSING" in ds:
-        ds_wo_proc = drop_variables(ds, drop="PROCESSING")
-    else:
-        ds_wo_proc = ds
+    ds_cp = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     # Also transposing dimensions to PRES, TIME for ease of plotting etc
     # in MATLAB.
-    matfile.xr_to_mat(ds_wo_proc.transpose(), outfile, simplify=simplify)
+    matfile.xr_to_mat(ds_cp.transpose(), outfile, simplify=simplify)
 
 
 def to_csv(ds: xr.Dataset, outfile: str) -> None:
@@ -636,8 +543,6 @@ def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
     return ds
 
 
-# Note: Doing PROCESSING.post_processing record keeping within the
-# drop_variables() function because we want to access the *dropped* list.
 def drop_variables(
     ds: xr.Dataset,
     retain: list[str] | bool | None = None,

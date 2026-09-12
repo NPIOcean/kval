@@ -258,19 +258,6 @@ class hand_remove_points:
         self.d = edit.remove_points_profile(self.d, self.varnm, self.TIME_index, self.remove_inds, 
                                             deep_copy = False)
 
-        # If we have a PROCESSING field:
-        if hasattr(self.d, 'PROCESSING'):
-            prof_num = self.TIME_index + 1
-            N_profs = self.d.sizes['TIME']
-
-            self.d.PROCESSING.attrs['post_processing'] += (
-                f'Manually edited out (->NaN) the following points from profile {prof_num}/{N_profs} (STATION= {self.station}): '
-                f'\n{self.remove_inds}\n')
-
-            self.d.PROCESSING.attrs['python_script'] += (
-                f'\n\n# Manually removing points from the {self.varnm} variable (from the TIME/STATION index {self.TIME_index}):'
-                f'\nds = data.edit.remove_points_profile(ds, "{self.varnm}", {self.TIME_index}, [{", ".join(map(str, self.remove_inds))}])')
-
 
         # Count how many points we removed
         self.points_removed = np.sum(self.remove_bool)
@@ -428,8 +415,6 @@ def apply_offset(D):
                     station_string = 'all stations'
                     D_offset = ctd.offset(D.copy(), varnm_sel, offset_value)
                     D[varnm_sel] = D_offset[varnm_sel]
-                    D['PROCESSING'] = D_offset['PROCESSING']
-
 
                 offset_metadata = f"Applied offset of {offset_value} [{units}] ({station_string})"
                 if 'applied_offset' in D[varnm_sel].attrs:

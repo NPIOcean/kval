@@ -123,44 +123,6 @@ def load_moored(
     if lon:
         ds["LONGITUDE"] = ((), lon)
 
-    # Add PROCESSING variable with useful metadata
-    # ( + remove some excessive global attributes)
-    if processing_variable:
-        ds = dataset.add_processing_history_var_moored(
-            ds,
-        )
-        # Add a source_file attribute (and remove from the global attrs)
-        if 'source_file' in ds.attrs:
-            ds.PROCESSING.attrs["source_file"] = ds.source_file
-
-        # Remove some unwanted global atributes
-        for attr_name in [
-            "source_file",
-            "filename",
-            "SBE_flags_applied",
-            "SBE_processing_date",
-        ]:
-            if attr_name in ds.attrs:
-                del ds.attrs[attr_name]
-
-        # For SBE: Move the SBE_processing attribute to PROCESSING.
-        if instr_type == "SBE" and "SBE_processing" in ds.attrs:
-            ds.PROCESSING.attrs["SBE_processing"] = ds.SBE_processing
-            del ds.attrs["SBE_processing"]
-
-        # Add python scipt snipped to reproduce this operation
-        ds.PROCESSING.attrs[
-            "python_script"
-        ] += f"""from kval import data
-data_dir = "./" # Directory containing `filename` (MUST BE SET BY THE USER!)
-filename = "{os.path.basename(file)}"
-
-# Load file into an xarray Dataset:
-ds = data.moored.load_moored(
-    data_dir + filename,
-    processing_variable={processing_variable})
-    """
-
     return ds
 
 
@@ -175,9 +137,7 @@ def load_nc(
 
     return ds
 
-# Chop record
-# Note: We do the recording to PROCESSING inside the function, not in the
-# decorator. (Too complex otherwise)
+
 def chop_deck(
     ds: xr.Dataset,
     variable: str = "PRES",
@@ -344,32 +304,6 @@ def chop_deck(
         print(f"Chopping to index: {indices}")
         print(net_str)
 
-    # Record to PROCESSING metadata variable
-    if "PROCESSING" in ds:
-
-        if keep_slice.start is None and keep_slice.stop is not None:
-            start_end_str = "end"
-            indices_str = f"None, {keep_slice.stop-1}"
-        elif keep_slice.start is not None and keep_slice.stop is None:
-            start_end_str = "start"
-            indices_str = f"{keep_slice.start}, None"
-        elif keep_slice.start is not None and keep_slice.stop is not None:
-            start_end_str = "start and end"
-            indices_str = f"{keep_slice.start}, {keep_slice.stop-1}"
-
-        if keep_slice.start is None and keep_slice.stop is None:
-            pass
-        else:
-            ds["PROCESSING"].attrs["post_processing"] += (
-                f"Chopped {L0 - L1} samples at the {start_end_str} "
-                "of the time series.\n"
-            )
-
-            ds["PROCESSING"].attrs["python_script"] += (
-                f"\n\n# Chopping away samples from the {start_end_str}"
-                " of the time series\n"
-                f"ds = data.moored.chop_deck(ds, indices = [{indices_str}])"
-            )
 
     return ds
 
@@ -453,17 +387,6 @@ def chop_by_time(
         )
         print(chop_info)
 
-    # Record to PROCESSING metadata (if the variable exists)
-    if "PROCESSING" in ds_chopped:
-        ds_chopped["PROCESSING"].attrs["post_processing"] += (
-            f"Chopped dataset to time range {start_time or 'start'}"
-            f" to {end_time or 'end'} ({L0} samples -> {L1} samples).\n"
-        )
-        ds_chopped["PROCESSING"].attrs["python_script"] += (
-            f"\n\n# Chopping dataset by time range\n"
-            f"ds = data.moored.chop_by_time(ds, start_time='{start_time}', "
-            f"end_time='{end_time}')"
-        )
 
     # If initial TIME was numerical: Convert back to numerical format
     if time_units:
@@ -548,15 +471,7 @@ def despike_rolling(
         verbose,
     )
 
-    n_removed = np.sum(is_outside_criterion).item()
-    if "PROCESSING" in ds:
-        ds.PROCESSING.attrs["post_processing"] += (
-            f"Edited out spikes {var_name} using a rolling window criterion. "
-            f"Values exceeding the {window_size}-point rolling {filter_type} "
-            f"by more than {n_std} (rolling) standard deviations were "
-            f"interpreted as outliers and masked (found {n_removed} "
-            "outliers)."
-        )
+    #n_removed = np.sum(is_outside_criterion).item()
 
 
     var_comment = (f"Despiking: Values exceeding the {window_size}-point rolling {filter_type} by more than {n_std} (rolling) standard deviations have been removed.")
@@ -714,12 +629,6 @@ def adjust_time_for_drift(
     else:
         time_attrs['comment'] = drift_comment
     ds['TIME'] = ('TIME', adjusted_time, time_attrs)
-
-    if "PROCESSING" in ds:
-        ds.PROCESSING.attrs["post_processing"] += (
-            f"Adjusted for clock offset: {drift_operation}"
-            f" from 0 to {abs(total_drift_seconds)} s assuming linear drift."
-        )
 
     return ds
 
@@ -1776,9 +1685,6 @@ def to_mat(ds: xr.Dataset, outfile: str, simplify: bool = False) -> None:
 
     ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
-    # Drop the empty PROCESSING variable (doesn't work well with MATLAB)
-    ds_wo_proc = drop_variables(ds, drop="PROCESSING")
-
     # Also transposing dimensions to PRES, TIME for ease of plotting etc in
     # MATLAB.
     matfile.xr_to_mat(ds_wo_proc.transpose(), outfile, simplify=simplify)
@@ -1924,8 +1830,6 @@ def adjust_PSAL_from_CNDC_TEMP(
         ds1.PSAL.attrs['comment'] += f'\n\n{comment}'
     else:
         ds1.PSAL.attrs['comment'] = comment
-
-    ds1.PROCESSING.attrs['post_processing'] += post_proc_comment
 
 
     if plot:

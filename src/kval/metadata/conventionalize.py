@@ -463,7 +463,7 @@ def add_standard_var_attrs(
         if not override and "coverage_content_type" not in ds[varnm].attrs:
             if varnm in ["NISKIN_NUMBER", "TIME", "TIME_SAMPLE", "LONGITUDE", "LATITUDE"]:
                 ds[varnm].attrs["coverage_content_type"] = "coordinate"
-            elif varnm in ["PROCESSING", "INSTRUMENT"]:
+            elif varnm in ["INSTRUMENT"]:
                 ds[varnm].attrs["coverage_content_type"] = (
                     "auxiliaryInformation")
             elif varnm in ["SBE_FLAG"]:
@@ -471,11 +471,6 @@ def add_standard_var_attrs(
                     "qualityInformation")
             else:
                 ds[varnm].attrs["coverage_content_type"] = "physicalMeasurement"
-
-        # Remove _FillValue from the PROCESSING variable
-        if varnm == 'PROCESSING':
-            if '_FillValue' in ds.PROCESSING.attrs:
-                del ds.PROCESSING.attrs['_FillValue']
 
     return ds
 

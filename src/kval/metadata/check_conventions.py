@@ -134,7 +134,7 @@ def custom_checks(ds: xr.Dataset) -> None:
         check, warn, cross, arrow = "[OK]", "[!]", "[X]", "->"
 
     warnings, passed, issues = [], [], 0
-    skip_vars = {"STATION", "PROCESSING", "CRUISE", "DEPTH_INDEX", "NISKIN_NUMBER", "CAST"}
+    skip_vars = {"STATION", "CRUISE", "DEPTH_INDEX", "NISKIN_NUMBER", "CAST"}
     vars_relevant = [v for v in ds.variables if v not in skip_vars]
     data_vars_relevant = [v for v in ds.data_vars if v not in skip_vars]
 
