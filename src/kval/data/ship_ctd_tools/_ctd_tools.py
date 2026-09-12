@@ -164,8 +164,7 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
         else:
             if n.start_time_source != start_time_source:
                 different_start_time_sources = True
-            N = xr.concat([N, n], dim = 'TIME', data_vars="all")
-
+            N = xr.concat([N, n], dim='TIME', data_vars="all", join='outer')
 
 
     ### CHECK IF ANY SENSORS CHANGED
