@@ -901,12 +901,6 @@ def _read_btl_column_data_xr(source_file, header_info, verbose=False):
         TIME_SAMPLE += [time_DSE]
 
     df_combined["TIME_SAMPLE"] = TIME_SAMPLE
-    df_combined["TIME_SAMPLE"].attrs = {
-        "units": f"Days since {epoch}",
-        "long_name": "Time stamp of bottle closing",
-        "coverage_content_type": "coordinate",
-        "SBE_source_variable": time_name,
-    }
 
     # Convert DataFrame to xarray Dataset
     ds = xr.Dataset()
@@ -923,6 +917,16 @@ def _read_btl_column_data_xr(source_file, header_info, verbose=False):
 
         # Preserve metadata attributes for the 'Value' variable
         ds[varnm].attrs = df_combined[varnm].attrs
+
+    # Set attrs directly on the xarray DataArray, bypassing pandas: under
+    # pandas >=3.0 Copy-on-Write, setting .attrs on a DataFrame column
+    # (a pandas Series) is silently dropped, so it must be set here instead.
+    ds["TIME_SAMPLE"].attrs = {
+        "units": f"Days since {epoch}",
+        "long_name": "Time stamp of bottle closing",
+        "coverage_content_type": "coordinate",
+        "SBE_source_variable": time_name,
+    }
 
     ds["NISKIN_NUMBER"].attrs = {
         "long_name": "Niskin bottle number",
