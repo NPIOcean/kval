@@ -17,7 +17,7 @@ To be implemented:
 
 import xarray as xr
 import warnings
-from typing import Literal, Union
+from typing import Literal
 from matplotlib.dates import num2date
 from datetime import datetime
 import pandas as pd
@@ -97,8 +97,8 @@ def get_era5_time_series_point(
     variable: Literal['SLP', 'UW10M', 'VW10M', 'T2M'],
     time_resolution: Literal['monthly', 'hourly'],
     lat: float, lon: float,
-    time_start: Union[str, datetime, float],
-    time_end: Union[str, datetime, float],
+    time_start: str | datetime | float,
+    time_end: str | datetime | float,
     method: str = 'nearest',
     center_time: bool = True,
     verbose: bool = True

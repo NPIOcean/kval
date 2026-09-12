@@ -15,7 +15,6 @@ from kval.metadata.check_conventions import check_file_with_button, custom_check
 from kval.metadata.conventionalize import convert_64_to_32, add_now_as_date_created, nans_to_fill_value
 from kval.metadata.io import import_metadata, export_metadata
 
-from typing import List, Optional, Union
 import numpy as np
 from pathlib import Path
 

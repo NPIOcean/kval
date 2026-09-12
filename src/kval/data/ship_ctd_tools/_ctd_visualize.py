@@ -18,7 +18,6 @@ from matplotlib.colors import Colormap
 import cmocean
 import numpy as np
 from kval.util import internals
-from typing import Union
 import xarray as xr
 
 # thinf
@@ -464,9 +463,9 @@ def map(
     return_fig_ax: bool = False,
     coast_resolution: str = '50m',
     figsize: tuple[int, int] = None,
-    station_labels: Union[bool, str] = False,
+    station_labels: bool | str = False,
     station_label_alpha: float = 0.5
-) -> Union[tuple[plt.Figure, plt.Axes], None]:
+) -> tuple[plt.Figure, plt.Axes] | None:
 
     # Making sure we are in an interactive notebook environment
     internals.check_interactive()

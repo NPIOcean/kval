@@ -16,7 +16,7 @@ import numpy as np
 def rotate_uv(
     u: np.ndarray, v: np.ndarray, angle: float, in_degrees: bool = False,
     decimals: int = 12,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Rotates the vector (u, v) CLOCKWISE by the specified angle.
 
@@ -38,7 +38,7 @@ def rotate_uv(
 
     Returns:
     -------
-    Tuple[np.ndarray, np.ndarray]
+    tuple[np.ndarray, np.ndarray]
         - The x-components of the rotated vector.
         - The y-components of the rotated vector.
     """
@@ -62,7 +62,7 @@ def principal_angle(
     v: np.ndarray,
     in_degrees: bool = False,
     return_std: bool = False,
-) -> Tuple[Union[float, float], Optional[float], Optional[float]]:
+) -> tuple[float, float | None, float | None]:
     """
     Computes the principal angle between two vectors `u` and `v` in the range
     [-π/2, π/2], where the squared distances to `u` and `v` are maximized. The
@@ -85,7 +85,7 @@ def principal_angle(
 
     Returns:
     -------
-    Tuple[Union[float, float], Optional[float], Optional[float]]
+    tuple[float, float | None, float | None]
         - The principal angle, in radians by default or degrees if `in_degrees`
           is True. Provided in the [-pi/2, pi/2] or [-180, 180] range.
         - Standard deviation along the major axis if `return_std` is True,

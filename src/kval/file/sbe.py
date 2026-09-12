@@ -47,7 +47,6 @@ from kval.data import dataset
 import matplotlib.pyplot as plt
 import re
 import os
-from typing import Optional
 from itertools import zip_longest
 from matplotlib.dates import num2date
 import warnings
@@ -57,21 +56,21 @@ import warnings
 
 def read_cnv(
     source_file: str,
-    apply_flags: Optional[bool] = True,
-    profile: Optional[str] = "downcast",
-    remove_surface_soak: Optional[bool] = True,
-    time_dim: Optional[bool] = False,
-    inspect_plot: Optional[bool] = False,
-    start_scan: Optional[int] = None,
-    end_scan: Optional[int] = None,
-    suppress_time_warning: Optional[bool] = False,
-    suppress_latlon_warning: Optional[bool] = False,
-    start_time_NMEA: Optional[bool] = False,
-    lat: Optional[float] = None,
-    lon: Optional[float] = None,
-    station: Optional[str] = None,
-    station_from_filename: Optional[bool] = False,
-    remove_duplicates: Optional[bool] = True,
+    apply_flags: bool = True,
+    profile: str = "downcast",
+    remove_surface_soak: bool = True,
+    time_dim: bool = False,
+    inspect_plot: bool = False,
+    start_scan: int | None = None,
+    end_scan: int | None = None,
+    suppress_time_warning: bool = False,
+    suppress_latlon_warning: bool = False,
+    start_time_NMEA: bool = False,
+    lat: float | None = None,
+    lon: float | None = None,
+    station: str | None = None,
+    station_from_filename: bool = False,
+    remove_duplicates: bool = True,
 
 ) -> xr.Dataset:
     """

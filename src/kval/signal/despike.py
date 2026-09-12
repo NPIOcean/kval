@@ -8,7 +8,6 @@ Routines for basic outlier editing.
 import numpy as np
 import xarray as xr
 from kval.signal import filt
-from typing import Union, Tuple
 import matplotlib.pyplot as plt
 
 
@@ -19,16 +18,18 @@ def despike_rolling(
     n_std: float,
     dim: str,
     filter_type: str = 'median',
-    min_periods: Union[int, None] = None,
+    min_periods: int | None = None,
     return_ds: bool = True,
     return_index: bool = False,
     plot: bool = False,
     verbose: bool = False,
 
-) -> Union[xr.Dataset,
-           xr.DataArray,
-           Tuple[xr.Dataset, xr.DataArray],
-           Tuple[xr.DataArray, xr.DataArray]]:
+) -> (
+    xr.Dataset
+    | xr.DataArray
+    | tuple[xr.Dataset, xr.DataArray]
+    | tuple[xr.DataArray, xr.DataArray]
+):
     """
     Despike a variable in a dataset by identifying and removing outliers
     based on a rolling mean/median and standard deviation.

@@ -18,7 +18,7 @@ import numpy as np
 import datetime
 from matplotlib.dates import date2num
 from kval.util import time
-from typing import Tuple, Dict, Any, Union
+from typing import Any
 import os
 
 def mat_to_xr_1D(
@@ -26,7 +26,7 @@ def mat_to_xr_1D(
     time_name: str = "time",
     epoch: str = "1970-01-01",
     verbose: bool = True,
-    field_name: Union[str, bool] = None,
+    field_name: str | bool = None,
 ) -> xr.Dataset:
     """
     Converts a MATLAB .mat file to an `xarray.Dataset` with 1D time data.
@@ -111,7 +111,7 @@ def mat_to_xr_2D(
     time_name: str = "time",
     dim2_name_in: str = "PRES",
     dim2_name_out: str = "PRES",
-    field_name: Union[str, bool] = None,
+    field_name: str | bool = None,
     epoch: str = "1970-01-01",
 ) -> xr.Dataset:
     """
@@ -217,7 +217,7 @@ def mat_to_xr_2D(
 def _parse_matfile_to_dict(
     matfile: str,
     verbose: bool = True,
-) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """
     Parse a MATLAB .mat file into dictionaries of data and attributes.
 
@@ -228,7 +228,7 @@ def _parse_matfile_to_dict(
         matfile (str): Path to the .mat file.
 
     Returns:
-        Tuple[Dict[str, Any], Dict[str, Any]]:
+        tuple[dict[str, Any], dict[str, Any]]:
             - data_dict: Dictionary of data variables.
             - attr_dict: Dictionary of global attributes (metadata).
 

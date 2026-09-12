@@ -1,16 +1,15 @@
 '''
-UTIL.FILT.PY
+SIGNAL.FILT.PY
 
 Functions for filtering data.
 '''
 import xarray as xr
 import numpy as np
-from typing import Union
 
 
 def rolling(ds: xr.Dataset, var_name: str, dim: str,
             window_size: int, filter_type: str = 'mean',
-            min_periods: Union[bool, int] = None,
+            min_periods: bool | int = None,
             nan_edges: bool = True) -> xr.Dataset:
     """
     Apply a running mean or median filter on a variable of an xarray Dataset
@@ -28,7 +27,7 @@ def rolling(ds: xr.Dataset, var_name: str, dim: str,
     - filter_type: str, optional
         The type of filter to apply: 'mean' for running mean, 'median' for
         running median, 'sd' for standard deviation. Defaults to 'mean'.
-    - min_periods: Union[bool, int], optional
+    - min_periods: bool | int, optional
         Minimum number of observations in the window required to have a value.
         If an integer, it specifies the minimum number of observations in a
         rolling window.
@@ -76,7 +75,7 @@ def rolling(ds: xr.Dataset, var_name: str, dim: str,
 
 def rolling_sd(ds: xr.Dataset, var_name: str, dim: str,
                window_size: int,
-               min_periods: Union[int, None] = None,
+               min_periods: int | None = None,
                nan_edges: bool = True,) -> xr.DataArray:
     """
     Compute a rolling standard deviation on a specified variable from an

@@ -1,4 +1,3 @@
-from typing import Union, List, Tuple
 from matplotlib.dates import num2date, date2num
 import pandas as pd
 from datetime import datetime, timedelta
@@ -138,8 +137,8 @@ def days_to_ISO8601(days: float) -> str:
 
 
 def matlab_time_to_datetime(
-    matlab_time: Union[float, List[float], Tuple[float], np.ndarray]
-) -> Union[datetime, np.ndarray]:
+    matlab_time: float | list[float] | tuple[float] | np.ndarray
+) -> datetime | np.ndarray:
     """
     Convert Matlab datenum into Python datetime.
     """
@@ -167,8 +166,8 @@ def matlab_time_to_datetime(
 
 
 def matlab_time_to_python_time(
-    matlab_time: Union[float, List[float], Tuple[float], np.ndarray]
-) -> Union[datetime, np.ndarray]:
+    matlab_time: float | list[float] | tuple[float] | np.ndarray
+) -> datetime | np.ndarray:
     """
     Convert MATLAB datenum (days) to Matplotlib dates (days).
 
@@ -188,8 +187,8 @@ def matlab_time_to_python_time(
 
 
 def timestamp_to_matlab_time(
-    timestamp: Union[datetime, List[datetime], Tuple[datetime], np.ndarray]
-) -> Union[float, np.ndarray]:
+    timestamp: datetime | list[datetime] | tuple[datetime] | np.ndarray
+) -> float | np.ndarray:
     """
     Convert Python datetime into Matlab datenum.
     """
@@ -219,7 +218,7 @@ def timestamp_to_matlab_time(
 
 
 def timestamp_to_datenum(
-    timestamps: Union[datetime, np.ndarray], epoch: str = "1970-01-01"
+    timestamps: datetime | np.ndarray, epoch: str = "1970-01-01"
 ) -> np.ndarray:
     """
     Convert a timestamp or an array of timestamps to the number of days since
@@ -247,8 +246,8 @@ def timestamp_to_datenum(
 
 
 def datenum_to_timestamp(
-    datenum: Union[float, np.ndarray], epoch: str = "1970-01-01"
-) -> Union[datetime, np.ndarray]:
+    datenum: float | np.ndarray, epoch: str = "1970-01-01"
+) -> datetime | np.ndarray:
     """
     Convert the number of days since the epoch to a timestamp or an array of
     timestamps.
@@ -324,13 +323,13 @@ def convert_timenum_to_datestring(
 
 
 def time_to_decimal_year(
-        time: Union[datetime, np.datetime64, str, Union[int, float]]
-        ) -> float:
+        time: datetime | np.datetime64 | str | int | float
+) -> float:
     """
     Convert various time formats to a decimal year.
 
     Args:
-        time (Union[datetime.datetime, np.datetime64, str, int, float]):
+        time (datetime.datetime | np.datetime64 | str | int | float):
             The time input which can be:
             - A `datetime.datetime` object.
             - A `numpy.datetime64` object.

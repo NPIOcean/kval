@@ -14,7 +14,6 @@ import re
 from collections import Counter
 import pandas as pd
 import xarray as xr
-from typing import Optional
 import warnings
 
 def nans_to_fill_value(ds: xr.Dataset, fill_value: float = -9999.0) -> xr.Dataset:
@@ -350,7 +349,7 @@ def _get_time_coverage_duration_str(ds):
 
 
 def add_standard_var_attrs(
-    ds: xr.Dataset, override: bool = False, data_type: Optional[str] = None
+    ds: xr.Dataset, override: bool = False, data_type: str | None = None
 ) -> xr.Dataset:
     """
     Add variable attributes to an xarray Dataset, as specified in

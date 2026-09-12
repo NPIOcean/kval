@@ -5,7 +5,7 @@ Wrapper for the Python API for British Geological Survey magnetic field
 calculator (https://github.com/filips123/MagneticFieldCalculator/).
 '''
 
-from typing import Union, Iterable
+from typing import Iterable
 from datetime import datetime
 from pygeomag import GeoMag
 from kval.util import time
@@ -15,7 +15,7 @@ import numpy as np
 def get_declination(
     lat: float,
     lon: float,
-    dates: Iterable[Union[datetime, np.datetime64, str, Union[int, float]]],
+    dates: Iterable[datetime | np.datetime64 | str | int | float],
     altitude: float = 0.0,
     model: str = 'auto',  # Which WMM model to use
 ) -> np.ndarray:
@@ -30,7 +30,7 @@ def get_declination(
         Latitude in decimal degrees.
     lon : float
         Longitude in decimal degrees.
-    dates : Iterable[Union[datetime, np.datetime64, str, Union[int, float]]]
+    dates : Iterable[datetime | np.datetime64 | str | int | float]
         An iterable of time inputs, where each element can be:
         - A `datetime.datetime` object.
         - A `numpy.datetime64` object.
@@ -71,7 +71,7 @@ def get_declination(
 def get_declination_point(
     lat: float,
     lon: float,
-    date: Union[datetime, np.datetime64, str, Union[int, float]],
+    date: datetime | np.datetime64 | str | int | float,
     altitude: float = 0.0,
     model: str = 'auto',  # Which WMM model to use
 ) -> float:
@@ -85,7 +85,7 @@ def get_declination_point(
         Latitude in decimal degrees.
     lon : float
         Longitude in decimal degrees.
-    date : (Union[datetime.datetime, np.datetime64, str, int, float])
+    date: Iterable[datetime | np.datetime64 | str | int | float]
             The time input which can be:
             - A `datetime.datetime` object.
             - A `numpy.datetime64` object.
