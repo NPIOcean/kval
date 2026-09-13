@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 def despike_rolling(
     ds: xr.Dataset,
-    var_name: str,
+    variable: str,
     window_size: int,
     n_std: float,
     dim: str,
@@ -43,7 +43,7 @@ def despike_rolling(
     ----------
     ds : xarray.Dataset
         The dataset containing the variable to despike.
-    var_name : str
+    variable : str
         The name of the variable to despike.
     window_size : int
         The size of the rolling window for calculating the mean/median
@@ -84,59 +84,59 @@ def despike_rolling(
     """
     # Calculate the rolling mean using the specified filter type
     var_mean = filt.rolling(
-        ds, var_name=var_name, dim=dim,
+        ds, variable=variable, dim=dim,
         window_size=window_size, filter_type=filter_type,
         min_periods=min_periods
-    )[var_name]
+    )[variable]
 
     # Calculate the rolling standard deviation
     var_sd = filt.rolling_sd(
-        ds, var_name=var_name, dim=dim,
+        ds, variable=variable, dim=dim,
         window_size=window_size, min_periods=min_periods,
     )
 
     # Identify the outliers based on the standard deviation threshold
     is_outside_criterion = (
-        np.abs(var_mean - ds[var_name].values) > n_std * var_sd)
+        np.abs(var_mean - ds[variable].values) > n_std * var_sd)
 
     # Apply the mask to remove outliers
-    var_despiked = ds[var_name].where(~is_outside_criterion)
+    var_despiked = ds[variable].where(~is_outside_criterion)
 
     # Optional plotting
     if plot:
         fig, ax = plt.subplots(2, 1, sharex=True)
-        ax[0].plot(ds[dim], ds[var_name], '.', color = 'tab:red', ms = 2,
-                   label=f'Original {var_name} data', alpha=0.6)
+        ax[0].plot(ds[dim], ds[variable], '.', color = 'tab:red', ms = 2,
+                   label=f'Original {variable} data', alpha=0.6)
         ax[0].plot(var_mean[dim], var_despiked, 'k',
-                   label=f'Despiked {var_name} data')
-        ax[1].plot(var_mean[dim], np.abs(var_mean - ds[var_name]),
+                   label=f'Despiked {variable} data')
+        ax[1].plot(var_mean[dim], np.abs(var_mean - ds[variable]),
                    label='| Data$-$rolling mean |', lw=1)
         ax[1].plot(var_mean[dim], n_std * var_sd, 'k', lw=0.4,
                    label=f'{n_std} $\\times$ Rolling std')
         ax[1].plot(var_mean[dim][is_outside_criterion],
-                   np.abs(var_mean - ds[var_name])[is_outside_criterion],
+                   np.abs(var_mean - ds[variable])[is_outside_criterion],
                    '.r', label='Labelled as outlier')
         for axn in ax:
             leg = axn.legend(fontsize=9, ncol=1, handlelength = 1, bbox_to_anchor = (1, 0.5))
             leg.set_zorder(0)
             axn.set_xlabel('Index')
-            if 'units' in ds[var_name].attrs:
-                axn.set_ylabel(ds[var_name].attrs['units'])
-        fig.suptitle(f'Despiking `{var_name}` along the dimension `{dim}`:')
+            if 'units' in ds[variable].attrs:
+                axn.set_ylabel(ds[variable].attrs['units'])
+        fig.suptitle(f'Despiking `{variable}` along the dimension `{dim}`:')
         plt.tight_layout()
 
     # Optional printing
     if verbose:
         n_removed = np.sum(is_outside_criterion).item()
         print(
-            f'Removed {n_removed} points from {var_name} after despiking'
+            f'Removed {n_removed} points from {variable} after despiking'
             f' along dimension {dim}.'
         )
 
     # Return options based on flags
     if return_ds:
         ds_updated = ds.copy()
-        ds_updated[var_name] = var_despiked
+        ds_updated[variable] = var_despiked
         if return_index:
             return ds_updated, is_outside_criterion
         return ds_updated

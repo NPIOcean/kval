@@ -7,7 +7,7 @@ import xarray as xr
 import numpy as np
 
 
-def rolling(ds: xr.Dataset, var_name: str, dim: str,
+def rolling(ds: xr.Dataset, variable: str, dim: str,
             window_size: int, filter_type: str = 'mean',
             min_periods: bool | int = None,
             nan_edges: bool = True) -> xr.Dataset:
@@ -18,7 +18,7 @@ def rolling(ds: xr.Dataset, var_name: str, dim: str,
     Parameters:
     - ds: xarray.Dataset
         The dataset containing the variable to filter.
-    - var_name: str
+    - variable: str
         The name of the variable in the dataset to apply the filter on.
     - dim: str
         The dimension along which to apply the filter.
@@ -42,7 +42,7 @@ def rolling(ds: xr.Dataset, var_name: str, dim: str,
         The dataset with the filtered variable, where edge values may be NaN if `nan_edges` is `True`.
     """
     # Extract the variable to be filtered
-    data_var = ds[var_name]
+    data_var = ds[variable]
 
     # Apply the appropriate rolling filter
     if filter_type == 'mean':
@@ -68,12 +68,12 @@ def rolling(ds: xr.Dataset, var_name: str, dim: str,
 
     # Replace the variable in the original dataset with the filtered result
     ds_filt = ds.copy()
-    ds_filt[var_name] = filtered_var
+    ds_filt[variable] = filtered_var
 
     return ds_filt
 
 
-def rolling_sd(ds: xr.Dataset, var_name: str, dim: str,
+def rolling_sd(ds: xr.Dataset, variable: str, dim: str,
                window_size: int,
                min_periods: int | None = None,
                nan_edges: bool = True,) -> xr.DataArray:
@@ -86,7 +86,7 @@ def rolling_sd(ds: xr.Dataset, var_name: str, dim: str,
     ds : xarray.Dataset
         The dataset containing the variable to apply the rolling standard
         deviation.
-    var_name : str
+    variable : str
         The name of the variable in the dataset on which to calculate the
         rolling standard deviation.
     dim : str
@@ -110,7 +110,7 @@ def rolling_sd(ds: xr.Dataset, var_name: str, dim: str,
         specified variable.
     """
     # Extract the variable to be filtered
-    data_var = ds[var_name]
+    data_var = ds[variable]
 
     def nan_std(var, **kwargs):
         '''

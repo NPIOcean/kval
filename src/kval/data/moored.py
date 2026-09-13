@@ -403,7 +403,7 @@ def chop_by_time(
 
 def despike_rolling(
     ds: xr.Dataset,
-    var_name: str,
+     variable: str,
     window_size: int,
     n_std: float,
     dim: str = "TIME",
@@ -424,7 +424,7 @@ def despike_rolling(
     ----------
     ds : xr.Dataset
         Dataset containing the variable to despike.
-    var_name : str
+    variable : str
         Name of the variable to despike.
     window_size : int
         Size of the rolling window.
@@ -458,7 +458,7 @@ def despike_rolling(
 
     ds, is_outside_criterion = despike.despike_rolling(
         ds,
-        var_name,
+        variable,
         window_size,
         n_std,
         dim,
@@ -476,7 +476,7 @@ def despike_rolling(
             f" filter ({filter_type}) by more than {n_std} (rolling) "
             "standard deviations have been removed.")
 
-    ds = append_processing_history(ds, var_name, note, deep_copy=False)
+    ds = append_processing_history(ds, variable, note, deep_copy=False)
 
     return ds
 
@@ -629,7 +629,7 @@ def adjust_time_for_drift(
 # Filtering
 def rolling_mean(
     ds: xr.Dataset,
-    var_name: str,
+     variable: str,
     window_size: int,
     filter_type: str = "mean",
     dim: str = "TIME",
@@ -646,7 +646,7 @@ def rolling_mean(
     ----------
     ds : xr.Dataset
         The dataset containing the variable to filter.
-    var_name : str
+    variable : str
         Name of the variable to apply the filter on.
     window_size : int
         Size of the rolling window.
@@ -670,7 +670,7 @@ def rolling_mean(
 
     ds = filt.rolling(
         ds=ds,
-        var_name=var_name,
+        variable=variable,
         window_size=window_size,
         filter_type=filter_type,
         dim=dim,
@@ -680,7 +680,7 @@ def rolling_mean(
 
     note = (f"A {window_size}-point rolling {filter_type} has been applied.")
 
-    ds = append_processing_history(ds, var_name, note, deep_copy=False)
+    ds = append_processing_history(ds, variable, note, deep_copy=False)
 
     return ds
 
@@ -726,7 +726,7 @@ def threshold_pick(ds: xr.Dataset) -> xr.Dataset:
 
 # Remove points by index
 def remove_points(
-    ds: xr.Dataset, varnm: str, remove_inds, time_var="TIME",
+    ds: xr.Dataset, variable: str, remove_inds, time_var="TIME",
     deep_copy = True,
 ) -> xr.Dataset:
     """
@@ -736,7 +736,7 @@ def remove_points(
     Parameters:
     - ds: xarray.Dataset
       The dataset containing the variable to modify.
-    - varnm: str
+    - variable: str
       The name of the variable to modify.
     - remove_inds: list or array-like
       Indices of points to remove (set to NaN).
@@ -749,7 +749,7 @@ def remove_points(
         ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     ds = edit.remove_points_timeseries(
-        ds=ds, varnm=varnm, remove_inds=remove_inds, time_var=time_var,
+        ds=ds, variable=variable, remove_inds=remove_inds, time_var=time_var,
         deep_copy = deep_copy
     )
 

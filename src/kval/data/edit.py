@@ -16,7 +16,7 @@ from kval.util import internals, index, time, xr_funcs
 import pandas as pd
 
 
-def remove_points_profile(ds: xr.Dataset, varnm: str, TIME_index: int,
+def remove_points_profile(ds: xr.Dataset, variable: str, TIME_index: int,
                           remove_inds, 
                           deep_copy = True) -> xr.Dataset:
     """
@@ -25,7 +25,7 @@ def remove_points_profile(ds: xr.Dataset, varnm: str, TIME_index: int,
     Parameters:
     - ds: xarray.Dataset
       The dataset containing the variable to modify.
-    - varnm: str
+    - variable: str
       The name of the variable to modify.
     - TIME_index: int
       The index along the TIME dimension to modify.
@@ -51,22 +51,22 @@ def remove_points_profile(ds: xr.Dataset, varnm: str, TIME_index: int,
     remove_inds = np.asarray(remove_inds)
 
     # Create a boolean array for removal
-    remove_bool = np.zeros(len(ds[varnm].isel(TIME=TIME_index)), dtype=bool)
+    remove_bool = np.zeros(len(ds[variable].isel(TIME=TIME_index)), dtype=bool)
     remove_bool[remove_inds] = True
 
     # Use the `where` method to set the selected points to NaN
-    ds[varnm].isel(TIME=TIME_index).values[:] = np.where(
-        remove_bool, np.nan, ds[varnm].isel(TIME=TIME_index).values)
+    ds[variable].isel(TIME=TIME_index).values[:] = np.where(
+        remove_bool, np.nan, ds[variable].isel(TIME=TIME_index).values)
 
     # Add a note in the `processing_history` field
     note = (f"Removed {len(remove_inds)} point(s) from the profile at "
             f"TIME index {TIME_index}.")
-    ds = xr_funcs.append_processing_history(ds, varnm, note, deep_copy=False)
+    ds = xr_funcs.append_processing_history(ds, variable, note, deep_copy=False)
 
     return ds
 
 
-def remove_points_timeseries(ds: xr.Dataset, varnm: str,
+def remove_points_timeseries(ds: xr.Dataset, variable: str,
                              remove_inds, time_var='TIME',
                              deep_copy = True) -> xr.Dataset:
     """
@@ -75,7 +75,7 @@ def remove_points_timeseries(ds: xr.Dataset, varnm: str,
     Parameters:
     - ds: xarray.Dataset
       The dataset containing the variable to modify.
-    - varnm: str
+    - variable: str
       The name of the variable to modify.
     - remove_inds: list, array-like, or slice
       Indices of points to remove (set to NaN).
@@ -104,15 +104,15 @@ def remove_points_timeseries(ds: xr.Dataset, varnm: str,
 
 
     # Create a boolean array for removal
-    remove_bool = np.zeros(len(ds[varnm]), dtype=bool)
+    remove_bool = np.zeros(len(ds[variable]), dtype=bool)
     for remove_ind in remove_inds:
         remove_bool[remove_ind] = True
 
     # Use the `where` method to set the selected points to NaN
-    ds[varnm] = ds[varnm].where(~remove_bool)
+    ds[variable] = ds[variable].where(~remove_bool)
 
     note = f"Removed {len(remove_inds)} point(s) from the time series."
-    ds = xr_funcs.append_processing_history(ds, varnm, note, deep_copy=False)
+    ds = xr_funcs.append_processing_history(ds, variable, note, deep_copy=False)
 
     return ds
 

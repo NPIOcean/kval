@@ -52,7 +52,7 @@ def sample_dataset_for_sd():
 def test_rolling_mean(sample_dataset):
     """Test the rolling mean filter."""
     window_size = 3
-    filtered_ds = filt.rolling(sample_dataset, var_name='temperature', dim='time', window_size=window_size, filter_type='mean')
+    filtered_ds = filt.rolling(sample_dataset, variable='temperature', dim='time', window_size=window_size, filter_type='mean')
 
     # Assert that the dimensions are the same
     assert filtered_ds['temperature'].dims == sample_dataset['temperature'].dims
@@ -73,7 +73,7 @@ def test_rolling_mean(sample_dataset):
 def test_rolling_median(sample_dataset):
     """Test the rolling median filter."""
     window_size = 3
-    filtered_ds = filt.rolling(sample_dataset, var_name='temperature', dim='time', window_size=window_size, filter_type='median')
+    filtered_ds = filt.rolling(sample_dataset, variable='temperature', dim='time', window_size=window_size, filter_type='median')
 
     # Assert that the dimensions are the same
     assert filtered_ds['temperature'].dims == sample_dataset['temperature'].dims
@@ -93,8 +93,8 @@ def test_rolling_median(sample_dataset):
 
 def test_rolling_mean_with_nans(sample_dataset_with_nan):
     """Test the rolling nanmean filter with NaNs."""
-    filtered_ds_nonan = filt.rolling(sample_dataset_with_nan, var_name='temperature', dim='time', window_size=3, filter_type='mean', nan_edges=True)
-    filtered_ds_yesnan = filt.rolling(sample_dataset_with_nan, var_name='temperature', dim='time', window_size=3, min_periods=1, filter_type='mean', nan_edges=True)
+    filtered_ds_nonan = filt.rolling(sample_dataset_with_nan, variable='temperature', dim='time', window_size=3, filter_type='mean', nan_edges=True)
+    filtered_ds_yesnan = filt.rolling(sample_dataset_with_nan, variable='temperature', dim='time', window_size=3, min_periods=1, filter_type='mean', nan_edges=True)
 
     # Assert that the dimensions are the same
     assert filtered_ds_nonan['temperature'].dims == sample_dataset_with_nan['temperature'].dims
@@ -117,8 +117,8 @@ def test_rolling_mean_with_nans(sample_dataset_with_nan):
 
 def test_rolling_nanmedian(sample_dataset_with_nan):
     """Test the rolling nanmedian filter with NaNs."""
-    filtered_ds_nonan = filt.rolling(sample_dataset_with_nan, var_name='temperature', dim='time', window_size=3, filter_type='median', nan_edges=True)
-    filtered_ds_yesnan = filt.rolling(sample_dataset_with_nan, var_name='temperature', dim='time', window_size=3, min_periods=1, filter_type='median', nan_edges=True)
+    filtered_ds_nonan = filt.rolling(sample_dataset_with_nan, variable='temperature', dim='time', window_size=3, filter_type='median', nan_edges=True)
+    filtered_ds_yesnan = filt.rolling(sample_dataset_with_nan, variable='temperature', dim='time', window_size=3, min_periods=1, filter_type='median', nan_edges=True)
 
     # Assert that the dimensions are the same
     assert filtered_ds_nonan['temperature'].dims == sample_dataset_with_nan['temperature'].dims
@@ -146,7 +146,7 @@ def test_rolling_nanmedian(sample_dataset_with_nan):
 def test_rolling_sd_basic(sample_dataset_for_sd):
     """Test basic rolling standard deviation computation."""
     ds = sample_dataset_for_sd
-    result = filt.rolling_sd(ds, var_name="signal", dim="time", window_size=5)
+    result = filt.rolling_sd(ds, variable="signal", dim="time", window_size=5)
 
     assert isinstance(result, xr.DataArray), "Result should be a DataArray."
     assert result.count() > 90, "Most values should be non-NaN."
@@ -155,7 +155,7 @@ def test_rolling_sd_nan_edges(sample_dataset_for_sd):
     """Test rolling standard deviation with nan_edges=True."""
     ds = sample_dataset_for_sd
     window_size = 5
-    result = filt.rolling_sd(ds, var_name="signal", dim="time", window_size=window_size, nan_edges=True)
+    result = filt.rolling_sd(ds, variable="signal", dim="time", window_size=window_size, nan_edges=True)
 
     halfwidth = int(np.ceil(window_size / 2))
 
@@ -167,7 +167,7 @@ def test_rolling_sd_nan_handling(sample_dataset_for_sd):
     """Test handling of NaNs in the dataset."""
     ds = sample_dataset_for_sd.copy()
     ds["signal"][10:20] = np.nan  # Introduce NaNs in the dataset
-    result = filt.rolling_sd(ds, var_name="signal", dim="time", window_size=5)
+    result = filt.rolling_sd(ds, variable="signal", dim="time", window_size=5)
 
     # Ensure the result contains NaNs where there is insufficient data
     assert result.isel(time=slice(10, 20)).isnull().all(), "NaN values should propagate in rolling calculation."
@@ -177,7 +177,7 @@ def test_rolling_sd_large_window(sample_dataset_for_sd):
     """Test rolling standard deviation with a large window size."""
     ds = sample_dataset_for_sd
     window_size = 50
-    result = filt.rolling_sd(ds, var_name="signal", dim="time",
+    result = filt.rolling_sd(ds, variable="signal", dim="time",
                              nan_edges=False,
                              window_size=window_size, min_periods=1)
     assert isinstance(result, xr.DataArray), "Result should be a DataArray."
@@ -189,7 +189,7 @@ def test_rolling_sd_small_dataset():
     data = np.random.random(5)
     ds = xr.Dataset({"signal": (["time"], data)}, coords={"time": time})
 
-    result = filt.rolling_sd(ds, var_name="signal", dim="time", window_size=3)
+    result = filt.rolling_sd(ds, variable="signal", dim="time", window_size=3)
 
     assert isinstance(result, xr.DataArray), "Result should be a DataArray."
     assert result.count() == 1, "Only one valid value should be present due to the small dataset size."
