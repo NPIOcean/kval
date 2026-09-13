@@ -30,7 +30,9 @@ from datetime import datetime
 import os
 
 
-def read_rsk(file: str, keep_total_pres: bool = False) -> xr.Dataset:
+def read_rsk(
+    file: str, keep_total_pres: bool = False, patm: float | None = None
+    ) -> xr.Dataset:
     """
     Parse an .rsk file with data from an RBR instrument into an xarray Dataset,
     preserving available metadata and converting units and variable names
@@ -55,10 +57,10 @@ def read_rsk(file: str, keep_total_pres: bool = False) -> xr.Dataset:
         rskdata.open()
         rskdata.readdata()
 
+        if rskdata.channelexists("pressure"):
+            rskdata.deriveseapressure(patm=patm)
         if rskdata.channelexists("conductivity"):
             rskdata.derivesalinity()
-        if rskdata.channelexists("pressure"):
-            rskdata.deriveseapressure()
 
         ds_rsk = rsk_to_xr(rskdata, keep_total_pres=keep_total_pres)
 
