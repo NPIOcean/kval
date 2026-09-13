@@ -153,7 +153,7 @@ def rename_attr(ds, old_name, new_name, verbose=True):
     - For renaming global attributes of the Dataset, use `rename_attr(ds,
       old_name, new_name)`.
     - For renaming attributes of a specific variable within the Dataset, use
-      `rename_attr(D[var_name], old_name, new_name)`.
+      `rename_attr(ds[var_name], old_name, new_name)`.
 
     Example:
     --------
@@ -185,7 +185,7 @@ def add_attrs_from_dict(ds, attr_dict, override=True):
     - For global attributes of the Dataset, use
       `add_attrs_from_dict(dataset, attr_dict)`.
     - For variable-specific attributes within the Dataset,
-      use `add_attrs_from_dict(dataset[var_name], attr_dict)`.
+      use `add_attrs_from_dict(ds[var_name], attr_dict)`.
 
     Parameters:
     - dataset (xarray.Dataset): The dataset to which attributes will be addeds.
