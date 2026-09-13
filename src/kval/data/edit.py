@@ -59,8 +59,8 @@ def remove_points_profile(ds: xr.Dataset, variable: str, TIME_index: int,
         remove_bool, np.nan, ds[variable].isel(TIME=TIME_index).values)
 
     # Add a note in the `processing_history` field
-    note = (f"Removed {len(remove_inds)} point(s) from the profile at "
-            f"TIME index {TIME_index}.")
+    note = (f"Removed {len(remove_inds)} point(s) from the "
+            f"profile at TIME index {TIME_index}.")
     ds = xr_funcs.append_processing_history(ds, variable, note, deep_copy=False)
 
     return ds
@@ -162,8 +162,10 @@ def offset(ds: xr.Dataset, variable: str, offset: float) -> xr.Dataset:
     if 'valid_max' in ds_new[variable].attrs:
         ds_new[variable].attrs['valid_max'] += offset
 
-    ds_new = xr_funcs.append_processing_history(
-        ds_new, variable, f'Applied offset of {offset:+}.', deep_copy=False)
+    units = ds_new[variable].attrs.get('units', '')
+    unit_str = f' {units}' if units else ''
+    note = f'Applied a constant offset of {offset:+}{unit_str} to all values.'
+    ds_new = xr_funcs.append_processing_history(ds_new, variable, note, deep_copy=False)
 
     return ds_new
 
@@ -220,18 +222,20 @@ def threshold(ds: xr.Dataset, variable: str,
         ds_new[variable] = ds_new[variable].where(ds_new[variable] >= min_val)
         ds_new[variable].attrs['valid_min'] = min_val
 
+    units = ds_new[variable].attrs.get('units', '')
+    unit_str = f' {units}' if units else ''
+
     if min_val is not None and max_val is not None:
-        note = f'Rejected values outside the range ({min_val}, {max_val}).'
+        note = f'Rejected values outside the range ({min_val}, {max_val}){unit_str}.'
     elif min_val is not None:
-        note = f'Rejected values below {min_val}.'
+        note = f'Rejected values below {min_val}{unit_str}.'
     elif max_val is not None:
-        note = f'Rejected values above {max_val}.'
+        note = f'Rejected values above {max_val}{unit_str}.'
     else:
         note = None
 
     if note is not None:
-        ds_new = xr_funcs.append_processing_history(
-            ds_new, variable, note, deep_copy=False)
+        ds_new = xr_funcs.append_processing_history(ds_new, variable, note, deep_copy=False)
 
     return ds_new
 
@@ -518,9 +522,17 @@ def linear_drift(
     edge_mode = 'extrapolated' if extrapolate else 'clamped'
     start_label = f'the first data entry ({start_str})' if start_date is None else start_str
     end_label = f'the last data entry ({end_str})' if end_date is None else end_str
-    note = (f'Applied drift {drift_type} linearly increasing from {start_val} '
-            f'to {end_val} from {start_label} to {end_label} '
-            f'({edge_mode} outside window).')
+
+    if factor:
+        value_str = f'{start_val} to {end_val} (dimensionless factor)'
+    else:
+        units = ds_out[variable].attrs.get('units', '')
+        unit_str = f' {units}' if units else ''
+        value_str = f'{start_val}{unit_str} to {end_val}{unit_str}'
+
+    note = (f'Applied a linearly increasing drift {drift_type}, from '
+            f'{value_str}, between {start_label} and {end_label} '
+            f'({edge_mode} outside this window).')
 
     ds_out = xr_funcs.append_processing_history(ds_out, variable, note, deep_copy=False)
 

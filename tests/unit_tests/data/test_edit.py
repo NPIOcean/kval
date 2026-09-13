@@ -112,6 +112,10 @@ def test_threshold_no_modification_needed(mock_dataset):
     assert ds_new['TEMP'].attrs['valid_min'] == -10
     assert ds_new['TEMP'].attrs['valid_max'] == 40
 
+def test_threshold_processing_history_says_set_to_nan(mock_dataset):
+    ds_new = edit.threshold(mock_dataset, 'TEMP', max_val=18, min_val=10)
+    history = ds_new['TEMP'].attrs['processing_history']
+    assert 'Rejected values outside the range (10, 18) degC.' == history
 
 # Test cases for the offset function
 def test_offset_apply_fixed_offset(mock_dataset):
@@ -166,24 +170,35 @@ def test_offset_zero_offset(mock_dataset):
 
 def test_offset_processing_history_created(mock_dataset):
     """A fresh processing_history note should be added, with the actual
-    offset value included."""
+    offset value and the variable's units included."""
     ds_new = edit.offset(mock_dataset, 'TEMP', 5.2)
-    assert ds_new['TEMP'].attrs['processing_history'] == 'Applied offset of +5.2.'
+    assert ds_new['TEMP'].attrs['processing_history'] == (
+        'Applied a constant offset of +5.2 degC to all values.')
 
 def test_offset_processing_history_appends_to_existing(mock_dataset):
     """Calling offset twice should accumulate both notes, not overwrite."""
     ds_step1 = edit.offset(mock_dataset, 'TEMP', 5.2)
     ds_step2 = edit.offset(ds_step1, 'TEMP', -1.0)
     assert ds_step2['TEMP'].attrs['processing_history'] == (
-        'Applied offset of +5.2. Applied offset of -1.0.')
+        'Applied a constant offset of +5.2 degC to all values. '
+        'Applied a constant offset of -1.0 degC to all values.')
 
 def test_offset_processing_history_explicit_sign(mock_dataset):
     """Positive offsets should show a '+' explicitly, negative offsets
     a '-', so the sign is never ambiguous when scanning the note."""
     ds_pos = edit.offset(mock_dataset, 'TEMP', 5.2)
     ds_neg = edit.offset(mock_dataset, 'TEMP', -3.0)
-    assert 'Applied offset of +5.2.' in ds_pos['TEMP'].attrs['processing_history']
-    assert 'Applied offset of -3.0.' in ds_neg['TEMP'].attrs['processing_history']
+    assert 'offset of +5.2 degC' in ds_pos['TEMP'].attrs['processing_history']
+    assert 'offset of -3.0 degC' in ds_neg['TEMP'].attrs['processing_history']
+
+def test_offset_processing_history_no_units_omits_unit(mock_dataset):
+    """If the variable has no units attribute, the note should read
+    cleanly without a dangling space or 'None'."""
+    ds = mock_dataset.copy(deep=True)
+    del ds['TEMP'].attrs['units']
+    ds_new = edit.offset(ds, 'TEMP', 5.2)
+    assert ds_new['TEMP'].attrs['processing_history'] == (
+        'Applied a constant offset of +5.2 to all values.')
 
 def test_offset_processing_history_does_not_affect_other_variables(mock_dataset):
     """Only the targeted variable should get a processing_history note."""
@@ -301,8 +316,11 @@ def test_remove_invalid_index(sample_dataset_remove_pts):
     with pytest.raises(IndexError):
         edit.remove_points_timeseries(ds, varnm, remove_inds)
 
-
-
+def test_remove_points_timeseries_processing_history(sample_dataset_remove_pts):
+    ds = sample_dataset_remove_pts.copy()
+    modified_ds = edit.remove_points_timeseries(ds, 'var', [0, 4])
+    assert modified_ds['var'].attrs['processing_history'] == (
+        'Removed 2 point(s) from the time series.')
 
 # -------------------------
 # Fixtures for replace tests
@@ -532,19 +550,26 @@ def test_linear_drift_numeric_time_with_units(mock_dataset_numeric_time):
     actual_diff = ds_out['TEMP'].values[:, 0] - mock_dataset_numeric_time['TEMP'].values[:, 0]
     np.testing.assert_almost_equal(actual_diff, expected_diff, decimal=5)
 
-
 def test_linear_drift_processing_history_created(mock_dataset):
     ds_out = edit.linear_drift(mock_dataset, 'TEMP', end_val=5, start_val=2)
     assert 'processing_history' in ds_out['TEMP'].attrs
-    assert 'Applied drift offset linearly increasing from 2 to 5' in (
+    assert 'Applied a linearly increasing drift offset, from 2 degC to 5 degC' in (
         ds_out['TEMP'].attrs['processing_history'])
 
 def test_linear_drift_processing_history_accumulates(mock_dataset):
     ds_step1 = edit.linear_drift(mock_dataset, 'TEMP', end_val=5, start_val=2)
     ds_step2 = edit.linear_drift(ds_step1, 'TEMP', end_val=1.5, factor=True, start_val=1)
     history = ds_step2['TEMP'].attrs['processing_history']
-    assert 'Applied drift offset linearly increasing from 2 to 5' in history
-    assert 'Applied drift factor linearly increasing from 1 to 1.5' in history
+    assert 'Applied a linearly increasing drift offset, from 2 degC to 5 degC' in history
+    assert 'Applied a linearly increasing drift factor, from 1 to 1.5 (dimensionless factor)' in history
+
+def test_linear_drift_processing_history_factor_has_no_units(mock_dataset):
+    """A multiplicative (factor=True) drift is dimensionless -- its note
+    should say so explicitly, not attach the variable's units to it."""
+    ds_out = edit.linear_drift(mock_dataset, 'TEMP', end_val=1.5, factor=True, start_val=1)
+    history = ds_out['TEMP'].attrs['processing_history']
+    assert 'dimensionless factor' in history
+    assert 'degC' not in history
 
 def test_linear_drift_processing_history_notes_extrapolate_vs_clamp(mock_dataset):
     ds_clamped = edit.linear_drift(mock_dataset, 'TEMP', end_val=5, extrapolate=False)
