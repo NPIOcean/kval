@@ -53,7 +53,10 @@ def rbr_file(request):
     was_downloaded = False
 
     if not file_path.exists():
-        content = _download_with_retry(RBR_FILE_URLS[file_name])
+        try:
+            content = _download_with_retry(RBR_FILE_URLS[file_name])
+        except requests.exceptions.HTTPError as e:
+            pytest.skip(f"Could not download {file_name} from Zenodo: {e}")
         with open(file_path, "wb") as file:
             file.write(content)
         was_downloaded = True
