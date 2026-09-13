@@ -340,6 +340,9 @@ def test_invalid_time_units(sample_dataset_drift_bad_time_units):
         adjust_time_for_drift(sample_dataset_drift_bad_time_units,
                               seconds=10)
 
+
+# Note: ignoring the warning - don't want to see it when testing
+@pytest.mark.filterwarnings("ignore:TIME coordinate is empty -> Doing nothing:UserWarning")
 def test_empty_dataset():
     """Test adjustment on an empty dataset."""
     ds = xr.Dataset()
