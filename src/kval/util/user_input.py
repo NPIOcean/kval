@@ -12,23 +12,23 @@ from IPython.display import display, clear_output, Markdown
 ## Enter attributes using inteactive widgets
 # Can probably refactor this..
     
-def set_attr_textbox(D, attr, rows=1, cols=50, initial_value = None):
+def set_attr_textbox(ds, attr, rows=1, cols=50, initial_value = None):
     """
     Create a widget for setting a text attribute with a text box.
 
     Parameters:
-        D (dict): The dictionary to update with the entered text for the attribute.
+        ds (xr.Dataset): The dataset to update with the entered text for the attribute.
         attr (str): The attribute name.
         rows (int): The number of rows for the text box (default is 1).
         cols (int): The number of columns for the text box (default is 50).
 
     Returns:
-        dict: The updated dictionary with the entered text for the attribute.
+        xr.Dataset: The updated dataset with the entered text for the attribute.
     """
 
-    def _on_button_click(b, D, attr, text_input):
+    def _on_button_click(b, ds, attr, text_input):
         clear_output(wait=True)
-        D.attrs[attr] = text_input.value
+        ds.attrs[attr] = text_input.value
 
         # Close the widget
         vbox.close()
@@ -48,7 +48,7 @@ def set_attr_textbox(D, attr, rows=1, cols=50, initial_value = None):
     
     # Attach the function to the button's click event using a lambda function
     enter_button.on_click(
-        lambda b: _on_button_click(b, D, attr, text_input))
+        lambda b: _on_button_click(b, ds, attr, text_input))
     
     # Create a VBox to arrange the prompt, text box, and button
     vbox = widgets.VBox([widgets.HTML(value=prompt1), widgets.HTML(value=prompt2),
@@ -57,27 +57,27 @@ def set_attr_textbox(D, attr, rows=1, cols=50, initial_value = None):
     # Display the VBox
     display(vbox)
     
-    return D  # Return the modified dictionary
+    return ds  # Return the modified dataset
 
 
-def set_var_attr_textbox(D, varnm, attr, rows=1, cols=50, initial_value = None):
+def set_var_attr_textbox(ds, varnm, attr, rows=1, cols=50, initial_value = None):
     """
     Create a widget for setting a variable text attribute with a text box.
 
     Parameters:
-        D (dict): The dictionary containing the variable and its attributes.
+        ds (xr.Dataset): The dataset containing the variable and its attributes.
         varnm (str): The variable name.
         attr (str): The attribute name.
         rows (int): The number of rows for the text box (default is 1).
         cols (int): The number of columns for the text box (default is 50).
 
     Returns:
-        dict: The updated dictionary with the entered text for the attribute.
+        xr.Dataset: The updated dataset with the entered text for the attribute.
     """
 
     def on_button_click(b):
         clear_output(wait=True)
-        D[varnm].attrs[attr] = text_input.value
+        ds[varnm].attrs[attr] = text_input.value
 
         # Close the widget
         vbox.close()
@@ -105,29 +105,29 @@ def set_var_attr_textbox(D, varnm, attr, rows=1, cols=50, initial_value = None):
     # Display the VBox
     display(vbox)
     
-    return D  # Return the modified dictionary
+    return ds  # Return the modified dataset
 
 
 
-def set_attr_pulldown(D, attr, options_with_comments, initial_value = None):
+def set_attr_pulldown(ds, attr, options_with_comments, initial_value = None):
     """
     Create a widget for setting an attribute with a pulldown menu and optional comments.
 
     Parameters:
-        D (dict): The dictionary to update with the selected attribute value.
+        ds (xr.Dataset): The dataset to update with the selected attribute value.
         attr (str): The attribute name.
         options_with_comments (list or list of lists): List of options for the pulldown menu.
             If comments are available, it should be a list of lists where each inner list contains
             the option and its associated comment. If no comments, it can be a simple list of options.
 
     Returns:
-        dict: The updated dictionary with the selected attribute value.
+        xr.Dataset: The updated dataset with the selected attribute value.
 
     """
     def on_button_click(b):
         selected_value = dropdown.value
         if selected_value is not None:
-            D.attrs[attr] = selected_value
+            ds.attrs[attr] = selected_value
         else:
             # Handle the case when no option is selected, e.g., show an error message
             pass
@@ -174,17 +174,17 @@ def set_attr_pulldown(D, attr, options_with_comments, initial_value = None):
 
     display(vbox)
 
-    return D
+    return ds
 
 
 
 
-def set_var_attr_pulldown(D, varnm, attr, options_with_comments, initial_value = None):
+def set_var_attr_pulldown(ds, varnm, attr, options_with_comments, initial_value = None):
     """
     Create a widget for setting a variable attribute with a pulldown menu and optional comments.
 
     Parameters:
-        D (dict): The dictionary containing the variable and its attributes.
+        ds (xr.Dataset): The dataset containing the variable and its attributes.
         varnm (str): The variable name.
         attr (str): The attribute name.
         options_with_comments (list or list of lists): List of options for the pulldown menu.
@@ -192,13 +192,13 @@ def set_var_attr_pulldown(D, varnm, attr, options_with_comments, initial_value =
             the option and its associated comment. If no comments, it can be a simple list of options.
 
     Returns:
-        dict: The updated dictionary with the selected attribute value.
+        xr.Dataset: The updated dataset with the selected attribute value.
 
     """
     def on_button_click(b):
         selected_value = dropdown.value
         if selected_value is not None:
-            D[varnm].attrs[attr] = selected_value
+            ds[varnm].attrs[attr] = selected_value
         else:
             # Handle the case when no option is selected, e.g., show an error message
             pass
@@ -245,5 +245,4 @@ def set_var_attr_pulldown(D, varnm, attr, options_with_comments, initial_value =
 
     display(vbox)
 
-    return D
-
+    return ds

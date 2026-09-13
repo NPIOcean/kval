@@ -15,7 +15,7 @@ class hand_remove_points:
     A class for interactive removal of data points from CTD profiles
 
     Parameters:
-    - d (xarray.Dataset): The dataset containing the CTD data.
+    - ds (xarray.Dataset): The dataset containing the CTD data.
     - varnm (str): The name of the variable to visualize and edit (e.g. 'TEMP1', 'CHLA').
     - station (str): The name of the station (E.g. '003', '012_01', 'AT290', 'StationA').
 
@@ -29,32 +29,32 @@ class hand_remove_points:
     # Check that we in a notebook and with the ipympl backend..
     # (raise a warning otherwise)
 
-    def __init__(self, d, varnm, TIME_index):
+    def __init__(self, ds, varnm, TIME_index):
         """
         Initialize the HandRemovePoints instance.
 
         Parameters:
-        - d (xarray.Dataset): The dataset containing the data.
+        - ds (xarray.Dataset): The dataset containing the data.
         - varnm (str): The name of the variable to visualize and edit.
         - station (str): The name of the station.
         """
         internals.check_interactive()
 
-        if varnm not in d.data_vars:
+        if varnm not in ds.data_vars:
             raise Exception(f'Invalid variable ("{varnm}")')
 
         self.TIME_index = TIME_index
 
         self.varnm = varnm
-        self.d = d
+        self.ds = ds
 
-        self.var_data = d.isel(TIME=TIME_index)[varnm]
-        if 'STATION' in d.keys():
-            self.station = d.isel(TIME=TIME_index).STATION.item()
+        self.var_data = ds.isel(TIME=TIME_index)[varnm]
+        if 'STATION' in ds.keys():
+            self.station = ds.isel(TIME=TIME_index).STATION.item()
         else:
             self.station = 'N/A'
-        self.PRES = d.PRES
-        self.Npres = len(d.PRES)
+        self.PRES = ds.PRES
+        self.Npres = len(ds.PRES)
 
         self.fig, self.ax = plt.subplots()
 
@@ -65,10 +65,10 @@ class hand_remove_points:
         xlims = self.ax.get_xlim()
         self.ax.set_xlim(xlims)
         self.ax.invert_yaxis()
-        self.ax.set_xlabel(f'{varnm} [{self.d[varnm].units}]')
+        self.ax.set_xlabel(f'{varnm} [{self.ds[varnm].units}]')
         self.ax.set_ylabel(f'PRES [{self.PRES.units}]')
         self.ax.grid()
-        station_time_string = time.convert_timenum_to_datetime(self.d.TIME.values[TIME_index], d.TIME.units)
+        station_time_string = time.convert_timenum_to_datetime(self.ds.TIME.values[TIME_index], ds.TIME.units)
         self.fig.canvas.header_visible = False  # Hide the figure header
         self.ax.set_title(f'Station: {self.station}: {station_time_string}')
         plt.tight_layout()
@@ -247,15 +247,15 @@ class hand_remove_points:
         """
 
         # Indexer used to access this specific profile
-        time_loc = dict(TIME=self.d['TIME'].isel(TIME=self.TIME_index))
+        time_loc = dict(TIME=self.ds['TIME'].isel(TIME=self.TIME_index))
         # Set remove-flagged indices to NaN
 
         ## HERE: CALL XR FUNCTION AND PRODUCE EXACT RECORD!
-        #self.d[self.varnm].loc[time_loc] = np.where(self.remove_bool,
-         #                           np.nan, self.d[self.varnm].loc[time_loc])
+        #self.ds[self.varnm].loc[time_loc] = np.where(self.remove_bool,
+         #                           np.nan, self.ds[self.varnm].loc[time_loc])
 
         self.remove_inds = np.where(self.remove_bool)[0]
-        self.d = edit.remove_points_profile(self.d, self.varnm, self.TIME_index, self.remove_inds, 
+        self.ds = edit.remove_points_profile(self.ds, self.varnm, self.TIME_index, self.remove_inds, 
                                             deep_copy = False)
 
 
@@ -265,19 +265,19 @@ class hand_remove_points:
 
 
         # Add info as a variable attribute
-        if 'manual_editing' in self.d[self.varnm].attrs.keys():
-            previous_edits = int(self.d[self.varnm].attrs['manual_editing'].split()[0])
+        if 'manual_editing' in self.ds[self.varnm].attrs.keys():
+            previous_edits = int(self.ds[self.varnm].attrs['manual_editing'].split()[0])
             total_edits = previous_edits + self.points_removed
-            self.d[self.varnm].attrs['manual_editing'] = (
+            self.ds[self.varnm].attrs['manual_editing'] = (
                f'{total_edits} data points have been removed '
                 'from this variable based on visual inspection.')
         else:
-            self.d[self.varnm].attrs['manual_editing'] = (
+            self.ds[self.varnm].attrs['manual_editing'] = (
                f'{self.points_removed} data points have been '
                 'removed from this variable based on visual inspection.')
             if self.points_removed==1:
-                self.d[self.varnm].attrs['manual_editing']  = (
-                    self.d[self.varnm].attrs['manual_editing'].replace(
+                self.ds[self.varnm].attrs['manual_editing']  = (
+                    self.ds[self.varnm].attrs['manual_editing'].replace(
                         'points have', 'point has')
                     )
 
@@ -321,12 +321,12 @@ class hand_remove_points:
 ################################################################################
 
 
-def apply_offset(D):
+def apply_offset(ds):
     """
     Apply an offset to selected variables in a given xarray Dataset.
 
     Parameters:
-    - D (xarray.Dataset): The dataset to which the offset will be applied.
+    - ds (xarray.Dataset): The dataset to which the offset will be applied.
 
     Displays interactive widgets for selecting the variable, choosing the application scope
     (all stations or a single station), entering the offset value, and applying or exiting.
@@ -338,7 +338,7 @@ def apply_offset(D):
     # (raise a warning otherwise)
     internals.check_interactive()
 
-    vars = list(D.data_vars.keys())
+    vars = list(ds.data_vars.keys())
 
     var_buttons = widgets.RadioButtons(
         options=vars,
@@ -364,8 +364,8 @@ def apply_offset(D):
 
     # Dropdown for selecting a single profile
     station_dropdown = widgets.Dropdown(
-        options=list(D.STATION.values) if 'STATION' in D else [],
-        value=D.STATION.values[0] if 'STATION' in D else None,
+        options=list(ds.STATION.values) if 'STATION' in ds else [],
+        value=ds.STATION.values[0] if 'STATION' in ds else None,
         disabled=False,
         style={'description_width': 'initial'}
     )
@@ -395,7 +395,7 @@ def apply_offset(D):
     # Function to update the description of value_textbox
     def update_description(change):
         selected_variable = change['new']
-        units = D[selected_variable].attrs.get('units', 'unknown')
+        units = ds[selected_variable].attrs.get('units', 'unknown')
         value_label.value = f'Value of offset ({units}):'
 
     def on_apply_button_click(change):
@@ -403,24 +403,24 @@ def apply_offset(D):
             if value_textbox.value:
                 varnm_sel = var_buttons.value
                 offset_value = float(value_textbox.value)
-                units = D[varnm_sel].attrs.get('units', 'unknown')
+                units = ds[varnm_sel].attrs.get('units', 'unknown')
 
                 if station_buttons.value == 'Single station →':
                     station_sel = station_dropdown.value
                     station_string = f'station {station_sel}'
-                    time_at_station = D['TIME'].where(D['STATION'] == station_sel, drop=True).values[0]
-                    D[varnm_sel].loc[{'TIME': time_at_station}] += offset_value
+                    time_at_station = ds['TIME'].where(ds['STATION'] == station_sel, drop=True).values[0]
+                    ds[varnm_sel].loc[{'TIME': time_at_station}] += offset_value
 
                 else:
                     station_string = 'all stations'
-                    D_offset = ctd.offset(D.copy(), varnm_sel, offset_value)
-                    D[varnm_sel] = D_offset[varnm_sel]
+                    ds_offset = ctd.offset(ds.copy(), varnm_sel, offset_value)
+                    ds[varnm_sel] = ds_offset[varnm_sel]
 
                 offset_metadata = f"Applied offset of {offset_value} [{units}] ({station_string})"
-                if 'applied_offset' in D[varnm_sel].attrs:
-                    D[varnm_sel].attrs['applied_offset'] += f'\n{offset_metadata}'
+                if 'applied_offset' in ds[varnm_sel].attrs:
+                    ds[varnm_sel].attrs['applied_offset'] += f'\n{offset_metadata}'
                 else:
-                    D[varnm_sel].attrs['applied_offset'] = offset_metadata
+                    ds[varnm_sel].attrs['applied_offset'] = offset_metadata
 
                 var_buttons.close()
                 hbox_station.close()
@@ -474,7 +474,7 @@ class drop_stations_pick:
     Interactive class for dropping selected time points from an xarray Dataset based on the value of STATION(TIME).
 
     Parameters:
-    - D (xarray.Dataset): The dataset from which time points will be dropped.
+    - ds (xarray.Dataset): The dataset from which time points will be dropped.
 
     Displays an interactive widget with checkboxes for each time point, showing the associated STATION.
     Users can select time points to remove. The removal is performed by clicking the "Drop time points"
@@ -490,20 +490,20 @@ class drop_stations_pick:
 
 
 
-    def __init__(self, D):
+    def __init__(self, ds):
 
 
         # Check that we in a notebook and with the ipympl backend..
         # (raise a warning otherwise)
         internals.check_interactive()
 
-        self.D = D
+        self.ds = ds
         self.selected_time_points = []
         self.max_stations_per_row = 3
         self.checkbox_spacing = '0px'  # Adjust this value to control spacing
 
         # Create Checkbox widgets with STATION labels
-        self.checkbox_widgets = [widgets.Checkbox(description=str(D['STATION'].sel(TIME=time_point).item()), indent=False) for time_point in D['TIME'].values]
+        self.checkbox_widgets = [widgets.Checkbox(description=str(ds['STATION'].sel(TIME=time_point).item()), indent=False) for time_point in ds['TIME'].values]
 
         # Calculate the number of checkboxes per row
         checkboxes_per_row = min(self.max_stations_per_row, len(self.checkbox_widgets))
@@ -533,7 +533,7 @@ class drop_stations_pick:
         self.exit_button = widgets.ToggleButton(value=False, description='Exit', button_style='danger')
 
         # Attach button event handlers
-        self.remove_button.observe(lambda change: self.on_remove_button_click(change, D), names='value')
+        self.remove_button.observe(lambda change: self.on_remove_button_click(change, ds), names='value')
         self.exit_button.observe(self.on_exit_button_click, names='value')
 
         # Layout for buttons
@@ -542,7 +542,7 @@ class drop_stations_pick:
 
         # Function to handle checkbox changes
         def handle_checkbox_change(change):
-            self.selected_time_points = [time_point for checkbox, time_point in zip(self.checkbox_widgets, D['TIME'].values) if checkbox.value]
+            self.selected_time_points = [time_point for checkbox, time_point in zip(self.checkbox_widgets, ds['TIME'].values) if checkbox.value]
             print(f"Selected time points: {', '.join(map(str, self.selected_time_points))}")
 
         # Attach the handle_checkbox_change function to the observe method of each checkbox
@@ -555,24 +555,24 @@ class drop_stations_pick:
         display(self.hbox_buttons)
         display(self.output_widget)
 
-    def on_remove_button_click(self, change, D):
+    def on_remove_button_click(self, change, ds):
         if change['new']:
             stations_removed = []
 
             for time_point in self.selected_time_points:
-                for variable in D.variables:
-                    if 'TIME' in D[variable].dims:
+                for variable in ds.variables:
+                    if 'TIME' in ds[variable].dims:
                         stations_removed.append(f"{variable}_"
-                                f"{str(self.D.STATION.sel(TIME=self.D['TIME'] == time_point).values[0])}")
+                                f"{str(self.ds.STATION.sel(TIME=self.ds['TIME'] == time_point).values[0])}")
 
             # Perform the removal after collecting all items to remove
             for time_point in self.selected_time_points:
-                for variable in D.variables:
-                    if 'TIME' in D[variable].dims:
-                        index_to_remove = np.where(D['TIME'].values == time_point)[0]
+                for variable in ds.variables:
+                    if 'TIME' in ds[variable].dims:
+                        index_to_remove = np.where(ds['TIME'].values == time_point)[0]
 
                         # Remove the corresponding values from the variable
-                        del D[variable][index_to_remove]
+                        del ds[variable][index_to_remove]
 
             self.close_widgets()
             with self.output_widget:
@@ -595,7 +595,3 @@ class drop_stations_pick:
         #self.output_widget.close()
         for checkbox in self.checkbox_widgets:
             checkbox.close()
-
-
-#########################################################################
-

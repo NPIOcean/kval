@@ -1606,7 +1606,7 @@ def to_mat(ds: xr.Dataset, outfile: str, simplify: bool = False) -> None:
 
     # Also transposing dimensions to PRES, TIME for ease of plotting etc in
     # MATLAB.
-    matfile.xr_to_mat(ds_wo_proc.transpose(), outfile, simplify=simplify)
+    matfile.xr_to_mat(ds.transpose(), outfile, simplify=simplify)
 
 
 def check_metadata(ds: xr.Dataset | str) -> None:

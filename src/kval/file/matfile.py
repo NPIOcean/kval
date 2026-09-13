@@ -367,14 +367,14 @@ def _parse_time(data_dict, time_name="time"):
 
 
 
-def xr_to_mat(D, outfile, simplify=False):
+def xr_to_mat(ds, outfile, simplify=False):
     """
     Convert an xarray.Dataset to a MATLAB .mat file.
 
     A field 'TIME_mat' with Matlab datenums is added along with the data.
 
     Parameters:
-    - D (xarray.Dataset): Input dataset to be converted.
+    - ds (xarray.Dataset): Input dataset to be converted.
     - outfile (str): Output file path for the MATLAB .mat file. If the path
       doesn't end with '.mat', it will be appended.
     - simplify (bool, optional): If True, simplify the dataset by extracting
@@ -386,24 +386,24 @@ def xr_to_mat(D, outfile, simplify=False):
     None: The function saves the dataset as a MATLAB .mat file.
 
     Example:
-    >>> xr_to_mat(D, 'output_matfile', simplify=True)
+    >>> xr_to_mat(ds, 'output_matfile', simplify=True)
     """
 
-    time_epoch = D.TIME.units.upper().replace("DAYS SINCE ", "")[:11]
-    time_stamp = time.datenum_to_timestamp(D.TIME, D.TIME.units)
+    time_epoch = ds.TIME.units.upper().replace("DAYS SINCE ", "")[:11]
+    time_stamp = time.datenum_to_timestamp(ds.TIME, ds.TIME.units)
     time_mat = time.timestamp_to_matlab_time(time_stamp)
 
-    data_dict = D.to_dict()
+    data_dict = ds.to_dict()
 
     if simplify:
-        ds = {}
+        simplified_dict = {}
         for sub_dict_name in ["coords", "data_vars"]:
             sub_dict = data_dict[sub_dict_name]
             for varnm, item in sub_dict.items():
-                ds[varnm] = sub_dict[varnm]["data"]
+                simplified_dict[varnm] = sub_dict[varnm]["data"]
 
-        ds["TIME_mat"] = time_mat
-        data_dict = ds
+        simplified_dict["TIME_mat"] = time_mat
+        data_dict = simplified_dict
         simple_str = " (simplified)"
     else:
         data_dict["coords"]["TIME_mat"] = time_mat

@@ -155,7 +155,7 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
         SBE_proc_times += [sbe_timestamp]
 
         if first:
-            N = n
+            ds = n
             # Want to keep track of whether we use different
             # start_time sources
             start_time_source = n.start_time_source
@@ -164,12 +164,12 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
         else:
             if n.start_time_source != start_time_source:
                 different_start_time_sources = True
-            N = xr.concat([N, n], dim='TIME', data_vars="all", join='outer')
+            ds = xr.concat([ds, n], dim='TIME', data_vars="all", join='outer')
 
 
     ### CHECK IF ANY SENSORS CHANGED
     # Modify metadata if they did
-    for varnm in list(N.data_vars) + ['PRES']:
+    for varnm in list(ds.data_vars) + ['PRES']:
         caldates, sns, stations = [], [], []
 
         for n in nc_files:
@@ -197,16 +197,18 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
             if len(caldates_unique)==1:
                 caldates_unique = [caldates_unique] + [caldates_unique]
 
-            N = xr_funcs.append_processing_history(
-                N, varnm, 'Sensors changed underway.', deep_copy=False)
-            
+            if 'comment' in ds[varnm].attrs:
+                comment_0 = ds[varnm].comment
+            else:
+                comment_0 = ''
+            ds[varnm].attrs['comment'] = comment_0 + ' Sensors changed underway.'
             where_sensor_A = np.array(stations)[np.array(sns)==sns_unique[0]]
             where_sensor_B = np.array(stations)[np.array(sns)==sns_unique[1]]
-            N[varnm].attrs['stations_A'] = ', '.join(where_sensor_A)
-            N[varnm].attrs['stations_B'] = ', '.join(where_sensor_B)
-            N[varnm].attrs['sensor_calibration_date'] = (
+            ds[varnm].attrs['stations_A'] = ', '.join(where_sensor_A)
+            ds[varnm].attrs['stations_B'] = ', '.join(where_sensor_B)
+            ds[varnm].attrs['sensor_calibration_date'] = (
                 f'A: {caldates_unique[0]}, B: {caldates_unique[1]}')
-            N[varnm].attrs['sensor_serial_number'] = (
+            ds[varnm].attrs['sensor_serial_number'] = (
                 f'A: {sns_unique[0]}, B: {sns_unique[1]}')
         elif len(sns_unique)>2:
             print(f'NOTE: More than 2 sensors were used for the variable {varnm}. '
@@ -218,20 +220,20 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     # Transpose so that variables are structured like (TIME, PRES) rather than
     # (PRES, TIME). Convenient when plotting etc.
     # **Note**: Dropping doing this because CF conventions seem to require T first
-    # N = N.transpose()
+    # ds = ds.transpose()
 
     # Sort chronologically
-    N = N.sortby('TIME')
+    ds = ds.sortby('TIME')
 
     # Add some standard metadata to the measurement variables
-    N = _add_standard_variable_attributes(N)
+    ds = _add_standard_variable_attributes(ds)
 
     # Set LATITUTDE, LONGITUDE and STATION as auxiliary coordinates (if available)
-    N = N.set_coords([v for v in ['LATITUDE', 'LONGITUDE', 'STATION'] if v in N])
+    ds = ds.set_coords([v for v in ['LATITUDE', 'LONGITUDE', 'STATION'] if v in ds])
 
     # Add some metadata to the STATION variable
-    if 'STATION' in N.data_vars:
-        N['STATION'].attrs = {'long_name' : 'CTD station ID',
+    if 'STATION' in ds.data_vars:
+        ds['STATION'].attrs = {'long_name' : 'CTD station ID',
                               'cf_role':'profile_id'}
 
     # Warn the user if we used different sources for profile start time
@@ -244,26 +246,26 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
 
 
     # Generalize (insert "e.g.") in attributes with specific file names
-    N.attrs['source_file'] = f"E.g. {N.attrs['source_file']}"
-    SBEproc_file_ind = N.SBE_processing.rfind('Raw data read from ')+19
-    N.attrs['SBE_processing'] = (N.SBE_processing[:SBEproc_file_ind]
-                + 'e.g. ' + N.SBE_processing[SBEproc_file_ind:])
+    ds.attrs['source_file'] = f"E.g. {ds.attrs['source_file']}"
+    SBEproc_file_ind = ds.SBE_processing.rfind('Raw data read from ')+19
+    ds.attrs['SBE_processing'] = (ds.SBE_processing[:SBEproc_file_ind]
+                + 'e.g. ' + ds.SBE_processing[SBEproc_file_ind:])
 
     # Add date *ranges* to the history entries if we have different dates
-    N = _replace_history_dates_with_ranges(N, post_proc_times, SBE_proc_times)
+    ds = _replace_history_dates_with_ranges(ds, post_proc_times, SBE_proc_times)
 
     # Delete some non-useful attributes (that are only relevant to individual
     # profiles)
     del_attrs = ['SBE_processing_date', 'start_time_source', 'station',
                  'start_time', 'SBE_flags_applied', 'latitude', 'longitude']
     for attr in del_attrs:
-        del N.attrs[attr]
+        del ds.attrs[attr]
 
     # Set the featureType attribute
-    N.attrs['featureType'] = 'profile'
-    N.PRES.attrs['coverage_content_type'] = 'coordinate'
+    ds.attrs['featureType'] = 'profile'
+    ds.PRES.attrs['coverage_content_type'] = 'coordinate'
 
-    return N
+    return ds
 
 
 
@@ -352,7 +354,7 @@ def join_cruise_btl(datasets, verbose = True,
         SBE_proc_times += [sbe_timestamp]
 
         if first:
-            N = n
+            ds = n
             # Want to keep track of whether we use different
             # start_time sources
             start_time_source = n.start_time_source
@@ -361,11 +363,11 @@ def join_cruise_btl(datasets, verbose = True,
         else:
             if n.start_time_source != start_time_source:
                 different_start_time_sources = True
-            N = xr.concat([N, n], dim = 'TIME', data_vars="all")
+            ds = xr.concat([ds, n], dim = 'TIME', data_vars="all")
 
     ### CHECK IF ANY SENSORS CHANGED
     # Modify metadata if they did
-    for varnm in list(N.data_vars) + ['NISKIN_NUMBER']:
+    for varnm in list(ds.data_vars) + ['NISKIN_NUMBER']:
         caldates, sns, units, stations = [], [], [], []
 
         for n in datasets:
@@ -386,35 +388,35 @@ def join_cruise_btl(datasets, verbose = True,
         caldates_unique = unique_entries = list(set(caldates_filtered))
 
         if len(sns_unique)==2:
-            if 'comment' in N[varnm].attrs:
-                comment_0 = N[varnm].comment
+            if 'comment' in ds[varnm].attrs:
+                comment_0 = ds[varnm].comment
             else:
                 comment_0 = ''
-            N[varnm].attrs['comment'] = comment_0 + ' Sensors changed underway.'
+            ds[varnm].attrs['comment'] = comment_0 + ' Sensors changed underway.'
             where_sensor_A = np.array(stations)[np.array(sns)==sns_unique[0]]
             where_sensor_B = np.array(stations)[np.array(sns)==sns_unique[1]]
-            N[varnm].attrs['stations_A'] = ', '.join(where_sensor_A)
-            N[varnm].attrs['stations_B'] = ', '.join(where_sensor_B)
-            N[varnm].attrs['sensor_calibration_date'] = (
+            ds[varnm].attrs['stations_A'] = ', '.join(where_sensor_A)
+            ds[varnm].attrs['stations_B'] = ', '.join(where_sensor_B)
+            ds[varnm].attrs['sensor_calibration_date'] = (
                 f'A: {caldates_unique[0]}, B: {caldates_unique[1]}')
-            N[varnm].attrs['sensor_serial_number'] = (
+            ds[varnm].attrs['sensor_serial_number'] = (
                 f'A: {sns_unique[0]}, B: {sns_unique[1]}')
 
     ### FINAL TOUCHES AND EXPORTS
 
     # Transpose so that variables are structured like (TIME, PRES) rather than
     # (PRES, TIME). Convenient when plotting etc.
-    N = N.transpose()
+    ds = ds.transpose()
 
     # Sort chronologically
-    N = N.sortby('TIME')
+    ds = ds.sortby('TIME')
 
     # Add some standard metadata to the measurement variables
-    N = _add_standard_variable_attributes(N)
+    ds = _add_standard_variable_attributes(ds)
 
     # Add some metadata to the STATION variable
-    if 'STATION' in N.data_vars:
-        N['STATION'].attrs = {'long_name' : 'CTD station ID',
+    if 'STATION' in ds.data_vars:
+        ds['STATION'].attrs = {'long_name' : 'CTD station ID',
                               'cf_role':'profile_id'}
 
     # Warn the user if we used different sources for profile start time
@@ -426,23 +428,23 @@ def join_cruise_btl(datasets, verbose = True,
             'the TIME field.')
 
     # Add a cruise variable
-    if 'cruise' in N.attrs:
-        cruise = N.cruise_name
+    if 'cruise' in ds.attrs:
+        cruise = ds.cruise_name
     else:
         cruise = '!! CRUISE !!'
 
-    N['CRUISE'] =  xr.DataArray(cruise, dims=())
-    N['CRUISE'].attrs = {'long_name':'Cruise ID',}
+    ds['CRUISE'] =  xr.DataArray(cruise, dims=())
+    ds['CRUISE'].attrs = {'long_name':'Cruise ID',}
 
     # Generalize (insert "e.g.") in attributes with specific file names
-    N.attrs['source_file'] = f"E.g. {N.attrs['source_file']}"
-    SBEproc_file_ind = N.SBE_processing.rfind('Raw data read from ')+19
-    N.attrs['SBE_processing'] = (N.SBE_processing[:SBEproc_file_ind]
-                + 'e.g. ' + N.SBE_processing[SBEproc_file_ind:])
+    ds.attrs['source_file'] = f"E.g. {ds.attrs['source_file']}"
+    SBEproc_file_ind = ds.SBE_processing.rfind('Raw data read from ')+19
+    ds.attrs['SBE_processing'] = (ds.SBE_processing[:SBEproc_file_ind]
+                + 'e.g. ' + ds.SBE_processing[SBEproc_file_ind:])
 
     # Add date *ranges* to the history entries if we have different dates
     # post_proc_fimes = None for btl files..
-    N = _replace_history_dates_with_ranges(N, None, SBE_proc_times)
+    ds = _replace_history_dates_with_ranges(ds, None, SBE_proc_times)
 
     # Delete some non-useful attributes (that are only relevant to individual
     # profiles)
@@ -450,13 +452,13 @@ def join_cruise_btl(datasets, verbose = True,
                  'start_time', 'SBE_flags_applied', 'latitude', 'longitude']
 
     for attr in del_attrs:
-        if attr in N.attrs:
-            del N.attrs[attr]
+        if attr in ds.attrs:
+            del ds.attrs[attr]
 
     # Set the featureType attribute
-    N.attrs['featureType'] = 'profile'
+    ds.attrs['featureType'] = 'profile'
 
-    return N
+    return ds
 
 
 
@@ -633,7 +635,7 @@ def _datasets_from_btllist(btl_list,
 
 
 
-def _replace_history_dates_with_ranges(D, post_proc_times, SBE_proc_times):
+def _replace_history_dates_with_ranges(ds, post_proc_times, SBE_proc_times):
     '''
     When joining files: Change the history string to show time *ranges*,
     e.g.
@@ -646,31 +648,31 @@ def _replace_history_dates_with_ranges(D, post_proc_times, SBE_proc_times):
     if post_proc_times:
         ppr_min, ppr_max = np.min(post_proc_times), np.max(post_proc_times)
     sbe_min, sbe_max = np.min(SBE_proc_times), np.max(SBE_proc_times)
-    ctd_min, ctd_max = D.TIME.min(), D.TIME.max()
+    ctd_min, ctd_max = ds.TIME.min(), ds.TIME.max()
 
     date_fmt = '%Y-%m-%d'
 
     if ctd_max>ctd_min:
         ctd_range = (
-            f'{cftime.num2date(ctd_min, D.TIME.units).strftime(date_fmt)}'
-            f' to {cftime.num2date(ctd_max, D.TIME.units).strftime(date_fmt)}')
-        D.attrs['history'] = ctd_range + D.history[10:]
+            f'{cftime.num2date(ctd_min, ds.TIME.units).strftime(date_fmt)}'
+            f' to {cftime.num2date(ctd_max, ds.TIME.units).strftime(date_fmt)}')
+        ds.attrs['history'] = ctd_range + ds.history[10:]
 
     if sbe_max>sbe_min:
         sbe_range = f'{sbe_min.strftime(date_fmt)} to {sbe_max.strftime(date_fmt)}'
-        rind = D.history.find(': Processed to .cnv using SBE')
-        D.attrs['history'] = D.history[:rind-10] + sbe_range + D.attrs['history'][rind:]
+        rind = ds.history.find(': Processed to .cnv using SBE')
+        ds.attrs['history'] = ds.history[:rind-10] + sbe_range + ds.attrs['history'][rind:]
 
     if post_proc_times:
 
         if ppr_max>ppr_min and post_proc_times:
             ppr_range = (f'{ppr_min.strftime(date_fmt)} to'
                 f'{ppr_max.strftime(date_fmt)}')
-            rind = D.history.find(': Post-processing.')
-            D.attrs['history'] = (D.history[:rind-10] + ppr_range +
-                                  D.attrs['history'][rind:])
+            rind = ds.history.find(': Post-processing.')
+            ds.attrs['history'] = (ds.history[:rind-10] + ppr_range +
+                                  ds.attrs['history'][rind:])
 
-    return D
+    return ds
 
 
 def _dates_from_history(ds):
@@ -720,4 +722,3 @@ def _get_profile_variables(ds, profile_var = 'PRES', require_TIME = True):
             profile_variables += [varnm]
 
     return profile_variables
-
