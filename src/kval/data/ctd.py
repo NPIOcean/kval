@@ -20,7 +20,7 @@ from pathlib import Path
 
 # Want to be able to use these functions directly..
 from kval.data.dataset import to_netcdf
-
+from kval.data.edit import threshold, offset
 
 
 # LOADING AND SAVING DATA
@@ -306,78 +306,7 @@ def to_csv(ds: xr.Dataset, outfile: str) -> None:
 
 # MODIFYING DATA
 
-
-def threshold(
-    ds: xr.Dataset,
-    variable: str,
-    min_val: float | None = None,
-    max_val: float | None = None,
-) -> xr.Dataset:
-    """
-    Apply a threshold to a specified variable in an xarray Dataset, setting
-    values outside the specified range (min_val, max_val) to NaN.
-
-    Updates the variable attributes `valid_min` and `valid_max`.
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        Input xarray Dataset.
-    variable : str
-        Name of the variable to threshold.
-    min_val : float | None, default=None
-        Minimum allowed value. Values below this are set to NaN.
-    max_val : float | None, default=None
-        Maximum allowed value. Values above this are set to NaN.
-
-    Returns
-    -------
-    xr.Dataset
-        A new xarray Dataset with the thresholded variable.
-
-    Examples
-    --------
-    >>> ds_thresholded = threshold(ds, 'TEMP', min_val=-1, max_val=3)
-    """
-    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
-
-    ds = edit.threshold(
-        ds=ds, variable=variable, max_val=max_val, min_val=min_val
-    )
-    return ds
-
-
-def offset(ds: xr.Dataset, variable: str, offset: float) -> xr.Dataset:
-    """
-    Apply a fixed offset to a variable in an xarray Dataset.
-
-    Adds a fixed value to the specified variable. Updates the
-    `valid_min` and `valid_max` attributes to reflect the new range.
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        Input dataset.
-    variable : str
-        Name of the variable to modify.
-    offset : float
-        Value to add to the variable.
-
-    Returns
-    -------
-    xr.Dataset
-        A new dataset with the offset applied and updated `valid_min`/`valid_max`.
-
-    Examples
-    --------
-    >>> ds_offset = offset(ds, 'TEMP', 5)
-    """
-
-    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
-
-    ds = edit.offset(ds=ds, variable=variable, offset=offset)
-    return ds
-
+# (deleted old locatl functions (threshold, offset), now importing from universal ones in edit.py)
 
 # APPLYING CORRECTIONS ETC
 

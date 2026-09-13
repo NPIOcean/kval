@@ -12,7 +12,7 @@ import xarray as xr
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 from kval.calc.number import order_of_magnitude
-from kval.util import internals, index, time
+from kval.util import internals, index, time, xr_funcs
 import pandas as pd
 
 
@@ -130,7 +130,7 @@ def offset(ds: xr.Dataset, variable: str, offset: float) -> xr.Dataset:
     -------
     xr.Dataset
         A new xarray Dataset with the offset applied to the specified variable. The
-        `valid_min` and `valid_max` attributes are updated accordingly.
+        `valid_min` and `valid_max` attributes are updated accordingly if they exist.
 
     Examples
     --------
@@ -154,17 +154,22 @@ def offset(ds: xr.Dataset, variable: str, offset: float) -> xr.Dataset:
     if 'valid_max' in ds_new[variable].attrs:
         ds_new[variable].attrs['valid_max'] += offset
 
+    ds_new = xr_funcs.append_processing_history(
+        ds_new, variable, f'Applied offset of {offset:+}.', deep_copy=False)
+
     return ds_new
 
 
 def threshold(ds: xr.Dataset, variable: str,
-              max_val: float | None = None,
-              min_val: float | None = None) -> xr.Dataset:
+              min_val: float | None = None,
+              max_val: float | None = None) -> xr.Dataset:
     """
     Apply a threshold to a specified variable in an xarray Dataset, setting
     values outside the specified range (min_val, max_val) to NaN.
 
-    Also modifies the valid_min and valid_max variable attributes.
+    Also modifies the valid_min and valid_max variable attributes, and
+    appends a note describing the operation to the variable's
+    `processing_history` attribute.
 
     Parameters
     ----------
@@ -172,14 +177,14 @@ def threshold(ds: xr.Dataset, variable: str,
         The input xarray Dataset.
     variable : str
         The name of the variable within the Dataset to be thresholded.
-    max_val : Optional[float], default=None
-        The maximum allowed value for the variable. Values greater than
-        this will be set to NaN.
-        If None, no upper threshold is applied.
     min_val : Optional[float], default=None
         The minimum allowed value for the variable. Values less than
         this will be set to NaN.
         If None, no lower threshold is applied.
+    max_val : Optional[float], default=None
+        The maximum allowed value for the variable. Values greater than
+        this will be set to NaN.
+        If None, no upper threshold is applied.
 
     Returns
     -------
@@ -195,6 +200,10 @@ def threshold(ds: xr.Dataset, variable: str,
 
     ds_new = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
+    if max_val is not None and min_val is not None and max_val <= min_val:
+        raise ValueError(f'Threshold editing: max_val ({max_val}) must be '
+                         f'greater than min_val ({min_val}).')
+
     if max_val is not None:
         ds_new[variable] = ds_new[variable].where(ds_new[variable] <= max_val)
         ds_new[variable].attrs['valid_max'] = max_val
@@ -203,9 +212,18 @@ def threshold(ds: xr.Dataset, variable: str,
         ds_new[variable] = ds_new[variable].where(ds_new[variable] >= min_val)
         ds_new[variable].attrs['valid_min'] = min_val
 
-        if max_val is not None and max_val <= min_val:
-            raise ValueError(f'Threshold editing: max_val ({max_val}) must be '
-                             f'greater than min_val ({min_val}).')
+    if min_val is not None and max_val is not None:
+        note = f'Rejected values outside the range ({min_val}, {max_val}).'
+    elif min_val is not None:
+        note = f'Rejected values below {min_val}.'
+    elif max_val is not None:
+        note = f'Rejected values above {max_val}.'
+    else:
+        note = None
+
+    if note is not None:
+        ds_new = xr_funcs.append_processing_history(
+            ds_new, variable, note, deep_copy=False)
 
     return ds_new
 

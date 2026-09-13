@@ -201,6 +201,55 @@ def add_attrs_from_dict(ds, attr_dict, override=True):
             ds.attrs[key] = value  # Assign attribute to the dataset
 
 
+def append_processing_history(ds, variable, note, key="processing_history", deep_copy=True):
+    """
+    Append a note to a variable's processing-history attribute, creating it
+    if it doesn't already exist. Used by editing functions (offset,
+    threshold, filters, drift corrections, etc.) to build up a plain-text,
+    human-readable record of what's been done to a variable.
+
+    Parameters:
+    -----------
+    ds : xarray.Dataset
+        The dataset containing the variable.
+    variable : str
+        Name of the variable within `ds` to attach the note to.
+    note : str
+        Description of the operation performed, written to read naturally
+        when appended after any existing notes (e.g. a full sentence).
+    key : str, optional
+        The attribute name to use. Default is 'processing_history'.
+    deep_copy : bool, optional
+        If True (default), returns a fresh deep copy of `ds`, leaving the
+        dataset passed in untouched. Set to False when calling from inside
+        a function that has already made its own deep copy (e.g. most
+        kval editing functions), to avoid copying the same dataset twice.
+
+    Returns:
+    --------
+    xarray.Dataset
+        `ds` (or a deep copy of it, if deep_copy=True), with the note
+        appended to `ds[variable].attrs[key]`.
+
+    Raises:
+    -------
+    ValueError
+        If `variable` is not found in `ds`.
+
+    Example:
+    --------
+    ds = append_processing_history(ds, 'TEMP', 'Applied offset of 5.2 degC.')
+    """
+    if variable not in ds:
+        raise ValueError(f"Variable '{variable}' not found in the Dataset.")
+
+    if deep_copy:
+        ds = ds.copy(deep=True)
+    existing = ds[variable].attrs.get(key)
+    ds[variable].attrs[key] = f"{existing} {note}" if existing else note
+    return ds
+
+
 # STRUCTURE MANIPULATION
 
 

@@ -261,3 +261,61 @@ def test_promote_cf_coordinates_ignores_nonexistent_names(mock_dataset):
     assert 'STATION' in result.coords
     assert 'NOT_A_REAL_VAR' not in result.coords
     assert 'NOT_A_REAL_VAR' not in result.variables
+
+
+### Testing the append_processing_history() function
+
+def test_append_processing_history_creates_when_missing(mock_dataset):
+    result = xr_funcs.append_processing_history(
+        mock_dataset, 'TEMP', 'Applied offset of 5.2 degC.')
+    assert result['TEMP'].attrs['processing_history'] == (
+        'Applied offset of 5.2 degC.')
+
+def test_append_processing_history_appends_when_present(mock_dataset):
+    mock_dataset['TEMP'].attrs['processing_history'] = 'Applied offset of 5.2 degC.'
+    result = xr_funcs.append_processing_history(
+        mock_dataset, 'TEMP', 'Rejected values above 30 degC.')
+    assert result['TEMP'].attrs['processing_history'] == (
+        'Applied offset of 5.2 degC. Rejected values above 30 degC.')
+
+def test_append_processing_history_multiple_calls_accumulate_in_order(mock_dataset):
+    ds = xr_funcs.append_processing_history(mock_dataset, 'TEMP', 'Step one.')
+    ds = xr_funcs.append_processing_history(ds, 'TEMP', 'Step two.')
+    ds = xr_funcs.append_processing_history(ds, 'TEMP', 'Step three.')
+    assert ds['TEMP'].attrs['processing_history'] == (
+        'Step one. Step two. Step three.')
+
+def test_append_processing_history_custom_key(mock_dataset):
+    result = xr_funcs.append_processing_history(
+        mock_dataset, 'TEMP', 'Applied offset.', key='editing_log')
+    assert result['TEMP'].attrs['editing_log'] == 'Applied offset.'
+    assert 'processing_history' not in result['TEMP'].attrs
+
+def test_append_processing_history_does_not_affect_other_variables(mock_dataset):
+    result = xr_funcs.append_processing_history(mock_dataset, 'TEMP', 'Applied offset.')
+    assert 'processing_history' not in result['OCEAN'].attrs
+
+def test_append_processing_history_does_not_mutate_original(mock_dataset):
+    """Since this uses deep=True, the dataset passed in should be
+    completely untouched -- caller must use the returned dataset."""
+    result = xr_funcs.append_processing_history(mock_dataset, 'TEMP', 'Applied offset.')
+    assert 'processing_history' not in mock_dataset['TEMP'].attrs
+    assert result is not mock_dataset
+
+def test_append_processing_history_does_not_disturb_other_attrs(mock_dataset):
+    """Existing unrelated attrs on the variable should survive untouched."""
+    result = xr_funcs.append_processing_history(mock_dataset, 'TEMP', 'Applied offset.')
+    assert result['TEMP'].attrs['units'] == 'degC'
+    assert result['TEMP'].attrs['long_name'] == 'Test Temperature'
+
+def test_append_processing_history_raises_if_variable_missing(mock_dataset):
+    with pytest.raises(ValueError, match="not found in the Dataset"):
+        xr_funcs.append_processing_history(mock_dataset, 'NOT_A_REAL_VAR', 'Note.')
+
+def test_append_processing_history_deep_copy_false_mutates_in_place(mock_dataset):
+    """With deep_copy=False, the caller's dataset is modified directly --
+    intended for use inside functions that already made their own copy."""
+    result = xr_funcs.append_processing_history(
+        mock_dataset, 'TEMP', 'Applied offset.', deep_copy=False)
+    assert result is mock_dataset
+    assert mock_dataset['TEMP'].attrs['processing_history'] == 'Applied offset.'

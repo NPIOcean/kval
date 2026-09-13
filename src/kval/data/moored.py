@@ -698,53 +698,6 @@ def rolling_mean(
 # Drift
 
 
-# Threshold edit
-def threshold(
-    ds: xr.Dataset,
-    var_name: str,
-    min_val: float | None = None,
-    max_val: float | None = None,
-) -> xr.Dataset:
-    """
-    Threshold a variable in an xarray Dataset, setting values outside the
-    specified range to NaN. Updates `valid_min` and `valid_max` attributes.
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        Input dataset.
-    var_name : str
-        Variable to threshold.
-    min_val : float or None, optional
-        Minimum allowed value. Values below this are set to NaN. Default is None.
-    max_val : float or None, optional
-        Maximum allowed value. Values above this are set to NaN. Default is None.
-
-    Returns
-    -------
-    xr.Dataset
-        Dataset with the thresholded variable and updated attributes.
-
-    Examples
-    --------
-    ds_thresholded = threshold(ds, 'TEMP', min_val=-1, max_val=3)
-    """
-
-
-    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
-
-    ds = edit.threshold(
-        ds=ds, variable=var_name, max_val=max_val, min_val=min_val
-    )
-
-    var_comment = (f"Values outside the range ({min_val}, {max_val}) have been removed.")
-
-    if 'comment' in ds[var_name].attrs:
-        var_comment = ds[var_name].comment + '\n' + var_comment
-
-    ds[var_name].attrs['comment'] = var_comment
-
-    return ds
 
 
 # Interactive threshold edit

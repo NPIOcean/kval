@@ -1,7 +1,6 @@
 import pytest
 import xarray as xr
 import numpy as np
-from typing import Optional
 import pandas as pd
 from kval.data import edit
 
@@ -114,8 +113,6 @@ def test_threshold_no_modification_needed(mock_dataset):
     assert ds_new['TEMP'].attrs['valid_max'] == 40
 
 
-
-
 # Test cases for the offset function
 def test_offset_apply_fixed_offset(mock_dataset):
     """Test applying a fixed offset to the dataset."""
@@ -127,8 +124,6 @@ def test_offset_apply_fixed_offset(mock_dataset):
     assert np.array_equal(ds_new['TEMP'].values, expected.values, equal_nan=True)
     assert ds_new['TEMP'].attrs['units'] == 'degC'
     assert ds_new['TEMP'].attrs['long_name'] == 'Test Temperature'
-#    assert ds_new['TEMP'].attrs['valid_min'] == mock_dataset['TEMP'].attrs.get('valid_min', 0) + offset
-#    assert ds_new['TEMP'].attrs['valid_max'] == mock_dataset['TEMP'].attrs.get('valid_max', 0) + offset
 
 def test_offset_valid_min(mock_dataset):
     """Test that applying a fixed offset to the dataset
@@ -155,12 +150,45 @@ def test_offset_no_variable(mock_dataset):
 
 
 def test_offset_zero_offset(mock_dataset):
-    """Test when applying an offset that doesn't change the data."""
+    """Test when applying an offset that doesn't change the data.
+    Note: a processing_history note is still added even for a zero
+    offset, so we compare attrs excluding that key rather than the
+    whole dict."""
     offset = 0
     ds_new = edit.offset(mock_dataset, 'TEMP', offset)
 
     assert np.array_equal(ds_new['TEMP'].values, mock_dataset['TEMP'].values, equal_nan=True)
-    assert ds_new['TEMP'].attrs == mock_dataset['TEMP'].attrs
+
+    new_attrs = dict(ds_new['TEMP'].attrs)
+    new_attrs.pop('processing_history', None)
+    assert new_attrs == dict(mock_dataset['TEMP'].attrs)
+
+
+def test_offset_processing_history_created(mock_dataset):
+    """A fresh processing_history note should be added, with the actual
+    offset value included."""
+    ds_new = edit.offset(mock_dataset, 'TEMP', 5.2)
+    assert ds_new['TEMP'].attrs['processing_history'] == 'Applied offset of +5.2.'
+
+def test_offset_processing_history_appends_to_existing(mock_dataset):
+    """Calling offset twice should accumulate both notes, not overwrite."""
+    ds_step1 = edit.offset(mock_dataset, 'TEMP', 5.2)
+    ds_step2 = edit.offset(ds_step1, 'TEMP', -1.0)
+    assert ds_step2['TEMP'].attrs['processing_history'] == (
+        'Applied offset of +5.2. Applied offset of -1.0.')
+
+def test_offset_processing_history_explicit_sign(mock_dataset):
+    """Positive offsets should show a '+' explicitly, negative offsets
+    a '-', so the sign is never ambiguous when scanning the note."""
+    ds_pos = edit.offset(mock_dataset, 'TEMP', 5.2)
+    ds_neg = edit.offset(mock_dataset, 'TEMP', -3.0)
+    assert 'Applied offset of +5.2.' in ds_pos['TEMP'].attrs['processing_history']
+    assert 'Applied offset of -3.0.' in ds_neg['TEMP'].attrs['processing_history']
+
+def test_offset_processing_history_does_not_affect_other_variables(mock_dataset):
+    """Only the targeted variable should get a processing_history note."""
+    ds_new = edit.offset(mock_dataset, 'TEMP', 5.2)
+    assert 'processing_history' not in ds_new['OCEAN'].attrs
 
 
 # Test the linear drift function
@@ -503,3 +531,5 @@ def test_linear_drift_numeric_time_with_units(mock_dataset_numeric_time):
 
     actual_diff = ds_out['TEMP'].values[:, 0] - mock_dataset_numeric_time['TEMP'].values[:, 0]
     np.testing.assert_almost_equal(actual_diff, expected_diff, decimal=5)
+
+
