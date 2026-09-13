@@ -197,11 +197,9 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
             if len(caldates_unique)==1:
                 caldates_unique = [caldates_unique] + [caldates_unique]
 
-            if 'comment' in N[varnm].attrs:
-                comment_0 = N[varnm].comment
-            else:
-                comment_0 = ''
-            N[varnm].attrs['comment'] = comment_0 + ' Sensors changed underway.'
+            N = xr_funcs.append_processing_history(
+                N, varnm, 'Sensors changed underway.', deep_copy=False)
+            
             where_sensor_A = np.array(stations)[np.array(sns)==sns_unique[0]]
             where_sensor_B = np.array(stations)[np.array(sns)==sns_unique[1]]
             N[varnm].attrs['stations_A'] = ', '.join(where_sensor_A)

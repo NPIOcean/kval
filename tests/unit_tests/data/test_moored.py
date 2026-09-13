@@ -257,8 +257,8 @@ def test_calculate_psal():
     np.testing.assert_allclose(ds_updated["PSAL"], expected_psal, rtol=1e-5)
 
     # Check that the attributes are updated
-    assert "note" in ds_updated["PSAL"].attrs
-    assert "Python gsw module" in ds_updated["PSAL"].attrs["note"]
+    assert "processing_history" in ds_updated["PSAL"].attrs
+    assert "Python gsw module" in ds_updated["PSAL"].attrs["processing_history"]
 
     # Ensure no other variables were altered
     assert ds["CNDC"].equals(ds_updated["CNDC"])
@@ -497,14 +497,22 @@ def test_adjust_time_for_drift_missing_units_raises(sample_dataset_drift_no_unit
         adjust_time_for_drift(sample_dataset_drift_no_units, seconds=10)
 
 
-def test_adjust_time_for_drift_appends_existing_comment(sample_dataset_drift):
-    """If TIME already has a comment, the drift note should be appended,
-    not overwrite it."""
+def test_adjust_time_for_drift_leaves_existing_comment_untouched(sample_dataset_drift):
+    """A pre-existing 'comment' attribute is unrelated to processing_history
+    and should be left completely alone."""
     sample_dataset_drift['TIME'].attrs['comment'] = 'Pre-existing comment'
     ds = adjust_time_for_drift(sample_dataset_drift, seconds=30)
-    assert 'Pre-existing comment' in ds['TIME'].attrs['comment']
-    assert 'Adjusted for observed clock drift' in ds['TIME'].attrs['comment']
+    assert ds['TIME'].attrs['comment'] == 'Pre-existing comment'
 
+def test_adjust_time_for_drift_processing_history_created(sample_dataset_drift):
+    ds = adjust_time_for_drift(sample_dataset_drift, seconds=30)
+    assert 'Adjusted for observed clock drift' in ds['TIME'].attrs['processing_history']
+
+def test_adjust_time_for_drift_processing_history_accumulates(sample_dataset_drift):
+    ds_step1 = adjust_time_for_drift(sample_dataset_drift, seconds=30)
+    ds_step2 = adjust_time_for_drift(ds_step1, seconds=-10)
+    history = ds_step2['TIME'].attrs['processing_history']
+    assert history.count('Adjusted for observed clock drift') == 2
 
 def test_adjust_time_for_drift_unsorted_raises(sample_dataset_drift_unsorted):
     with pytest.raises(Exception, match="not sorted in non-decreasing order"):

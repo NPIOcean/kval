@@ -60,8 +60,7 @@ import warnings
 # Want to be able to use these functions directly..
 from kval.data.dataset import  to_netcdf, add_latlon
 from kval.data.edit import threshold, offset, linear_drift
-from kval.util.xr_funcs import time_average
-
+from kval.util.xr_funcs import time_average, append_processing_history
 if internals.is_notebook():
     from IPython.display import display
 
@@ -473,16 +472,14 @@ def despike_rolling(
 
     #n_removed = np.sum(is_outside_criterion).item()
 
+    note = (f"Despiking: Values exceeding the {window_size}-point rolling"
+            f" filter ({filter_type}) by more than {n_std} (rolling) "
+            "standard deviations have been removed.")
 
-    var_comment = (f"Despiking: Values exceeding the {window_size}-point rolling {filter_type} by more than {n_std} (rolling) standard deviations have been removed.")
-
-    if 'comment' in ds[var_name].attrs:
-        var_comment = ds[var_name].comment + '\n' + var_comment
-
-    ds[var_name].attrs['comment'] = var_comment
-
+    ds = append_processing_history(ds, var_name, note, deep_copy=False)
 
     return ds
+
 
 def adjust_time_for_drift(
     ds: xr.Dataset,
@@ -620,15 +617,11 @@ def adjust_time_for_drift(
     adjusted_time = time - drift_adjustments_sec / 86400
 
     # Update the TIME coordinate in the dataset
-    time_attrs = ds['TIME'].attrs
-    drift_comment = (
+    note = (
         f'Adjusted for observed clock drift ({drift_operation} '
         f'from 0 to {abs(total_drift_seconds)} sec)')
-    if 'comment' in time_attrs and time_attrs['comment']:
-        time_attrs['comment'] = time_attrs['comment'] + '; ' + drift_comment
-    else:
-        time_attrs['comment'] = drift_comment
-    ds['TIME'] = ('TIME', adjusted_time, time_attrs)
+    ds['TIME'] = ('TIME', adjusted_time, dict(ds['TIME'].attrs))
+    ds = append_processing_history(ds, 'TIME', note, deep_copy=False)
 
     return ds
 
@@ -685,12 +678,9 @@ def rolling_mean(
         nan_edges=nan_edges,
     )
 
-    var_comment = (f"A {window_size}-point rolling {filter_type} has been applied.")
+    note = (f"A {window_size}-point rolling {filter_type} has been applied.")
 
-    if 'comment' in ds[var_name].attrs:
-        var_comment = ds[var_name].comment + '\n' + var_comment
-
-    ds[var_name].attrs['comment'] = var_comment
+    ds = append_processing_history(ds, var_name, note, deep_copy=False)
 
     return ds
 
@@ -893,10 +883,11 @@ def calculate_PSAL(
                 f'{ds[temp_var].sensor_calibration_date} (TEMP), '
                 f'{ds[cndc_var].sensor_calibration_date} (CNDC)')
 
-    ds[psal_var].attrs["note"] = (
+    note = (
         f"Computed from {cndc_var}, {temp_var}, {pres_var} "
         "using the Python gsw module."
     )
+    ds = append_processing_history(ds, psal_var, note, deep_copy=False)
 
     return ds
 
@@ -955,11 +946,12 @@ def calculate_SA_CT(
                  'standard_name':'sea_water_conservative_temperature',
                  'long_name': 'Conservative Temperature'})
 
+    note = (
+        f"Computed from {cndc_var}, {temp_var}, {pres_var} "
+        "using the Python gsw module."
+    )
     for varname in ['CT', 'SA']:
-        ds[varname].attrs["note"] = (
-            f"Computed from {cndc_var}, {temp_var}, {pres_var} "
-            "using the Python gsw module."
-        )
+        ds = append_processing_history(ds, varname, note, deep_copy=False)
 
     return ds
 
@@ -1016,11 +1008,11 @@ def calculate_rho(
                   'long_name' : 'In-situ seawater density'})
 
 
-    ds['RHO'].attrs["note"] = (
+    note = (
         f"Computed from {cndc_var}, {temp_var}, {pres_var} "
         "using the Python gsw module."
     )
-
+    ds = append_processing_history(ds, 'RHO', note, deep_copy=False)
 
     return ds
 
@@ -1072,10 +1064,11 @@ def calculate_sig0(
                   'long_name': ('Potential density of water '
                                 'minus 1000 kg m-3.')})
 
-    ds['SIG0'].attrs["note"] = (
+    note = (
         f"Computed from {temp_var}, {pres_var} "
         "using the Python gsw module."
     )
+    ds = append_processing_history(ds, 'SIG0', note, deep_copy=False)
     return ds
 
 
@@ -1148,10 +1141,11 @@ def calculate_CNDC(
                 f'{ds[psal_var].sensor_calibration_date} (PSAL)'
             )
 
-    ds[cndc_var].attrs["note"] = (
+    note = (
         f"Computed from {psal_var}, {temp_var}, {pres_var} "
         "using the Python gsw module."
     )
+    ds = append_processing_history(ds, cndc_var, note, deep_copy=False)
 
     return ds
 
@@ -1339,11 +1333,14 @@ def assign_pressure(
             "long_name": "Sea pressure (estimate from interpolation)",
             "processing_level": "Data interpolated",
             "coverage_content_type": "referenceInformation",
-            "comment": ("Estimated by interpolating between adjacent"
-                        " instruments with pressure sensors."),
         },
     )
-
+    ds_main = append_processing_history(
+        ds_main, 'PRES',
+        "Estimated by interpolating between adjacent instruments with "
+        "pressure sensors.",
+        deep_copy=False)
+    
     if return_fig:
         return ds_main, fig
     else:
@@ -1391,27 +1388,9 @@ def linear_drift_offset(
     This is a wrapper for `kval.data.edit.linear_drift`.
     """
 
-    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
-
     ds = edit.linear_drift(
         ds, variable, end_val, start_val=start_val, start_date=start_date,
         end_date=end_date, factor=False)
-
-
-    # Record to PSAL metadata field
-    if start_date is None:
-        start_date = 'the first data entry'
-    if end_date is None:
-        end_date = 'the last data entry'
-
-    drift_comment = (f'Adjusted for drift by applying am *offset* linearly '
-                     f'evolving from {start_val} on {start_date} to {end_val}'
-                     ' on {end_date}.')
-
-    if 'comment' in ds[variable].attrs:
-        ds[variable].attrs['comment' ] += '\n' + drift_comment
-    else:
-        ds[variable].attrs['comment' ] = drift_comment
 
     return ds
 
@@ -1457,27 +1436,9 @@ def linear_drift_factor(
     This is a wrapper for `kval.data.edit.linear_drift`.
     """
 
-    ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
-
-    # Apply drift
     ds = edit.linear_drift(
         ds, variable, end_val, start_val=start_val, start_date=start_date,
         end_date=end_date, factor=True)
-
-    # Record to PSAL metadata field
-    if start_date is None:
-        start_date = 'the first data entry'
-    if end_date is None:
-        end_date = 'the last data entry'
-
-    drift_comment = (f'Adjusted for drift by applying a *factor*'
-                     f' linearly evolving from {start_val} on'
-                    f' {start_date} to {end_val} on {end_date}.')
-
-    if 'comment' in ds[variable].attrs:
-        ds[variable].attrs['comment' ] += '\n' + drift_comment
-    else:
-        ds[variable].attrs['comment' ] = drift_comment
 
     return ds
 
@@ -1784,11 +1745,7 @@ def adjust_PSAL_from_CNDC_TEMP(
     # Make a copy of the dataset and update with the new PSAL
     ds1 = ds.copy()
     ds1.PSAL.values = PSAL_
-    if 'comment' in ds1.PSAL.attrs:
-        ds1.PSAL.attrs['comment'] += f'\n\n{comment}'
-    else:
-        ds1.PSAL.attrs['comment'] = comment
-
+    ds1 = append_processing_history(ds1, 'PSAL', comment, deep_copy=False)
 
     if plot:
         fig, ax = plt.subplots(3, 1, sharex=True)

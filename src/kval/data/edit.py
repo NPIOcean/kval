@@ -492,7 +492,9 @@ def linear_drift(
         ds_out[variable] = ds_out[variable] + drift_val_aligned
         drift_type = 'offset'
 
-    # Add or update comment attribute
+    ds_out[variable].attrs = variable_data.attrs  # restore attrs dropped by the arithmetic above
+
+    # Add note to processing_history attribute
     if 'units' in ds_out.TIME.attrs:
         start_str = time.convert_timenum_to_datestring(t_start, ds_out.TIME.units) if not is_datetime else str(t_start)
         end_str = time.convert_timenum_to_datestring(t_end, ds_out.TIME.units) if not is_datetime else str(t_end)
@@ -500,13 +502,13 @@ def linear_drift(
         start_str, end_str = str(t_start), str(t_end)
 
     edge_mode = 'extrapolated' if extrapolate else 'clamped'
-    new_comment = (f'Applied drift {drift_type} linearly increasing from {start_val} '
-                f'to {end_val} from {start_str} to {end_str} ({edge_mode} outside window).')
+    start_label = f'the first data entry ({start_str})' if start_date is None else start_str
+    end_label = f'the last data entry ({end_str})' if end_date is None else end_str
+    note = (f'Applied drift {drift_type} linearly increasing from {start_val} '
+            f'to {end_val} from {start_label} to {end_label} '
+            f'({edge_mode} outside window).')
 
-    if 'comment' in variable_data.attrs and variable_data.attrs['comment']:
-        ds_out[variable].attrs['comment'] = variable_data.attrs['comment'] + f' {new_comment}'
-    else:
-        ds_out[variable].attrs['comment'] = new_comment
+    ds_out = xr_funcs.append_processing_history(ds_out, variable, note, deep_copy=False)
 
     return ds_out
 

@@ -533,3 +533,41 @@ def test_linear_drift_numeric_time_with_units(mock_dataset_numeric_time):
     np.testing.assert_almost_equal(actual_diff, expected_diff, decimal=5)
 
 
+def test_linear_drift_processing_history_created(mock_dataset):
+    ds_out = edit.linear_drift(mock_dataset, 'TEMP', end_val=5, start_val=2)
+    assert 'processing_history' in ds_out['TEMP'].attrs
+    assert 'Applied drift offset linearly increasing from 2 to 5' in (
+        ds_out['TEMP'].attrs['processing_history'])
+
+def test_linear_drift_processing_history_accumulates(mock_dataset):
+    ds_step1 = edit.linear_drift(mock_dataset, 'TEMP', end_val=5, start_val=2)
+    ds_step2 = edit.linear_drift(ds_step1, 'TEMP', end_val=1.5, factor=True, start_val=1)
+    history = ds_step2['TEMP'].attrs['processing_history']
+    assert 'Applied drift offset linearly increasing from 2 to 5' in history
+    assert 'Applied drift factor linearly increasing from 1 to 1.5' in history
+
+def test_linear_drift_processing_history_notes_extrapolate_vs_clamp(mock_dataset):
+    ds_clamped = edit.linear_drift(mock_dataset, 'TEMP', end_val=5, extrapolate=False)
+    ds_extrap = edit.linear_drift(mock_dataset, 'TEMP', end_val=5, extrapolate=True)
+    assert 'clamped' in ds_clamped['TEMP'].attrs['processing_history']
+    assert 'extrapolated' in ds_extrap['TEMP'].attrs['processing_history']
+
+def test_linear_drift_processing_history_defaulted_dates_say_first_last(mock_dataset):
+    """When start_date/end_date aren't given, the note should say so
+    explicitly, not just show a bare timestamp."""
+    ds_out = edit.linear_drift(mock_dataset, 'TEMP', end_val=5, start_val=2)
+    history = ds_out['TEMP'].attrs['processing_history']
+    assert 'the first data entry' in history
+    assert 'the last data entry' in history
+
+def test_linear_drift_processing_history_explicit_dates_shown_plainly(mock_dataset):
+    """When start_date/end_date ARE given, the note should show them
+    plainly, without the 'first/last data entry' framing."""
+    time_vals = mock_dataset.TIME.values
+    start_date = str(time_vals[2])[:10]
+    end_date = str(time_vals[6])[:10]
+    ds_out = edit.linear_drift(
+        mock_dataset, 'TEMP', end_val=5, start_date=start_date, end_date=end_date)
+    history = ds_out['TEMP'].attrs['processing_history']
+    assert 'the first data entry' not in history
+    assert 'the last data entry' not in history
