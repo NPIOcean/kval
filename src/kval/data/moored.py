@@ -845,10 +845,15 @@ def hand_remove_points(
     -----
     Use the interactive plot to select points for removal, then click the
     corresponding buttons for actions.
+
+    Unlike most kval functions, this modifies `ds` in place (in addition
+    to returning it), since the interactive editing session needs to act
+    on the same object the user is clicking on.
     """
 
-    # ds = ds.copy(deep=True) # Note: deliberately not doing this - 
-    # we need this to be the same object that we are returning
+    # Note: deliberately *not* doing a reep copy here-
+    # we to modify it in place for this to work.
+    # ds = ds.copy(deep=True) 
 
     if not variable_edit:
         variable_edit = variable

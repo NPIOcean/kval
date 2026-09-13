@@ -35,7 +35,15 @@ def remove_points_profile(ds: xr.Dataset, varnm: str, TIME_index: int,
     Returns:
     - ds: xarray.Dataset
       The dataset with specified points removed (set to NaN).
+
+
+    Notes:
+    - If deep_copy=False, this modifies `ds` in place (in addition to
+      returning it). Only intended for internal use by interactive
+      editing sessions that need to act on the same object across
+      successive calls — leave deep_copy=True (the default) otherwise.
     """
+
     if deep_copy:
         ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
@@ -47,9 +55,8 @@ def remove_points_profile(ds: xr.Dataset, varnm: str, TIME_index: int,
     remove_bool[remove_inds] = True
 
     # Use the `where` method to set the selected points to NaN
-    ds[varnm].isel(TIME=TIME_index).values[:] = np.where(remove_bool,
-                                                         np.nan,
-                                                         ds[varnm].isel(TIME=TIME_index).values)
+    ds[varnm].isel(TIME=TIME_index).values[:] = np.where(
+        remove_bool, np.nan, ds[varnm].isel(TIME=TIME_index).values)
 
     return ds
 

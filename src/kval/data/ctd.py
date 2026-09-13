@@ -854,10 +854,15 @@ def hand_remove_points(
     -----
     Use the interactive plot to select points for removal, then click the
     corresponding buttons for actions.
+
+    Unlike most kval functions, this modifies `ds` in place (in addition
+    to returning it), since the interactive editing session needs to act
+    on the same object the user is clicking on.
+
     """
 
-    # Deliberately skipå this - we need to change3 this object in place.
-    #ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+    # Deliberately skip using a deep copy - we need to change this object in place.
+    #ds = ds.copy(deep=True) 
 
     hand_remove = ctd_edit.hand_remove_points(ds, variable, TIME_index)
     ds = hand_remove.d

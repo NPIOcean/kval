@@ -41,8 +41,8 @@ def convert_64_to_32(ds: xr.Dataset, force: bool = False, relative_tol: float = 
     Convert float64 and int64 variables (including coords) in an xarray.Dataset
     to float32 and int32, updating related metadata attributes (valid_min, valid_max, valid_range).
     """
-    ds = ds.copy()
-
+    ds = ds.copy(deep=True)
+    
     def max_relative_diff(arr64: np.ndarray) -> float:
         arr32 = arr64.astype(np.float32)
         arr64_roundtrip = arr32.astype(np.float64)
