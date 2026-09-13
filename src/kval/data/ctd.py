@@ -402,6 +402,9 @@ def calibrate_chl(
     for key, item in new_attrs.items():
         ds[chl_name_out].attrs[key] = item
 
+    note = f"Calibrated from {chl_name_in} using {chl_name_out} = {A} * {chl_name_in} + {B}."
+    ds = xr_funcs.append_processing_history(ds, chl_name_out, note, deep_copy=False)
+
     # Remove the uncalibrated chl
     if remove_uncal:
         remove_str = (

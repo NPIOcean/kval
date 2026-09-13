@@ -58,6 +58,11 @@ def remove_points_profile(ds: xr.Dataset, varnm: str, TIME_index: int,
     ds[varnm].isel(TIME=TIME_index).values[:] = np.where(
         remove_bool, np.nan, ds[varnm].isel(TIME=TIME_index).values)
 
+    # Add a note in the `processing_history` field
+    note = (f"Removed {len(remove_inds)} point(s) from the profile at "
+            f"TIME index {TIME_index}.")
+    ds = xr_funcs.append_processing_history(ds, varnm, note, deep_copy=False)
+
     return ds
 
 
@@ -105,6 +110,9 @@ def remove_points_timeseries(ds: xr.Dataset, varnm: str,
 
     # Use the `where` method to set the selected points to NaN
     ds[varnm] = ds[varnm].where(~remove_bool)
+
+    note = f"Removed {len(remove_inds)} point(s) from the time series."
+    ds = xr_funcs.append_processing_history(ds, varnm, note, deep_copy=False)
 
     return ds
 
@@ -320,15 +328,21 @@ def replace(
 
     ds_new[var_target].loc[loc_index] = source_data
 
+    note = f"Replaced values in '{var_target}' with values from '{var_source}'."
+
     # Optional flagging
     if flag_value is not None and var_flag is not None:
         if var_flag in ds_new:
             ds_new[var_flag].loc[loc_index] = flag_value
+            note += f" Flagged with {var_flag}={flag_value} where replaced."
         else:
             print(f"Warning: var_flag '{var_flag}' not found in dataset. "
                   "Flagging skipped.")
 
+    ds_new = xr_funcs.append_processing_history(ds_new, var_target, note, deep_copy=False)
+
     return ds_new
+
 
 def linear_drift(
     ds: xr.Dataset,
