@@ -388,7 +388,12 @@ def linear_drift(
         return ds
 
     time_vals = ds.TIME.values
-    if not np.all(np.diff(time_vals) >= 0):
+    diffs = np.diff(time_vals)
+    if np.issubdtype(diffs.dtype, np.timedelta64):
+        is_non_decreasing = np.all(diffs >= np.timedelta64(0, "ns"))
+    else:
+        is_non_decreasing = np.all(diffs >= 0)
+    if not is_non_decreasing:
         raise Exception('Could not apply drift: TIME is not sorted in '
                         'non-decreasing order')
 

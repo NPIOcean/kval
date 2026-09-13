@@ -16,58 +16,60 @@ FILE_URLS = {
 
 # Define the directory where files should be stored
 FILE_DIR = Path("tests/test_data/rbr_files")
+def _download_with_retry(url: str, retries: int = 3, backoff: float = 2.0) -> bytes:
+    """
+    GET a URL, retrying on transient server errors (e.g. Zenodo occasionally
+    returning a 504 under load). Raises the last error if all attempts fail.
+    """
+    last_exc = None
+    for attempt in range(retries):
+        try:
+            response = requests.get(url, timeout=60)
+            response.raise_for_status()
+            return response.content
+        except requests.exceptions.HTTPError as e:
+            last_exc = e
+            if attempt < retries - 1:
+                time.sleep(backoff * (attempt + 1))
+    raise last_exc
 
-@pytest.fixture(scope="module", autouse=True)
-def setup_files():
+
+@pytest.fixture
+def rbr_file(request):
     """
-    Fixture to ensure test files are downloaded and available for testing.
-    Local files are used without deletion, while downloaded files are deleted after testing.
+    Ensure a single named RBR test file is downloaded and available locally.
     """
-    # Create the directory for storing test files if it doesn't already exist.
+    file_name = request.param
     FILE_DIR.mkdir(parents=True, exist_ok=True)
+    file_path = FILE_DIR / file_name
+    was_downloaded = False
 
-    # Track which files are downloaded
-    downloaded_files = set()
+    if not file_path.exists():
+        content = _download_with_retry(FILE_URLS[file_name])
+        with open(file_path, "wb") as file:
+            file.write(content)
+        was_downloaded = True
 
-    # Download each file in FILE_URLS if it doesn't already exist locally.
-    for file_name, url in FILE_URLS.items():
-        file_path = FILE_DIR / file_name
-        if not file_path.exists():  # Check if the file is already present
-            response = requests.get(url)  # Download the file
-            response.raise_for_status()  # Raise an error if download fails
-            with open(file_path, 'wb') as file:  # Write the file to disk
-                file.write(response.content)
-            downloaded_files.add(file_name)  # Mark the file as downloaded
+    yield file_path
 
-    # Yield control back to the test functions. This pauses the fixture here.
-    yield
+    if was_downloaded and file_path.exists():
+        for _ in range(3):
+            try:
+                file_path.unlink()
+                break
+            except PermissionError:
+                time.sleep(0.5)
 
-    # Teardown: This code runs after the tests are complete.
-    # Only delete files that were downloaded
-    for file_name in FILE_URLS.keys():
-        file_path = FILE_DIR / file_name
-        if file_path.exists() and file_name in downloaded_files:
-            # Only delete files that were downloaded
-            for _ in range(3):  # Try up to 3 times to delete the file
-                try:
-                    file_path.unlink()  # Attempt to delete the file
-                    break  # Exit the loop if the file is successfully deleted
-                except PermissionError:  # Handle the case of locked file
-                    time.sleep(0.5)  # Wait for a short time before trying again
-
-@pytest.mark.parametrize("file_name", [
+@pytest.mark.parametrize("rbr_file", [
     "solo_example.rsk",
     "conc_example.rsk",
     "conc_chl_par_example.rsk",
-])
+], indirect=True)
 
-def test_read(file_name):
-
-    # Construct the full path to the test file
-    file_path = FILE_DIR / file_name
+def test_read(rbr_file):
 
     # Read the dataset using the read function
-    ds_rsk = read_rsk(file_path)
+    ds_rsk = read_rsk(rbr_file)
 
     # Check if the dataset is of type xarray.Dataset
     assert isinstance(ds_rsk, xr.Dataset), "Output is not an xarray.Dataset"

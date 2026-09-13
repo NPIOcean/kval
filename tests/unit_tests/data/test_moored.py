@@ -8,6 +8,7 @@ from unittest import mock
 import numpy as np
 import re
 import pandas as pd
+import time
 
 # Define the URLs for the files you want to test
 RBR_FILE_URLS = {
@@ -19,74 +20,73 @@ RBR_FILE_URLS = {
 # Define the directory where files should be stored
 RBR_FILE_DIR = Path("tests/test_data/rbr_files")
 SBE37_FILE_PATH = Path("tests/test_data/sbe_files/sbe37/cnv/test_sbe37.cnv")
+def _download_with_retry(url: str, retries: int = 3, backoff: float = 2.0) -> bytes:
+    """
+    GET a URL, retrying on transient server errors (e.g. Zenodo occasionally
+    returning a 504 under load). Raises the last error if all attempts fail.
+    """
+    last_exc = None
+    for attempt in range(retries):
+        try:
+            response = requests.get(url, timeout=60)
+            response.raise_for_status()
+            return response.content
+        except requests.exceptions.HTTPError as e:
+            last_exc = e
+            if attempt < retries - 1:
+                time.sleep(backoff * (attempt + 1))
+    raise last_exc
 
-@pytest.fixture(scope="module", autouse=True)
-def setup_files():
+
+@pytest.fixture
+def rbr_file(request):
     """
-    Fixture to ensure test files are downloaded and available for testing.
-    Local files are used without deletion, while downloaded files are deleted after testing.
+    Ensure a single named RBR test file is downloaded and available locally.
+    Only downloads the specific file the requesting test needs, so a
+    transient failure fetching one file doesn't fail tests that don't
+    need it. Local files are reused without re-downloading; only files
+    this fixture itself downloaded are cleaned up afterward.
     """
-    # Create the directory for storing test files if it doesn't already exist.
+    file_name = request.param
     RBR_FILE_DIR.mkdir(parents=True, exist_ok=True)
+    file_path = RBR_FILE_DIR / file_name
+    was_downloaded = False
 
-    # Track which files are downloaded
-    downloaded_files = set()
+    if not file_path.exists():
+        content = _download_with_retry(RBR_FILE_URLS[file_name])
+        with open(file_path, "wb") as file:
+            file.write(content)
+        was_downloaded = True
 
-    # Download each file in RBR_FILE_URLS if it doesn't already exist locally.
-    for file_name, url in RBR_FILE_URLS.items():
-        file_path = RBR_FILE_DIR / file_name
-        if not file_path.exists():  # Check if the file is already present
-            response = requests.get(url)  # Download the file
-            response.raise_for_status()  # Raise an error if download fails
-            with open(file_path, 'wb') as file:  # Write the file to disk
-                file.write(response.content)
-            downloaded_files.add(file_name)  # Mark the file as downloaded
+    yield file_path
 
-    # Yield control back to the test functions. This pauses the fixture here.
-    yield
+    if was_downloaded and file_path.exists():
+        try:
+            file_path.unlink()
+        except PermissionError:
+            print(f"Failed to delete {file_name}. File might be in use.")
 
-    # Teardown: This code runs after the tests are complete.
-    # Only delete files that were downloaded
-    for file_name in RBR_FILE_URLS.keys():
-        file_path = RBR_FILE_DIR / file_name
-        if file_path.exists() and file_name in downloaded_files:
-            try:
-                file_path.unlink()  # Attempt to delete the file
-            except PermissionError:  # Handle the case of locked file
-                print(f"Failed to delete {file_name}. File might be in use.")
 
-@pytest.mark.parametrize("file_name", [
+@pytest.mark.parametrize("rbr_file", [
     "solo_example.rsk",
     "conc_example.rsk",
     "conc_chl_par_example.rsk",
-])
-def test_load_moored_rbr(file_name, setup_files):
+], indirect=True)
+def test_load_moored_rbr(rbr_file):
     """
     Test the load_moored function with RBR files.
-    The setup_files fixture ensures files are available locally before testing.
+    The rbr_file fixture ensures only the specific file needed is
+    downloaded before this test runs.
     """
-    # Full path to the file
-    file_path = RBR_FILE_DIR / file_name
-
-    # Call the load_moored function with the file
-    ds = load_moored(str(file_path))
-
-    # Perform basic checks on the returned xarray.Dataset
+    ds = load_moored(str(rbr_file))
     assert isinstance(ds, xr.Dataset), f"Expected xarray.Dataset, got {type(ds)}"
 
-    # Additional checks can be added here as needed
-
-def test_load_moored_sbe37(setup_files):
+def test_load_moored_sbe37():
     """
     Test the load_moored function with the SBE37 file.
     """
-    # Ensure the SBE37 file exists before running the test
     assert SBE37_FILE_PATH.exists(), f"SBE37 file not found at {SBE37_FILE_PATH}"
-
-    # Call the load_moored function with the SBE37 file
     ds = load_moored(str(SBE37_FILE_PATH))
-
-    # Perform basic checks on the returned xarray.Dataset
     assert isinstance(ds, xr.Dataset), f"Expected xarray.Dataset, got {type(ds)}"
 
 
