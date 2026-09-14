@@ -12,7 +12,7 @@ from IPython.display import display
 import cartopy.crs as ccrs
 from kval.util import time
 from kval.data.ship_ctd_tools import _ctd_tools
-from kval.maps import quickmap
+from kval.plot import quickmap
 from matplotlib.ticker import MaxNLocator
 from matplotlib.colors import Colormap
 import cmocean

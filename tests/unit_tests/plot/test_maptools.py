@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 from matplotlib.quiver import Quiver
 
-from kval.maps import maptools  # adjust import according to your package structure
+from kval.plot import maptools  # adjust import according to your package structure
 
 def test_quiver_basic():
     # Create a figure and Cartopy GeoAxes with PlateCarree projection
