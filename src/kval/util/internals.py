@@ -35,9 +35,6 @@ def check_interactive():
     support interactive features in a Jupyter notebook.
     """
 
-    # For consistency, ensure that warnings are always displayed
-    warnings.simplefilter("always", UserWarning)
-
     if is_notebook():
         current_backend = mpl.get_backend()
         notebook_interactive_backends = [
