@@ -6,32 +6,6 @@ Loading and processing data from fixed instruments.
 Currently works for SBE and RBR CTD sensors - may want to broaden functionality
 for other moored sensors.
 
-- Loading data from .cnv or .rsk
-- QC (!)
-    - Compare with CTD (!)
-    - Deck PRES values (!)
-    - Quicklook functions (!)
-- Editing
-    - Chop deck time from the record
-    - Despike*
-    - Rolling filter*
-    - Threshold editing*
-    - Drift corr (!)
-    - Remove points by index
-    - Remove pick by hand picking
-    - Drop variables
-    - Drop variables (interactive)
-- Calculations
-    - Recalculate PSAL
-    - Calculate depth (!)
-    - Calculate all TEOS-10 (!)
-- Standard metadata fixes*
-- Saving
-    - To matfile*
-
-(!) To be written
-* Simple wrappers
-
 """
 
 import xarray as xr
