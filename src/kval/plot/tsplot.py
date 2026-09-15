@@ -12,10 +12,22 @@ import numpy as np
 import matplotlib.pyplot as plt
 import xarray as xr
 import gsw
+import cmocean
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 
 from kval.util import internals
+
+
+# Applied explicitly to each text element as it's created (not via
+# plt.rc_context/rcParams) -- rcParams like axes.labelcolor turn out to
+# be baked in at *axes creation* time, not when set_xlabel() etc. is
+# actually called, so relying on them is timing-fragile, especially
+# since tsplot can be handed an already-existing ax. Explicit .set_color()
+# / fontfamily= calls work regardless of when/how the axes was made, and
+# never touch global matplotlib state.
+_TEXT_COLOR = '#404040'
+_FONT_FAMILY = 'Arial'  # matplotlib falls back gracefully if unavailable
 
 
 def _get_sa_ct(ds: xr.Dataset,
@@ -148,11 +160,20 @@ def _draw_ts_background(ax, sa_range, ct_range, pres: float = 0,
         Reserved for future use (source water point, ice type, etc.).
     n_grid : int, default=100
         Grid resolution used for computing density contours.
+
+    Returns
+    -------
+    list
+        The matplotlib artists created (contour set, contour labels,
+        freezing line), so a caller can remove() them later to redraw
+        at a different range (see _install_background_autoredraw).
     """
     if gade_line:
         raise NotImplementedError(
             "Gade line plotting is not yet implemented. The gade_line "
             "parameter is reserved for a future version.")
+
+    artists = []
 
     if density_contours:
         sa_grid = np.linspace(sa_range[0], sa_range[1], n_grid)
@@ -161,13 +182,65 @@ def _draw_ts_background(ax, sa_range, ct_range, pres: float = 0,
         sigma0 = gsw.sigma0(SA_mesh, CT_mesh)
         cs = ax.contour(SA_mesh, CT_mesh, sigma0, colors='grey',
                         linestyles='--', linewidths=0.7)
-        ax.clabel(cs, inline=True, fontsize=8, fmt='%.1f')
+        labels = ax.clabel(cs, inline=True, fontsize=8, fmt='%.1f')
+        for label in labels:
+            label.set_color(_TEXT_COLOR)
+            label.set_fontfamily(_FONT_FAMILY)
+        artists.append(cs)
+        artists.extend(labels)
 
     if freezing_line:
         sa_line = np.linspace(sa_range[0], sa_range[1], n_grid)
         ct_freezing = gsw.CT_freezing(sa_line, pres, 0)
-        ax.plot(sa_line, ct_freezing, color='tab:blue', linestyle='-',
-               linewidth=1, label='Freezing point')
+        line, = ax.plot(sa_line, ct_freezing, color='k',
+                        linestyle='--', linewidth=1, label='Freezing point')
+        artists.append(line)
+
+    return artists
+
+
+def _install_background_autoredraw(ax, pres: float = 0,
+                                   density_contours: bool = True,
+                                   freezing_line: bool = False):
+    """
+    Make the density contours / freezing line redraw automatically to
+    match the axis's current view, whenever that view changes (zoom,
+    pan, or any other resize) -- not just at initial plot creation.
+
+    Without this, contours/freezing line are computed once over
+    whatever range happened to be visible at creation time; zooming or
+    panning to a different area afterward would just show blank space
+    there instead of the background extending to cover it.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axis to install the auto-redraw behavior on.
+    pres : float, default=0
+        Pressure [dbar] used for the freezing line, as in
+        _draw_ts_background.
+    density_contours, freezing_line : bool
+        Which background elements to keep redrawn. If both are False,
+        no callback is installed at all (nothing to redraw).
+    """
+    if not (density_contours or freezing_line):
+        return
+
+    state = {'artists': []}
+
+    def _redraw(_ax):
+        for artist in state['artists']:
+            try:
+                artist.remove()
+            except (ValueError, NotImplementedError):
+                pass  # already gone somehow -- fine, nothing to clean up
+        state['artists'] = _draw_ts_background(
+            ax, ax.get_xlim(), ax.get_ylim(), pres=pres,
+            density_contours=density_contours, freezing_line=freezing_line)
+
+    ax.callbacks.connect('xlim_changed', _redraw)
+    ax.callbacks.connect('ylim_changed', _redraw)
+    _redraw(ax)  # initial draw, at whatever the axis limits are right now
 
 
 def tsplot(ds: xr.Dataset,
@@ -176,9 +249,11 @@ def tsplot(ds: xr.Dataset,
           lat_var: str = 'LATITUDE', lon_var: str = 'LONGITUDE',
           sa_var: str = 'SA', ct_var: str = 'CT',
           color_by: str | None = None, mode: str = 'scatter',
-          density_contours: bool = True, freezing_line: bool = True,
+          density_contours: bool = True, freezing_line: bool = False,
           freezing_line_pres: float = 0,
-          marker: str = 'o', alpha: float = 0.7, cmap: str = 'viridis',
+          marker: str = 'o', alpha: float = 0.7, cmap: str = 'cividis',
+          bins: int = 30, hist_cmap=None, hist_facecolor: str = 'lightgrey',
+          grid: bool = False,
           ax=None, **kwargs) -> tuple[plt.Figure, plt.Axes]:
     """
     Plot a Temperature-Salinity (T-S) diagram on TEOS-10 axes.
@@ -207,7 +282,7 @@ def tsplot(ds: xr.Dataset,
         together.
     density_contours : bool, default=True
         Whether to draw sigma0 (potential density) contours.
-    freezing_line : bool, default=True
+    freezing_line : bool, default=False
         Whether to draw the seawater freezing point line.
     freezing_line_pres : float, default=0
         Pressure [dbar] used for the freezing line calculation.
@@ -215,8 +290,19 @@ def tsplot(ds: xr.Dataset,
         Marker style (scatter mode only).
     alpha : float, default=0.7
         Point transparency (scatter mode only).
-    cmap : str, default='viridis'
-        Colormap used when color_by is given.
+    cmap : str, default='cividis'
+        Colormap used when color_by is given (scatter mode).
+    bins : int, default=30
+        Number of bins per axis for mode='hist2d'.
+    hist_cmap : str or matplotlib.colors.Colormap, optional
+        Colormap for mode='hist2d'. Defaults to cmocean's 'amp' if not
+        given.
+    hist_facecolor : str, default='lightgrey'
+        Color used for empty (zero-count) bins in mode='hist2d', so they
+        read clearly as "no data" rather than blending into the low end
+        of the colormap.
+    grid : bool, default=False
+        Whether to show gridlines.
     ax : matplotlib.axes.Axes, optional
         Axis to plot onto. If None, a new figure/axis is created.
     **kwargs
@@ -249,59 +335,131 @@ def tsplot(ds: xr.Dataset,
     finite = np.isfinite(sa_vals) & np.isfinite(ct_vals)
     sa_vals, ct_vals = sa_vals[finite], ct_vals[finite]
 
-    if ax is None:
-        fig, ax = plt.subplots()
-    else:
-        fig = ax.figure
-
-    sa_pad = 0.05 * (np.nanmax(sa_vals) - np.nanmin(sa_vals) or 1)
-    ct_pad = 0.05 * (np.nanmax(ct_vals) - np.nanmin(ct_vals) or 1)
-    sa_range = (np.nanmin(sa_vals) - sa_pad, np.nanmax(sa_vals) + sa_pad)
-    ct_range = (np.nanmin(ct_vals) - ct_pad, np.nanmax(ct_vals) + ct_pad)
-
-    _draw_ts_background(ax, sa_range, ct_range, pres=freezing_line_pres,
-                        density_contours=density_contours,
-                        freezing_line=freezing_line)
-
-    legend_handles, legend_labels = [], []
-    legend_title = None
-
-    if mode == 'scatter':
-        if color_by is not None:
-            color_vals = _resolve_color_values(ds, color_by, SA)
-            color_vals = np.asarray(color_vals).flatten()[finite]
-            if np.issubdtype(color_vals.dtype, np.number):
-                sc = ax.scatter(sa_vals, ct_vals, c=color_vals, cmap=cmap,
-                               marker=marker, alpha=alpha, **kwargs)
-                cbar = fig.colorbar(sc, ax=ax)
-                cbar.set_label(color_by)
-            else:
-                # Categorical (e.g. station names): factorize to integer
-                # codes for plotting, but show a discrete legend with the
-                # real category labels rather than a numeric colorbar.
-                categories, codes = np.unique(color_vals, return_inverse=True)
-                sc = ax.scatter(sa_vals, ct_vals, c=codes, cmap=cmap,
-                               marker=marker, alpha=alpha, **kwargs)
-                cat_handles, _ = sc.legend_elements(num=len(categories))
-                legend_handles += list(cat_handles)
-                legend_labels += list(categories)
-                legend_title = color_by
+    with plt.ioff():  # suppress premature auto-display under ion()
+                      # (widget backend) while the plot is still
+                      # being built -- see tsplot's display logic
+                      # right after this block for why
+        created_own_fig = ax is None
+        if ax is None:
+            fig, ax = plt.subplots()
         else:
-            ax.scatter(sa_vals, ct_vals, marker=marker, alpha=alpha, **kwargs)
-    else:  # mode == 'hist2d'
-        ax.hist2d(sa_vals, ct_vals, **kwargs)
+            fig = ax.figure
 
-    ax.set_xlabel('Absolute Salinity [g kg$^{-1}$]')
-    ax.set_ylabel('Conservative Temperature [$\\degree$C]')
+        sa_pad = 0.05 * (np.nanmax(sa_vals) - np.nanmin(sa_vals) or 1)
+        ct_pad = 0.05 * (np.nanmax(ct_vals) - np.nanmin(ct_vals) or 1)
+        sa_range = (np.nanmin(sa_vals) - sa_pad, np.nanmax(sa_vals) + sa_pad)
+        ct_range = (np.nanmin(ct_vals) - ct_pad, np.nanmax(ct_vals) + ct_pad)
 
-    if freezing_line:
-        freezing_handles, freezing_labels = ax.get_legend_handles_labels()
-        legend_handles += freezing_handles
-        legend_labels += freezing_labels
+        if freezing_line:
+            # Nicer initial view: make sure the starting range comfortably
+            # includes the freezing line across the full SA span. Not load
+            # bearing for correctness anymore (see _install_background_
+            # autoredraw below), just avoids the freezing line being cut off
+            # in the very first view before anyone's zoomed/panned at all.
+            freezing_ct_at_range = gsw.CT_freezing(
+                np.array(sa_range), freezing_line_pres, 0)
+            ct_range = (min(ct_range[0], np.nanmin(freezing_ct_at_range)),
+                       ct_range[1])
 
-    if legend_handles:
-        ax.legend(legend_handles, legend_labels, fontsize=8, loc='best',
-                 title=legend_title)
+        ax.set_xlim(sa_range)
+        ax.set_ylim(ct_range)
+
+        # Density contours / freezing line redraw automatically to match
+        # whatever the axis's current view is, including after zooming or
+        # panning later -- not just at this initial range. See
+        # _install_background_autoredraw's docstring.
+        _install_background_autoredraw(
+            ax, pres=freezing_line_pres, density_contours=density_contours,
+            freezing_line=freezing_line)
+
+        legend_handles, legend_labels = [], []
+        legend_title = None
+
+        if mode == 'scatter':
+            if color_by is not None:
+                color_vals = _resolve_color_values(ds, color_by, SA)
+                color_vals = np.asarray(color_vals).flatten()[finite]
+                if np.issubdtype(color_vals.dtype, np.number):
+                    sc = ax.scatter(sa_vals, ct_vals, c=color_vals, cmap=cmap,
+                                   marker=marker, alpha=alpha, **kwargs)
+                    cbar = fig.colorbar(sc, ax=ax)
+                    cbar_units = ds[color_by].attrs.get('units')
+                    cbar_label = (f'{color_by} [{cbar_units}]' if cbar_units
+                                 else color_by)
+                    cbar.set_label(cbar_label, color=_TEXT_COLOR,
+                                  fontfamily=_FONT_FAMILY)
+                    cbar.ax.tick_params(colors=_TEXT_COLOR)
+                else:
+                    # Categorical (e.g. station names): factorize to integer
+                    # codes for plotting, but show a discrete legend with the
+                    # real category labels rather than a numeric colorbar.
+                    categories, codes = np.unique(color_vals, return_inverse=True)
+                    sc = ax.scatter(sa_vals, ct_vals, c=codes, cmap=cmap,
+                                   marker=marker, alpha=alpha, **kwargs)
+                    cat_handles, _ = sc.legend_elements(num=len(categories))
+                    legend_handles += list(cat_handles)
+                    legend_labels += list(categories)
+                    legend_title = color_by
+            else:
+                ax.scatter(sa_vals, ct_vals, marker=marker, alpha=alpha, **kwargs)
+        else:  # mode == 'hist2d'
+            counts, sa_edges, ct_edges = np.histogram2d(
+                sa_vals, ct_vals, bins=bins, range=[sa_range, ct_range])
+            # histogram2d returns shape (n_sa_bins, n_ct_bins); pcolormesh
+            # expects the first axis to match the second coordinate array,
+            # so transpose to (n_ct_bins, n_sa_bins).
+            counts = counts.T
+            counts_masked = np.ma.masked_where(counts == 0, counts)
+
+            resolved_cmap = cmocean.cm.amp if hist_cmap is None else hist_cmap
+            if isinstance(resolved_cmap, str):
+                resolved_cmap = plt.get_cmap(resolved_cmap)
+            resolved_cmap = resolved_cmap.copy()
+            resolved_cmap.set_bad(color=hist_facecolor)
+
+            pcm = ax.pcolormesh(sa_edges, ct_edges, counts_masked,
+                                cmap=resolved_cmap, **kwargs)
+            cbar = fig.colorbar(pcm, ax=ax)
+            cbar.set_label('Count', color=_TEXT_COLOR,
+                          fontfamily=_FONT_FAMILY)
+            cbar.ax.tick_params(colors=_TEXT_COLOR)
+
+        ax.set_xlabel('Absolute Salinity [g kg$^{-1}$]',
+                     color=_TEXT_COLOR, fontfamily=_FONT_FAMILY)
+        ax.set_ylabel('Conservative Temperature [$\\degree$C]',
+                     color=_TEXT_COLOR, fontfamily=_FONT_FAMILY)
+        ax.grid(grid)
+
+        ax.tick_params(axis='both', colors=_TEXT_COLOR,
+                       labelfontfamily=_FONT_FAMILY)
+        if freezing_line:
+            freezing_handles, freezing_labels = ax.get_legend_handles_labels()
+            legend_handles += freezing_handles
+            legend_labels += freezing_labels
+
+        if legend_handles:
+            leg = ax.legend(legend_handles, legend_labels, fontsize=8,
+                            loc='best', title=legend_title)
+            for text in leg.get_texts():
+                text.set_color(_TEXT_COLOR)
+                text.set_fontfamily(_FONT_FAMILY)
+            if leg.get_title() is not None:
+                leg.get_title().set_color(_TEXT_COLOR)
+                leg.get_title().set_fontfamily(_FONT_FAMILY)
+
+    if created_own_fig:
+        # The whole plot was just built with auto-display suppressed
+        # (plt.ioff() above), specifically to avoid ipympl/widget's
+        # known issue where interactive mode auto-displays a figure the
+        # moment it's created -- i.e. blank, before any of this
+        # function's drawing has happened -- which can then race with
+        # the later draw calls and intermittently leave the blank
+        # version showing. Now that it's fully built, show it once,
+        # cleanly.
+        if internals.is_notebook():
+            display(fig)
+        else:
+            plt.show()
 
     return fig, ax
 
@@ -330,54 +488,104 @@ class tsplot_pick:
 
         self.ds = ds
         self.tsplot_kwargs = tsplot_kwargs
+        self.fig = None  # tracked so _redraw can close the previous one
 
         color_options = [None] + list(ds.data_vars)
 
         self.color_dropdown = widgets.Dropdown(
-            options=color_options, value=None, description='Color by:')
+            options=color_options, value=None, description='Color by:',
+            layout=widgets.Layout(width='200px'))
         self.mode_toggle = widgets.ToggleButtons(
-            options=['scatter', 'hist2d'], value='scatter',
-            description='Mode:')
+            options=[('Scatter', 'scatter'), ('Hist2d', 'hist2d')],
+            value='scatter', description='Mode:',
+            style={'button_width': '70px'})
         self.density_checkbox = widgets.Checkbox(
-            value=True, description='Density contours')
+            value=True, description='Density contours',
+            indent=False, layout=widgets.Layout(width='160px'))
         self.freezing_checkbox = widgets.Checkbox(
-            value=True, description='Freezing line')
+            value=False, description='Freezing line',
+            indent=False, layout=widgets.Layout(width='140px'))
+        self.grid_checkbox = widgets.Checkbox(
+            value=False, description='Grid',
+            indent=False, layout=widgets.Layout(width='80px'))
         self.marker_dropdown = widgets.Dropdown(
-            options=['o', '.', 'x', '+', '^', 's'], value='o',
-            description='Marker:')
+            options=['o', '.', '+'], value='o', description='Marker:',
+            layout=widgets.Layout(width='140px'))
         self.alpha_slider = widgets.FloatSlider(
-            value=0.7, min=0.05, max=1.0, step=0.05, description='Alpha:')
+            value=0.7, min=0.05, max=1.0, step=0.05, description='Alpha:',
+            layout=widgets.Layout(width='260px'))
+        self.bins_slider = widgets.IntSlider(
+            value=30, min=5, max=100, step=5, description='Bins:',
+            layout=widgets.Layout(width='260px'))
+        self.close_button = widgets.Button(
+            description='Close', button_style='danger',
+            layout=widgets.Layout(width='70px'))
+        self.close_button.on_click(self._on_close)
         self.output = widgets.Output()
 
         controls = [self.color_dropdown, self.mode_toggle,
                    self.density_checkbox, self.freezing_checkbox,
-                   self.marker_dropdown, self.alpha_slider]
+                   self.marker_dropdown, self.alpha_slider,
+                   self.grid_checkbox, self.bins_slider]
         for control in controls:
             control.observe(self._redraw, names='value')
 
+        # marker/alpha (scatter-only) and bins (hist2d-only) share one row
+        # and swap places depending on mode, rather than each getting its
+        # own row that leaves an empty gap when hidden.
         self.widget_box = widgets.VBox(
-            [widgets.HBox([self.mode_toggle, self.color_dropdown]),
-             widgets.HBox([self.density_checkbox, self.freezing_checkbox]),
-             widgets.HBox([self.marker_dropdown, self.alpha_slider]),
-             self.output])
+            [widgets.HBox([self.mode_toggle, self.color_dropdown,
+                          self.close_button]),
+             widgets.HBox([self.density_checkbox, self.freezing_checkbox,
+                          self.grid_checkbox]),
+             widgets.HBox([self.marker_dropdown, self.alpha_slider,
+                          self.bins_slider]),
+             self.output],
+            layout=widgets.Layout(width='620px'))
 
         display(self.widget_box)
         self._redraw(None)
 
+    def _on_close(self, _):
+        """Close the figure and the widget controls, to avoid leaving a
+        hanging figure open once you're done with a plot."""
+        if self.fig is not None:
+            plt.close(self.fig)
+        self.widget_box.close()
+
     def _redraw(self, change):
+        mode = self.mode_toggle.value
+        # marker/alpha/color_by only do anything in scatter mode, bins
+        # only in hist2d -- show/hide each set accordingly rather than
+        # leaving controls visible that silently do nothing.
+        scatter_display = '' if mode == 'scatter' else 'none'
+        hist_display = '' if mode == 'hist2d' else 'none'
+        self.marker_dropdown.layout.display = scatter_display
+        self.alpha_slider.layout.display = scatter_display
+        self.color_dropdown.layout.display = scatter_display
+        self.bins_slider.layout.display = hist_display
+
         with self.output:
             clear_output(wait=True)
+            if self.fig is not None:
+                plt.close(self.fig)  # don't let figures accumulate on
+                                      # every control change (matplotlib
+                                      # keeps pyplot-created figures alive
+                                      # until explicitly closed)
             color_by = self.color_dropdown.value
-            mode = self.mode_toggle.value
             if mode == 'hist2d':
                 color_by = None  # not supported together; drop silently
                                   # in the widget rather than erroring on
                                   # a live control change
-            tsplot(
+            self.fig, ax = tsplot(
                 self.ds, color_by=color_by, mode=mode,
                 density_contours=self.density_checkbox.value,
                 freezing_line=self.freezing_checkbox.value,
                 marker=self.marker_dropdown.value,
                 alpha=self.alpha_slider.value,
+                grid=self.grid_checkbox.value,
+                bins=self.bins_slider.value,
                 **self.tsplot_kwargs)
-            plt.show()
+            # tsplot() now handles displaying the figure it creates
+            # internally (see its own ioff()/display() logic) -- calling
+            # plt.show() again here would duplicate it
