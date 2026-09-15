@@ -10,6 +10,7 @@ dataset.
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import xarray as xr
 import gsw
 import cmocean
@@ -251,7 +252,8 @@ def tsplot(ds: xr.Dataset,
           color_by: str | None = None, mode: str = 'scatter',
           density_contours: bool = True, freezing_line: bool = False,
           freezing_line_pres: float = 0,
-          marker: str = 'o', alpha: float = 0.7, cmap: str = 'cividis',
+          marker: str = 'o', alpha: float = 0.7, markersize: float = None,
+          cmap: str = 'cividis',
           bins: int = 30, hist_cmap=None, hist_facecolor: str = 'lightgrey',
           grid: bool = False,
           ax=None, **kwargs) -> tuple[plt.Figure, plt.Axes]:
@@ -290,6 +292,9 @@ def tsplot(ds: xr.Dataset,
         Marker style (scatter mode only).
     alpha : float, default=0.7
         Point transparency (scatter mode only).
+    markersize : float, optional
+        Marker size (scatter mode only). Defaults to matplotlib's own
+        scatter default if not given.
     cmap : str, default='cividis'
         Colormap used when color_by is given (scatter mode).
     bins : int, default=30
@@ -379,13 +384,46 @@ def tsplot(ds: xr.Dataset,
             if color_by is not None:
                 color_vals = _resolve_color_values(ds, color_by, SA)
                 color_vals = np.asarray(color_vals).flatten()[finite]
-                if np.issubdtype(color_vals.dtype, np.number):
-                    sc = ax.scatter(sa_vals, ct_vals, c=color_vals, cmap=cmap,
-                                   marker=marker, alpha=alpha, **kwargs)
+                is_datetime = np.issubdtype(color_vals.dtype, np.datetime64)
+
+                # A plain numeric variable with CF-style time units (e.g.
+                # "days since 1970-01-01") represents time just as much
+                # as a native datetime64 array does -- decode it the same
+                # way xarray's own decode_cf would, so it gets the same
+                # readable date-formatted colorbar rather than showing
+                # raw day-counts.
+                if not is_datetime and np.issubdtype(color_vals.dtype, np.number):
+                    units = ds[color_by].attrs.get('units', '')
+                    if isinstance(units, str) and ' since ' in units:
+                        try:
+                            color_vals = xr.coding.times.decode_cf_datetime(
+                                color_vals, units)
+                            is_datetime = True
+                        except (ValueError, TypeError):
+                            pass  # not actually decodable as CF time --
+                                  # fall through to plain numeric handling
+
+                if is_datetime or np.issubdtype(color_vals.dtype, np.number):
+                    plot_vals = (mdates.date2num(color_vals) if is_datetime
+                                else color_vals)
+                    sc = ax.scatter(sa_vals, ct_vals, c=plot_vals, cmap=cmap,
+                                   marker=marker, alpha=alpha, s=markersize,
+                                   **kwargs)
                     cbar = fig.colorbar(sc, ax=ax)
-                    cbar_units = ds[color_by].attrs.get('units')
-                    cbar_label = (f'{color_by} [{cbar_units}]' if cbar_units
-                                 else color_by)
+                    cbar.solids.set_alpha(1)  # colorbar swatch should
+                                               # always be fully opaque,
+                                               # regardless of the
+                                               # points' own alpha
+                    if is_datetime:
+                        locator = mdates.AutoDateLocator()
+                        cbar.ax.yaxis.set_major_locator(locator)
+                        cbar.ax.yaxis.set_major_formatter(
+                            mdates.ConciseDateFormatter(locator))
+                        cbar_label = color_by
+                    else:
+                        cbar_units = ds[color_by].attrs.get('units')
+                        cbar_label = (f'{color_by} [{cbar_units}]'
+                                     if cbar_units else color_by)
                     cbar.set_label(cbar_label, color=_TEXT_COLOR,
                                   fontfamily=_FONT_FAMILY)
                     cbar.ax.tick_params(colors=_TEXT_COLOR)
@@ -395,13 +433,15 @@ def tsplot(ds: xr.Dataset,
                     # real category labels rather than a numeric colorbar.
                     categories, codes = np.unique(color_vals, return_inverse=True)
                     sc = ax.scatter(sa_vals, ct_vals, c=codes, cmap=cmap,
-                                   marker=marker, alpha=alpha, **kwargs)
+                                   marker=marker, alpha=alpha, s=markersize,
+                                   **kwargs)
                     cat_handles, _ = sc.legend_elements(num=len(categories))
                     legend_handles += list(cat_handles)
                     legend_labels += list(categories)
                     legend_title = color_by
             else:
-                ax.scatter(sa_vals, ct_vals, marker=marker, alpha=alpha, **kwargs)
+                ax.scatter(sa_vals, ct_vals, marker=marker, alpha=alpha,
+                          s=markersize, **kwargs)
         else:  # mode == 'hist2d'
             counts, sa_edges, ct_edges = np.histogram2d(
                 sa_vals, ct_vals, bins=bins, range=[sa_range, ct_range])
@@ -420,6 +460,7 @@ def tsplot(ds: xr.Dataset,
             pcm = ax.pcolormesh(sa_edges, ct_edges, counts_masked,
                                 cmap=resolved_cmap, **kwargs)
             cbar = fig.colorbar(pcm, ax=ax)
+            cbar.solids.set_alpha(1)
             cbar.set_label('Count', color=_TEXT_COLOR,
                           fontfamily=_FONT_FAMILY)
             cbar.ax.tick_params(colors=_TEXT_COLOR)
@@ -490,7 +531,7 @@ class tsplot_pick:
         self.tsplot_kwargs = tsplot_kwargs
         self.fig = None  # tracked so _redraw can close the previous one
 
-        color_options = [None] + list(ds.data_vars)
+        color_options = [None] + list(ds.coords) + list(ds.data_vars)
 
         self.color_dropdown = widgets.Dropdown(
             options=color_options, value=None, description='Color by:',
@@ -512,7 +553,10 @@ class tsplot_pick:
             options=['o', '.', '+'], value='o', description='Marker:',
             layout=widgets.Layout(width='140px'))
         self.alpha_slider = widgets.FloatSlider(
-            value=0.7, min=0.05, max=1.0, step=0.05, description='Alpha:',
+            value=0.7, min=0.01, max=1.0, step=0.01, description='Alpha:',
+            layout=widgets.Layout(width='260px'))
+        self.markersize_slider = widgets.FloatSlider(
+            value=36, min=1, max=200, step=1, description='Size:',
             layout=widgets.Layout(width='260px'))
         self.bins_slider = widgets.IntSlider(
             value=30, min=5, max=100, step=5, description='Bins:',
@@ -526,6 +570,7 @@ class tsplot_pick:
         controls = [self.color_dropdown, self.mode_toggle,
                    self.density_checkbox, self.freezing_checkbox,
                    self.marker_dropdown, self.alpha_slider,
+                   self.markersize_slider,
                    self.grid_checkbox, self.bins_slider]
         for control in controls:
             control.observe(self._redraw, names='value')
@@ -540,6 +585,7 @@ class tsplot_pick:
                           self.grid_checkbox]),
              widgets.HBox([self.marker_dropdown, self.alpha_slider,
                           self.bins_slider]),
+             widgets.HBox([self.markersize_slider]),
              self.output],
             layout=widgets.Layout(width='620px'))
 
@@ -562,6 +608,7 @@ class tsplot_pick:
         hist_display = '' if mode == 'hist2d' else 'none'
         self.marker_dropdown.layout.display = scatter_display
         self.alpha_slider.layout.display = scatter_display
+        self.markersize_slider.layout.display = scatter_display
         self.color_dropdown.layout.display = scatter_display
         self.bins_slider.layout.display = hist_display
 
@@ -583,6 +630,7 @@ class tsplot_pick:
                 freezing_line=self.freezing_checkbox.value,
                 marker=self.marker_dropdown.value,
                 alpha=self.alpha_slider.value,
+                markersize=self.markersize_slider.value,
                 grid=self.grid_checkbox.value,
                 bins=self.bins_slider.value,
                 **self.tsplot_kwargs)

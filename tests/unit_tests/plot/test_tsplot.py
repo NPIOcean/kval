@@ -8,12 +8,14 @@ tsplot() function, and the interactive tsplot_pick widget.
 import warnings
 
 import numpy as np
+import pandas as pd
 import pytest
 import xarray as xr
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+import matplotlib.figure
 import cmocean
 
 from kval.plot import tsplot
@@ -207,6 +209,59 @@ class TestColorBy:
             density_contours=False)
         sc = ax.collections[0]
         assert sc.get_cmap().name == 'plasma'
+
+    def test_color_by_datetime64_uses_colorbar_not_legend(self):
+        """datetime64 isn't a numpy 'number' dtype -- without explicit
+        handling it would wrongly fall into the categorical branch and
+        try to build one legend entry per unique timestamp."""
+        n = 50
+        ds = xr.Dataset(
+            {'TEMP': ('TIME', 5 + 3 * np.random.randn(n)),
+             'PSAL': ('TIME', 34 + 0.5 * np.random.randn(n)),
+             'PRES': ('TIME', np.linspace(0, 100, n)),
+             'LATITUDE': ((), 78.0), 'LONGITUDE': ((), 15.0)},
+            coords={'TIME': pd.date_range('2024-01-01', periods=n, freq='D')})
+        fig, ax = tsplot.tsplot(
+            ds, color_by='TIME', density_contours=False)
+        assert ax.get_legend() is None
+        assert len(fig.axes) == 2  # colorbar present
+
+    def test_color_by_cf_time_units_decoded_to_readable_dates(
+            self, mock_dataset):
+        """A plain numeric TIME with CF-style units (e.g. 'days since
+        1970-01-01') represents time just as much as native datetime64
+        -- the colorbar should show calendar dates, not raw day-counts."""
+        ds = mock_dataset.copy(deep=True)
+        ds = ds.assign_coords(TIME=19000.0 + np.arange(len(ds.TIME)))
+        ds['TIME'].attrs['units'] = 'days since 1970-01-01'
+        fig, ax = tsplot.tsplot(ds, color_by='TIME', density_contours=False)
+        cbar_ax = fig.axes[-1]
+        fig.canvas.draw()
+        labels = [t.get_text() for t in cbar_ax.get_yticklabels()]
+        assert any(l for l in labels
+                  if l and not l.replace('.', '').isdigit())
+
+    def test_colorbar_alpha_is_always_full_regardless_of_point_alpha(
+            self, mock_dataset):
+        """The colorbar swatch is a reference showing what each color
+        means -- it should stay fully opaque even when the scatter
+        points themselves are transparent."""
+        captured = {}
+        orig_colorbar = matplotlib.figure.Figure.colorbar
+
+        def capturing_colorbar(self, *args, **kwargs):
+            cb = orig_colorbar(self, *args, **kwargs)
+            captured['cbar'] = cb
+            return cb
+
+        matplotlib.figure.Figure.colorbar = capturing_colorbar
+        try:
+            tsplot.tsplot(mock_dataset, color_by='PRES', alpha=0.3,
+                         density_contours=False)
+        finally:
+            matplotlib.figure.Figure.colorbar = orig_colorbar
+
+        assert captured['cbar'].solids.get_alpha() == 1
 
 
 # --- hist2d mode ------------------------------------------------------

@@ -33,6 +33,8 @@ import warnings
 
 # Want to be able to use these functions directly..
 from kval.data.dataset import  to_netcdf, add_latlon
+from kval.plot.tsplot import  tsplot, tsplot_pick
+
 from kval.data.edit import threshold, offset, linear_drift
 from kval.util.xr_funcs import time_average, append_processing_history
 if internals.is_notebook():
