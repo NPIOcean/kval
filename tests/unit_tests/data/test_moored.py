@@ -3,12 +3,16 @@ import xarray as xr
 import requests
 from pathlib import Path
 import gsw
-from kval.data.moored import load_moored, assign_pressure, drop_variables, calculate_PSAL, adjust_time_for_drift, chop_by_time, combine_datasets
-from unittest import mock
-import numpy as np
+from kval.data.moored import (
+    load_moored, assign_pressure, drop_variables, 
+    calculate_PSAL, adjust_time_for_drift, chop_by_time, 
+    combine_datasets, metadata_auto)
 import re
 import pandas as pd
+import numpy as np
 import time
+from unittest import mock
+
 
 # Define the URLs for the files you want to test
 RBR_FILE_URLS = {
@@ -827,3 +831,30 @@ def test_combine_datasets_scalar_variable_stacked_by_instr(
     out = combine_datasets(ds1, ds2, interval='1h')
     assert out['LATITUDE'].dims == ('INSTR',)
     np.testing.assert_allclose(out['LATITUDE'].values, [78.5, 78.6])
+
+@pytest.fixture
+def sample_dataset_metadata_auto():
+    """Minimal moored-style dataset for testing metadata_auto. TIME is
+    numeric with a units attribute (matching how kval represents TIME
+    internally) rather than pre-decoded datetime64 -- add_standard_var_attrs
+    assumes this representation and mishandles the decoded case."""
+    n = 5
+    ds = xr.Dataset(
+        {'TEMP1': ('TIME', np.random.rand(n))},
+        coords={'TIME': np.arange(n, dtype=float)},
+    )
+    ds['TIME'].attrs['units'] = 'days since 1970-01-01'
+    return ds
+
+
+def test_metadata_auto_default_no_org_attrs(sample_dataset_metadata_auto):
+    """Without org specified, no organization-specific global attrs
+    (e.g. institution) should be added."""
+    ds = metadata_auto(sample_dataset_metadata_auto)
+    assert 'institution' not in ds.attrs
+
+
+def test_metadata_auto_explicit_org_npi(sample_dataset_metadata_auto):
+    """org='npi' should add the standard NPI global attributes."""
+    ds = metadata_auto(sample_dataset_metadata_auto, org='npi')
+    assert ds.attrs.get('institution') == 'Norwegian Polar Institute (NPI)'

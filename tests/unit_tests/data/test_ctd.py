@@ -64,3 +64,18 @@ def test_offset_apply_fixed_offset(dir_list_test_cnvs):
     assert ds['TEMP'].attrs['units'] == ds0['TEMP'].attrs['units']
     assert (ds['TEMP'].attrs['valid_max'] 
             == ds0['TEMP'].attrs['valid_max']+offset)
+
+
+def test_metadata_auto_default_no_org_attrs(dir_list_test_cnvs):
+    """Without org specified, no organization-specific global attrs
+    (e.g. institution) should be added."""
+    ds = ctd.ctds_from_cnv_dir(dir_list_test_cnvs[0])
+    ds = ctd.metadata_auto(ds)
+    assert 'institution' not in ds.attrs
+
+
+def test_metadata_auto_explicit_org_npi(dir_list_test_cnvs):
+    """org='npi' should add the standard NPI global attributes."""
+    ds = ctd.ctds_from_cnv_dir(dir_list_test_cnvs[0])
+    ds = ctd.metadata_auto(ds, org='npi')
+    assert ds.attrs.get('institution') == 'Norwegian Polar Institute (NPI)'

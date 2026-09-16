@@ -24,7 +24,6 @@ from scipy import signal
 from kval.file import sbe, rbr, matfile
 from kval.data import dataset, edit
 from kval.data.moored_tools import _moored_tools
-
 from kval.util import internals, index, time
 from kval.signal import despike, filt
 from kval.metadata import conventionalize
@@ -1498,8 +1497,7 @@ def drop_vars_pick(ds: xr.Dataset) -> xr.Dataset:
     return edit_obj.ds
 
 
-
-def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
+def metadata_auto(ds: xr.Dataset, org: str | None = None) -> xr.Dataset:
     """
     Various modifications to the metadata to standardize the dataset for
     publication.
@@ -1512,8 +1510,12 @@ def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
     ----------
     ds : xr.Dataset
         The input xarray Dataset whose metadata is to be standardized.
-    NPI : bool, optional
-        Not used in this function. Default is True.
+    org : str or None, optional
+        Organization whose standard global attributes to apply (e.g.
+        "npi"). If None (the default), no organization-specific
+        attributes are added. See
+        kval.metadata._standard_attrs_org.standard_globals_org for the
+        available organizations.
 
     Returns
     -------
@@ -1530,7 +1532,8 @@ def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
     - `add_standard_glob_attrs_ctd`:
         Adds standard global attributes specific to CTD data.
     - `add_standard_glob_attrs_org`:
-        Adds standard global attributes for the organization.
+        Adds standard global attributes for the organization (only if
+        `org` is given).
     - `add_gmdc_keywords_ctd`:
         Adds GMDC keywords for CTD data.
     - `add_range_attrs`:
@@ -1543,12 +1546,13 @@ def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
     ds = conventionalize.remove_numbers_in_var_names(ds)
     ds = conventionalize.add_standard_var_attrs(ds, data_type='moored')
     ds = conventionalize.add_standard_glob_attrs_moor(ds, override=False)
-    ds = conventionalize.add_standard_glob_attrs_org(ds)
+    ds = conventionalize.add_standard_glob_attrs_org(ds, org=org)
     ds = conventionalize.add_gmdc_keywords_ctd(ds, moored = True)
     ds = conventionalize.add_range_attrs(ds)
     ds = conventionalize.reorder_attrs(ds)
 
     return ds
+
 
 def to_mat(ds: xr.Dataset, outfile: str, simplify: bool = False) -> None:
     """

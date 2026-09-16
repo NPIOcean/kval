@@ -289,3 +289,53 @@ def test_original_dataset_not_modified():
     # Since xarray datasets are mutable, ds will be modified in place
     # But we can check ds and ds_out are same object
     assert ds is ds_out
+
+# --- Tests for add_standard_glob_attrs_org ---
+
+def test_add_standard_glob_attrs_org_default_none_does_nothing():
+    """No org specified -> no organization-specific attributes added."""
+    ds = xr.Dataset(attrs={'title': 'test'})
+    ds_out = conventionalize.add_standard_glob_attrs_org(ds)
+    assert 'institution' not in ds_out.attrs
+    assert ds_out.attrs == {'title': 'test'}
+
+
+def test_add_standard_glob_attrs_org_npi():
+    """Explicit org='npi' adds the expected NPI attributes."""
+    ds = xr.Dataset()
+    ds_out = conventionalize.add_standard_glob_attrs_org(ds, org='npi')
+    assert ds_out.attrs['institution'] == 'Norwegian Polar Institute (NPI)'
+    assert ds_out.attrs['creator_email'] == 'post@npolar.no'
+    assert ds_out.attrs['publisher_name'] == 'Norwegian Polar Institute (NPI)'
+
+
+def test_add_standard_glob_attrs_org_case_insensitive():
+    """Org name matching should be case-insensitive."""
+    ds = xr.Dataset()
+    ds_out = conventionalize.add_standard_glob_attrs_org(ds, org='NPI')
+    assert ds_out.attrs['institution'] == 'Norwegian Polar Institute (NPI)'
+
+
+def test_add_standard_glob_attrs_org_unknown_raises_clear_error():
+    """An unrecognized org name should raise ValueError listing what's
+    actually available, not a bare KeyError."""
+    ds = xr.Dataset()
+    with pytest.raises(ValueError, match="Unknown org 'not_a_real_org'"):
+        conventionalize.add_standard_glob_attrs_org(ds, org='not_a_real_org')
+
+
+def test_add_standard_glob_attrs_org_does_not_override_existing_by_default():
+    """override=False (the default) should not touch an attribute the
+    dataset already has."""
+    ds = xr.Dataset(attrs={'institution': 'My Own Institution'})
+    ds_out = conventionalize.add_standard_glob_attrs_org(ds, org='npi')
+    assert ds_out.attrs['institution'] == 'My Own Institution'
+
+
+def test_add_standard_glob_attrs_org_override_true_replaces_existing():
+    """override=True should replace an existing attribute with the
+    organization's standard value."""
+    ds = xr.Dataset(attrs={'institution': 'My Own Institution'})
+    ds_out = conventionalize.add_standard_glob_attrs_org(
+        ds, org='npi', override=True)
+    assert ds_out.attrs['institution'] == 'Norwegian Polar Institute (NPI)'

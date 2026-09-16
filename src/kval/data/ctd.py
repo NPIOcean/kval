@@ -426,8 +426,7 @@ def calibrate_chl(
 
 # MODIFYING METADATA
 
-
-def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
+def metadata_auto(ds: xr.Dataset, org: str | None = None) -> xr.Dataset:
     """
     Standardize and enrich metadata in a CTD xarray Dataset.
 
@@ -442,8 +441,12 @@ def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
     ----------
     ds : xr.Dataset
         Input dataset whose metadata will be standardized.
-    NPI : bool, default=True
-        Not used; retained for API compatibility.
+    org : str or None, optional
+        Organization whose standard global attributes to apply (e.g.
+        "npi"). If None (the default), no organization-specific
+        attributes are added. See
+        kval.metadata._standard_attrs_org.standard_globals_org for the
+        available organizations.
 
     Returns
     -------
@@ -457,6 +460,7 @@ def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
     - `add_standard_var_attrs`: add standard variable attributes
     - `add_standard_glob_attrs_ctd`: add CTD-specific global attributes
     - `add_standard_glob_attrs_org`: add organizational global attributes
+      (only if `org` is given)
     - `add_gmdc_keywords_ctd`: add GMDC keywords for CTD data
     - `add_range_attrs`: add range attributes
     - `reorder_attrs`: reorder attributes for consistency
@@ -466,7 +470,7 @@ def metadata_auto(ds: xr.Dataset, NPI: bool = True) -> xr.Dataset:
     ds = conventionalize.remove_numbers_in_var_names(ds)
     ds = conventionalize.add_standard_var_attrs(ds, data_type='ctdprof')
     ds = conventionalize.add_standard_glob_attrs_ctd(ds, override=False)
-    ds = conventionalize.add_standard_glob_attrs_org(ds)
+    ds = conventionalize.add_standard_glob_attrs_org(ds, org=org)
     ds = conventionalize.add_gmdc_keywords_ctd(ds)
     ds = conventionalize.add_range_attrs(ds)
     ds = conventionalize.reorder_attrs(ds)

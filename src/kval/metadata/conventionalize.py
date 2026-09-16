@@ -474,21 +474,44 @@ def add_standard_var_attrs(
     return ds
 
 
-def add_standard_glob_attrs_org(ds, override=False, org="npi"):
+def add_standard_glob_attrs_org(ds, override=False, org=None):
     """
-    Adds standard organization, specific global variables for a CTD dataset as
-    specified in kval.data.nc_format._standard_attrs_org.
+    Adds standard organization-specific global attributes for a dataset,
+    as specified in kval.metadata._standard_attrs_org.
 
-    Includes  standard attribute values for things like "institution",
+    Includes standard attribute values for things like "institution",
     "creator_name", etc.
 
-    'org' is the organiztion (currently only 'npi' available)
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input dataset.
+    override : bool, default=False
+        Whether to override any global attributes that are already
+        present (typically not advised).
+    org : str or None, default=None
+        Which organization's standard attributes to apply (e.g. "npi").
+        If None (the default), no organization-specific attributes are
+        added -- this function does nothing in that case. See
+        kval.metadata._standard_attrs_org.standard_globals_org for the
+        available organizations.
 
-    override: governs whether to override any global attributes that are
-    already present (typically not advised..)
+    Returns
+    -------
+    xr.Dataset
     """
+    if org is None:
+        return ds
 
-    org_attrs = _standard_attrs_org.standard_globals_org[org.lower()]
+    org_key = org.lower()
+    if org_key not in _standard_attrs_org.standard_globals_org:
+        available = list(_standard_attrs_org.standard_globals_org.keys())
+        raise ValueError(
+            f"Unknown org '{org}'. Available organizations: {available}. "
+            "To support another organization, add an entry to "
+            "kval.metadata._standard_attrs_org.standard_globals_org.")
+
+    org_attrs = _standard_attrs_org.standard_globals_org[org_key]
 
     for attr, item in org_attrs.items():
         if attr not in ds.attrs:
@@ -498,6 +521,7 @@ def add_standard_glob_attrs_org(ds, override=False, org="npi"):
                 ds.attrs[attr] = item
 
     return ds
+
 
 def add_standard_glob_attrs_ctd(ds, override=False, org=False):
     """
