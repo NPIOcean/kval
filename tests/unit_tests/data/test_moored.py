@@ -757,3 +757,73 @@ def test_combine_datasets_too_few_datasets_raises(ds_instr1_combine):
 def test_combine_datasets_invalid_method_raises(ds_instr1_combine, ds_instr2_combine):
     with pytest.raises(ValueError, match='method must be'):
         combine_datasets(ds_instr1_combine, ds_instr2_combine, interval='1h', method='bogus')
+
+def test_combine_datasets_duplicate_labels_warns_not_raises(
+        ds_instr1_combine, ds_instr2_combine):
+    """Duplicate INSTR labels should warn, not raise -- e.g. useful for
+    testing self-correlation by combining a dataset with itself."""
+    with pytest.warns(UserWarning, match='not unique'):
+        out = combine_datasets(
+            ds_instr1_combine, ds_instr2_combine, interval='1h',
+            instr_names=['dup', 'dup'])
+    assert out.sizes['INSTR'] == 2
+    assert list(out.INSTR.values) == ['dup', 'dup']
+
+
+def test_combine_datasets_instr_names_wrong_length_raises(
+        ds_instr1_combine, ds_instr2_combine):
+    with pytest.raises(ValueError, match='entries but'):
+        combine_datasets(
+            ds_instr1_combine, ds_instr2_combine, interval='1h',
+            instr_names=['only_one'])
+
+
+def test_combine_datasets_missing_time_coord_raises(
+        ds_instr1_combine, ds_instr2_combine):
+    ds_no_time = ds_instr1_combine.rename({'TIME': 'OTHER_TIME'})
+    with pytest.raises(ValueError, match="missing 'TIME'"):
+        combine_datasets(ds_no_time, ds_instr2_combine, interval='1h')
+
+
+def test_combine_datasets_numeric_time_no_units_raises(
+        ds_instr1_combine):
+    ds_bad = xr.Dataset(
+        {'TEMP': ('TIME', np.linspace(10, 12, 5))},
+        coords={'TIME': np.arange(5, dtype=float)},
+    )
+    with pytest.raises(ValueError, match="no 'units' attribute"):
+        combine_datasets(ds_instr1_combine, ds_bad, interval='1h')
+
+
+def test_combine_datasets_interpolate_drops_non_numeric_var(
+        ds_instr1_combine, ds_instr2_combine, capsys):
+    ds1 = ds_instr1_combine.copy(deep=True)
+    ds1['FLAG'] = ('TIME', ['a'] * ds1.sizes['TIME'])
+    out = combine_datasets(
+        ds1, ds_instr2_combine, interval='1h', method='interpolate')
+    assert 'FLAG' not in out.data_vars
+    captured = capsys.readouterr()
+    assert 'dropped non-numeric' in captured.out
+
+
+def test_combine_datasets_varying_var_attr_becomes_coordinate(
+        ds_instr1_combine, ds_instr2_combine):
+    ds1 = ds_instr1_combine.copy(deep=True)
+    ds1['TEMP'].attrs['sensor_calibration_date'] = '2022-01-01'
+    ds2 = ds_instr2_combine.copy(deep=True)
+    ds2['TEMP'].attrs['sensor_calibration_date'] = '2023-06-01'
+    out = combine_datasets(ds1, ds2, interval='1h')
+    assert 'TEMP_sensor_calibration_date' in out.coords
+    assert list(out['TEMP_sensor_calibration_date'].values) == [
+        '2022-01-01', '2023-06-01']
+
+
+def test_combine_datasets_scalar_variable_stacked_by_instr(
+        ds_instr1_combine, ds_instr2_combine):
+    ds1 = ds_instr1_combine.copy(deep=True)
+    ds1['LATITUDE'] = 78.5
+    ds2 = ds_instr2_combine.copy(deep=True)
+    ds2['LATITUDE'] = 78.6
+    out = combine_datasets(ds1, ds2, interval='1h')
+    assert out['LATITUDE'].dims == ('INSTR',)
+    np.testing.assert_allclose(out['LATITUDE'].values, [78.5, 78.6])

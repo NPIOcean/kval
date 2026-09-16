@@ -1939,7 +1939,11 @@ def combine_datasets(
             labels.append(str(serial) if serial is not None else i)
  
     if len(set(labels)) != len(labels):
-        raise ValueError(f"INSTR labels must be unique, got: {labels}")
+        warnings.warn(
+            f"INSTR labels are not unique: {labels}. Did you supply the"
+            " same `ds` several times? That can cause some strange results. "
+            "Use instr_names to give explicit, unique labels if you need "
+            "to avoid this.", UserWarning)
  
     # --- Decode TIME to datetime64 for each dataset ---
     decoded = []

@@ -1,7 +1,8 @@
 '''
 ## kval.data.moored_tools._moored_tools
 
-Various functions for making modifications to moored sensor data in xarray format
+Various functions for making modifications to and plotting
+moored sensor data in xarray format
 '''
 
 
@@ -16,7 +17,8 @@ from kval.data import edit, moored
 from kval.signal.filt import rolling
 import xarray as xr
 import pandas as pd
-#from kval.data.ship_ctd_tools import _ctd_tools
+
+_FONT_FAMILY = 'Arial'  # matplotlib falls back gracefully if unavailable
 
 class hand_remove_points:
     """
@@ -449,47 +451,102 @@ def inspect_time_series(ds: xr.Dataset) -> None:
         close_button
     ])  # Align items to the start)
 
-    # Define the plot function
+
     def plot_time_series(variable, hourly_apply, hours, daily_apply, days, grid_apply):
         fig, ax = plt.subplots(figsize=(8, 5))
 
-        # Plot original data
-        ds[variable].plot(ax=ax, label=f"{variable} (original)", color='k', alpha=0.7)
+        da = ds[variable]
 
-        # Apply hourly mean if checkbox is checked
-        if hourly_apply:
-            try:
-                ds_resampled = ds[variable].resample(TIME=f'{hours}h', label='right').mean()
-                half_window_offset = pd.Timedelta(hours=hours / 2)
-                ds_resampled['TIME'] = ds_resampled.TIME - half_window_offset
-                ax.plot(ds_resampled.TIME, ds_resampled, label=(
-                    f"{variable} (hourly mean, window={hours} hours)"),
-                    color='tab:cyan')
-            except Exception as e:
-                print(f"Error applying hourly mean: {e}")
+        if 'INSTR' in da.dims:
+            # Combined multi-instrument dataset (e.g. from
+            # moored.combine_datasets): one trace per instrument, each
+            # a distinct color, legend showing just the instrument name.
+            # Mean-filter traces (if toggled) reuse the same color rather
+            # than getting their own legend entry, distinguished only by
+            # being drawn bolder/more opaque on top of the raw trace.
+            instr_values = da['INSTR'].values
+            color_cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
+            colors = {instr: color_cycle[i % len(color_cycle)]
+                     for i, instr in enumerate(instr_values)}
 
-        # Apply daily mean if checkbox is checked
-        if daily_apply:
-            try:
-                ds_resampled = ds[variable].resample(TIME=f'{days}D', label='right').mean()
-                half_window_offset = pd.Timedelta(days=days / 2)
-                ds_resampled['TIME'] = ds_resampled.TIME - half_window_offset
-                ax.plot(ds_resampled.TIME, ds_resampled, label=(
-                    f"{variable} (daily mean, window={days} days)"),
-                    color='tab:orange')
-            except Exception as e:
-                print(f"Error applying daily mean: {e}")
+            for instr in instr_values:
+                da_i = da.sel(INSTR=instr)
+                ax.plot(da_i.TIME, da_i, color=colors[instr], alpha=0.5,
+                       linewidth=0.8, label=str(instr))
+
+                if hourly_apply:
+                    try:
+                        resampled = da_i.resample(
+                            TIME=f'{hours}h', label='right').mean()
+                        half_window_offset = pd.Timedelta(hours=hours / 2)
+                        resampled['TIME'] = resampled.TIME - half_window_offset
+                        ax.plot(resampled.TIME, resampled, color=colors[instr],
+                               alpha=0.9, linewidth=1.5)
+                    except Exception as e:
+                        print(f"Error applying hourly mean for INSTR="
+                             f"{instr}: {e}")
+
+                if daily_apply:
+                    try:
+                        resampled = da_i.resample(
+                            TIME=f'{days}D', label='right').mean()
+                        half_window_offset = pd.Timedelta(days=days / 2)
+                        resampled['TIME'] = resampled.TIME - half_window_offset
+                        ax.plot(resampled.TIME, resampled, color=colors[instr],
+                               alpha=0.9, linewidth=2.5)
+                    except Exception as e:
+                        print(f"Error applying daily mean for INSTR="
+                             f"{instr}: {e}")
+
+        else:
+            # Plot original data
+            da.plot(ax=ax, label=f"{variable} (original)", color='k', alpha=0.7)
+
+            # Apply hourly mean if checkbox is checked
+            if hourly_apply:
+                try:
+                    ds_resampled = da.resample(TIME=f'{hours}h', label='right').mean()
+                    half_window_offset = pd.Timedelta(hours=hours / 2)
+                    ds_resampled['TIME'] = ds_resampled.TIME - half_window_offset
+                    ax.plot(ds_resampled.TIME, ds_resampled, label=(
+                        f"{variable} (hourly mean, window={hours} hours)"),
+                        color='tab:cyan')
+                except Exception as e:
+                    print(f"Error applying hourly mean: {e}")
+
+            # Apply daily mean if checkbox is checked
+            if daily_apply:
+                try:
+                    ds_resampled = da.resample(TIME=f'{days}D', label='right').mean()
+                    half_window_offset = pd.Timedelta(days=days / 2)
+                    ds_resampled['TIME'] = ds_resampled.TIME - half_window_offset
+                    ax.plot(ds_resampled.TIME, ds_resampled, label=(
+                        f"{variable} (daily mean, window={days} days)"),
+                        color='tab:orange')
+                except Exception as e:
+                    print(f"Error applying daily mean: {e}")
 
         # Show grid if checkbox is checked
         if grid_checkbox.value:
             ax.grid()
 
         ax.legend()
-        ax.set_title(f"Time Series: {variable}")
+        ax.set_title(f"Time Series: {variable}", fontfamily=_FONT_FAMILY)
+
+        units = da.attrs.get('units')
+        ylabel = f'{variable} [{units}]' if units else variable
+        ax.set_ylabel(ylabel, fontfamily=_FONT_FAMILY)
+
+        ax.tick_params(axis='both', labelfontfamily=_FONT_FAMILY)
+        if ax.get_legend() is not None:
+            for text in ax.get_legend().get_texts():
+                text.set_fontfamily(_FONT_FAMILY)
+
         fig.canvas.header_visible = False  # Hide the figure header
         plt.tight_layout()
 
         plt.show(block=False)
+
     # Define interaction without calling display explicitly
     interact_plot = widgets.interactive(
         plot_time_series,
