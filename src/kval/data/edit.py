@@ -625,10 +625,10 @@ def drop_variables(
 
 
 def cndc_offset_from_psal_offset(
-    delta_psal: float,
-    psal: float,
-    temp: float,
-    pres: float,
+    dS: float,
+    S: float,
+    T: float,
+    P: float,
 ) -> tuple[float, float]:
     """
     Convert a known Practical Salinity offset into the corresponding
@@ -644,7 +644,7 @@ def cndc_offset_from_psal_offset(
     "cell constant" (conductivity = cell constant x measured
     conductance), which is a multiplicative effect on the reading.
 
-    Typical use: you know a salinity offset from comparing an
+    Typical use: you know a salinity offset ΔS from comparing an
     instrument's reading (e.g. at recovery) against an independent
     reference. Use this function to find the corresponding conductivity
     factor, then apply it over the deployment with linear_drift
@@ -652,36 +652,35 @@ def cndc_offset_from_psal_offset(
 
     Parameters
     ----------
-    delta_psal : float
-        Known salinity offset: measured minus true, i.e.
-        psal_measured = psal_true + delta_psal. A positive value means
-        the instrument reads too high.
-    psal : float
+    dS : float
+        Known salinity offset (ΔS): measured minus true, i.e.
+        S_measured = S_true + dS. A positive value means the
+        instrument reads too high.
+    S : float
         The measured (uncorrected) Practical Salinity at the point
-        where delta_psal was determined.
-    temp : float
+        where dS was determined.
+    T : float
         In-situ temperature [degC] at that point.
-    pres : float
+    P : float
         Sea pressure [dbar] at that point.
 
     Returns
     -------
-    delta_cndc : float
-        Conductivity offset [mS/cm]: cndc_measured - cndc_true.
-    factor_cndc : float
-        Multiplicative correction factor: cndc_true / cndc_measured.
+    dC : float
+        Conductivity offset (ΔC) [mS/cm]: C_measured - C_true.
+    aC : float
+        Multiplicative correction factor (αC): C_true / C_measured.
         Multiply measured conductivity by this factor to correct it.
 
     Examples
     --------
-    >>> delta_cndc, factor_cndc = cndc_offset_from_psal_offset(
-    ...     delta_psal=0.02, psal=34.85, temp=1.5, pres=99.0)
+    >>> dC, aC = cndc_offset_from_psal_offset(dS=0.02, S=34.85, T=1.5, P=99.0)
     """
-    cndc_measured = gsw.C_from_SP(psal, temp, pres)
-    cndc_true = gsw.C_from_SP(psal - delta_psal, temp, pres)
-    delta_cndc = cndc_measured - cndc_true
-    factor_cndc = cndc_true / cndc_measured
-    return delta_cndc, factor_cndc
+    C_measured = gsw.C_from_SP(S, T, P)
+    C_true = gsw.C_from_SP(S - dS, T, P)
+    dC = C_measured - C_true
+    aC = C_true / C_measured
+    return dC, aC
 
 
 class drop_vars_pick: 
