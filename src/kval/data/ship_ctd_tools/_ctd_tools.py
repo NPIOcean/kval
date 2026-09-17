@@ -363,7 +363,8 @@ def join_cruise_btl(datasets, verbose = True,
         else:
             if n.start_time_source != start_time_source:
                 different_start_time_sources = True
-            ds = xr.concat([ds, n], dim = 'TIME', data_vars="all")
+            ds = xr.concat([ds, n], dim = 'TIME', data_vars="all", 
+                           join = 'outer')
 
     ### CHECK IF ANY SENSORS CHANGED
     # Modify metadata if they did
