@@ -3,6 +3,7 @@ import xarray as xr
 import numpy as np
 import pandas as pd
 from kval.data import edit
+import gsw
 
 # Define a fixture for a mock dataset
 @pytest.fixture
@@ -516,6 +517,62 @@ def test_linear_drift_identical_start_end_date_raises(mock_dataset):
         edit.linear_drift(
             mock_dataset, 'TEMP', end_val=5,
             start_date=same_date, end_date=same_date)
+
+
+
+# --- Tests for cndc_offset_from_psal_offset ---
+
+def test_cndc_offset_matches_manual_gsw_calculation():
+    """Direct check against the same gsw calls done by hand, not just
+    trusting the function's own internal logic."""
+    delta_cndc, factor_cndc = edit.cndc_offset_from_psal_offset(
+        delta_psal=0.02, psal=34.85, temp=1.5, pres=99.0)
+
+    expected_cndc_measured = gsw.C_from_SP(34.85, 1.5, 99.0)
+    expected_cndc_true = gsw.C_from_SP(34.83, 1.5, 99.0)
+    expected_delta = expected_cndc_measured - expected_cndc_true
+    expected_factor = expected_cndc_true / expected_cndc_measured
+
+    assert delta_cndc == pytest.approx(expected_delta)
+    assert factor_cndc == pytest.approx(expected_factor)
+
+
+def test_cndc_offset_zero_offset_gives_identity():
+    """No salinity offset should mean no conductivity offset and a
+    factor of exactly 1.0 (no-op correction)."""
+    delta_cndc, factor_cndc = edit.cndc_offset_from_psal_offset(
+        delta_psal=0.0, psal=34.85, temp=1.5, pres=99.0)
+    assert delta_cndc == pytest.approx(0.0, abs=1e-12)
+    assert factor_cndc == pytest.approx(1.0, abs=1e-12)
+
+
+def test_cndc_offset_applying_factor_recovers_true_salinity():
+    """The actual point of this function: using factor_cndc to correct
+    a measured conductivity and recalculating salinity should recover
+    the true (offset-corrected) salinity -- a round-trip check, not
+    just confirming the function runs."""
+    temp, pres = 1.5, 99.0
+    psal_measured, delta_psal = 34.85, 0.02
+    psal_true = psal_measured - delta_psal
+
+    _, factor_cndc = edit.cndc_offset_from_psal_offset(
+        delta_psal=delta_psal, psal=psal_measured, temp=temp, pres=pres)
+
+    cndc_measured = gsw.C_from_SP(psal_measured, temp, pres)
+    cndc_corrected = cndc_measured * factor_cndc
+    psal_recovered = gsw.SP_from_C(cndc_corrected, temp, pres)
+
+    assert psal_recovered == pytest.approx(psal_true, abs=1e-8)
+
+
+def test_cndc_offset_negative_offset():
+    """A negative delta_psal (instrument reads too low) should give a
+    factor > 1 (need to scale conductivity up to correct it)."""
+    delta_cndc, factor_cndc = edit.cndc_offset_from_psal_offset(
+        delta_psal=-0.02, psal=34.85, temp=1.5, pres=99.0)
+    assert factor_cndc > 1.0
+    assert delta_cndc < 0.0
+
 
 
 # --- Numeric TIME (with units attribute) fixture, separate from mock_dataset

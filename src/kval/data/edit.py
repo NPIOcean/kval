@@ -14,7 +14,7 @@ from IPython.display import display, clear_output
 from kval.calc.number import order_of_magnitude
 from kval.util import internals, index, time, xr_funcs
 import pandas as pd
-
+import gsw
 
 def remove_points_profile(ds: xr.Dataset, variable: str, TIME_index: int,
                           remove_inds, 
@@ -622,6 +622,66 @@ def drop_variables(
             print(drop_str)
 
     return ds
+
+
+def cndc_offset_from_psal_offset(
+    delta_psal: float,
+    psal: float,
+    temp: float,
+    pres: float,
+) -> tuple[float, float]:
+    """
+    Convert a known Practical Salinity offset into the corresponding
+    Conductivity offset and multiplicative correction factor, at the
+    temperature and pressure the offset was determined at.
+
+    Useful for sensor drift correction: it is the conductivity cell
+    that actually drifts, not salinity directly, so drift correction
+    should ideally be applied to conductivity rather than salinity --
+    and applied as a multiplicative factor, not an additive offset,
+    since conductivity drift (fouling, scaling, slow degradation of the
+    cell's geometry) acts by changing the cell's effective geometric
+    "cell constant" (conductivity = cell constant x measured
+    conductance), which is a multiplicative effect on the reading.
+
+    Typical use: you know a salinity offset from comparing an
+    instrument's reading (e.g. at recovery) against an independent
+    reference. Use this function to find the corresponding conductivity
+    factor, then apply it over the deployment with linear_drift
+    (factor=True), or kval.data.moored.linear_drift_factor.
+
+    Parameters
+    ----------
+    delta_psal : float
+        Known salinity offset: measured minus true, i.e.
+        psal_measured = psal_true + delta_psal. A positive value means
+        the instrument reads too high.
+    psal : float
+        The measured (uncorrected) Practical Salinity at the point
+        where delta_psal was determined.
+    temp : float
+        In-situ temperature [degC] at that point.
+    pres : float
+        Sea pressure [dbar] at that point.
+
+    Returns
+    -------
+    delta_cndc : float
+        Conductivity offset [mS/cm]: cndc_measured - cndc_true.
+    factor_cndc : float
+        Multiplicative correction factor: cndc_true / cndc_measured.
+        Multiply measured conductivity by this factor to correct it.
+
+    Examples
+    --------
+    >>> delta_cndc, factor_cndc = cndc_offset_from_psal_offset(
+    ...     delta_psal=0.02, psal=34.85, temp=1.5, pres=99.0)
+    """
+    cndc_measured = gsw.C_from_SP(psal, temp, pres)
+    cndc_true = gsw.C_from_SP(psal - delta_psal, temp, pres)
+    delta_cndc = cndc_measured - cndc_true
+    factor_cndc = cndc_true / cndc_measured
+    return delta_cndc, factor_cndc
 
 
 class drop_vars_pick: 
