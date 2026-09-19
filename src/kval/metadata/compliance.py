@@ -13,8 +13,36 @@ try:
 except ImportError:
     COMPLIANCE_CHECKER_AVAILABLE = False
 
+def _in_notebook() -> bool:
+    """Check whether we're running inside a Jupyter notebook/lab (not a
+    plain terminal or script), where ipywidgets will actually render."""
+    try:
+        from IPython import get_ipython
+        shell = get_ipython()
+        return shell is not None and shell.__class__.__name__ == "ZMQInteractiveShell"
+    except ImportError:
+        return False
 
-def check_file(file):
+
+def compliance_checks_ioos(file):
+    """
+    Use the IOOS compliance checker to check an nc file (CF and ACDD
+    conventions). Can take a file path or an xr.Dataset as input.
+
+    If running in a Jupyter notebook, results are shown with a "close"
+    button; otherwise, results print directly.
+    """
+    if not COMPLIANCE_CHECKER_AVAILABLE:
+        raise ImportError(...)  # unchanged
+
+    if _in_notebook():
+        _compliance_checks_ioos_with_button(file)
+    else:
+        _compliance_checks_ioos_plain(file)
+
+
+
+def _compliance_checks_ioos_plain(file):
     """
     Use the IOOS compliance checker
     (https://github.com/ioos/compliance-checker-web)
@@ -61,7 +89,7 @@ def check_file(file):
         os.remove(temp_file)
 
 
-def check_file_with_button(file):
+def _compliance_checks_ioos_with_button(file):
     """
     (Wrapper for check_file() with a "close" button)
 
@@ -97,12 +125,11 @@ def check_file_with_button(file):
 
     display(widgets.VBox([close_button, output_widget]))
 
-    # Your existing code
     with output_widget:
-        check_file(file)
+        _compliance_checks_ioos_plain(file)
 
 
-def custom_checks(ds: xr.Dataset) -> None:
+def compliance_checks_custom(ds: xr.Dataset) -> None:
     """
     Various ad-hoc checks for CF/ACDD compatibility and following good NPI practice. 
     Inspects an xarray.Dataset and prints a summary with red flags.

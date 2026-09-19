@@ -9,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 import xarray as xr
 import numpy as np
-from kval.metadata import check_conventions, conventionalize
+from kval.metadata import compliance, conventionalize
 from kval.util import time
 
 #### ADD VARIABLES
@@ -131,4 +131,4 @@ def to_netcdf(
 
     if convention_check:
         print('Running convention checker:')
-        check_conventions.check_file(file_path)
+        compliance.compliance_checks_ioos(file_path)

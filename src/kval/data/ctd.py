@@ -11,7 +11,7 @@ from kval.file import matfile
 from kval.data import dataset, edit
 from kval.util import time, xr_funcs
 from kval.metadata import conventionalize, _standard_attrs
-from kval.metadata.check_conventions import check_file_with_button, custom_checks
+from kval.metadata.compliance import compliance_checks_ioos, compliance_checks_custom
 from kval.metadata.conventionalize import convert_64_to_32, add_now_as_date_created, nans_to_fill_value
 from kval.metadata.io import import_metadata, export_metadata
 
@@ -674,28 +674,6 @@ def contour(ds: xr.Dataset) -> None:
     """
     viz.ctd_contours(ds)
 
-
-############
-
-
-def check_metadata(ds: xr.Dataset | str) -> None:
-    """
-    Check a dataset or NetCDF file for CF and ACDD compliance.
-
-    Uses the IOOS compliance checker to validate conventions in a dataset 
-    or a NetCDF file.
-
-    Parameters
-    ----------
-    ds : xr.Dataset | str
-        Dataset or path to a NetCDF file to be checked.
-
-    Returns
-    -------
-    None
-        Displays the compliance results interactively, including a "Close" button.
-    """
-    check_file_with_button(ds)
 
 
 ############

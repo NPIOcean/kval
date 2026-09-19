@@ -8,6 +8,6 @@ def test_imports():
     from kval.file import sbe, rbr, matfile,  _variable_defs
     from kval.geo import geocalc
     from kval.plot import quickmap
-    from kval.metadata import conventionalize, check_conventions, _standard_attrs, _standard_attrs_org
+    from kval.metadata import conventionalize, compliance, _standard_attrs, _standard_attrs_org
     from kval.ocean import empirical, uv
     from kval.util import time, user_input, xr_funcs

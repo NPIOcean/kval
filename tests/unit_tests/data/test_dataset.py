@@ -126,7 +126,7 @@ def test_to_netcdf_convention_check(mock_dataset):
     Test the to_netcdf function to ensure convention checker is called.
     """
     with TemporaryDirectory() as tmpdir:
-        with patch('kval.data.dataset.check_conventions.check_file') as mock_check:
+        with patch('kval.data.dataset.compliance.compliance_checks_ioos') as mock_check:
             dataset.to_netcdf(mock_dataset, tmpdir, convention_check=True)
             mock_check.assert_called_once_with(Path(tmpdir) / 'test_dataset.nc')
 

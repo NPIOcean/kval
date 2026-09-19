@@ -27,7 +27,7 @@ from kval.data.moored_tools import _moored_tools
 from kval.util import internals, index, time
 from kval.signal import despike, filt
 from kval.metadata import conventionalize
-from kval.metadata.check_conventions import check_file_with_button
+from kval.metadata.compliance import compliance_checks_ioos, compliance_checks_custom
 import warnings
 
 # Want to be able to use these functions directly..
@@ -1587,24 +1587,6 @@ def to_mat(ds: xr.Dataset, outfile: str, simplify: bool = False) -> None:
     # Also transposing dimensions to PRES, TIME for ease of plotting etc in
     # MATLAB.
     matfile.xr_to_mat(ds.transpose(), outfile, simplify=simplify)
-
-
-def check_metadata(ds: xr.Dataset | str) -> None:
-    """
-    Run the IOOS compliance checker on a dataset or NetCDF file.
-
-    Checks for compliance with CF and ACDD conventions and displays the results
-    interactively with a "Close" button.
-
-    Parameters
-    ----------
-    ds : xr.Dataset or str
-        The dataset or path to a NetCDF file to check.
-
-    Notes
-    -----
-    This function is intended for interactive use in a Jupyter environment.
-    """
 
 
 def plot(ds: xr.Dataset) -> None:
