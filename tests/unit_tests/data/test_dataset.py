@@ -130,3 +130,191 @@ def test_to_netcdf_convention_check(mock_dataset):
             dataset.to_netcdf(mock_dataset, tmpdir, convention_check=True)
             mock_check.assert_called_once_with(Path(tmpdir) / 'test_dataset.nc')
 
+
+
+# ===================================================================
+# Tests for the gsw-based derived-parameter functions:
+# calculate_PSAL, calculate_CNDC, calculate_SA_CT, calculate_rho,
+# calculate_sig0, calculate_ss.
+#
+# These check numerical correctness against official TEOS-10 reference
+# ("check") values -- the same reference values gsw-python's own test
+# suite uses to validate against the reference MATLAB toolbox. A test
+# that only checks "the function runs and returns a finite number" would
+# not catch a real bug like a swapped argument order or a wrong input
+# unit, since gsw would still return *some* number in that case.
+# Comparing against independently-known-correct values is what actually
+# catches that class of bug.
+#
+# Reference values were extracted from gsw's own check-value dataset
+# (gsw/tests/gsw_cv_v3_0.npz, TEOS-10 v3.0) at two points:
+#   - point A: shallow, warm (p=0 dbar, t=27.962 C)
+#   - point B: intermediate depth, cooler (p=909 dbar, t=5.195 C)
+#
+# calculate_rho, calculate_sig0, and calculate_ss use gsw's "computationally
+# efficient" polynomial approximation (Roquet et al., 2015) rather than the
+# fully exact Gibbs-function computation the reference values use, so these
+# three are checked with a small tolerance rather than an exact match. This
+# was verified deliberately (not just assumed) -- the approximation's known
+# discrepancy against the exact reference is on the order of 1e-4 to 1e-1
+# in absolute terms, many orders of magnitude below any real CTD sensor's
+# measurement precision. calculate_PSAL, calculate_CNDC, and calculate_SA_CT
+# use exact algorithms and match the reference to machine precision.
+# ===================================================================
+
+from kval.data.dataset import (
+    calculate_PSAL,
+    calculate_CNDC,
+    calculate_SA_CT,
+    calculate_rho,
+    calculate_sig0,
+    calculate_ss,
+)
+
+_POINT_A = dict(
+    SP=34.306287392599714, t=27.962, p=0.0, lat=11.0, lon=142.0,
+    SA_ref=34.468236430490606, CT_ref=27.996436412058213,
+    RHO_ref=1021.8866110446018, SIG0_ref=21.886611044601636,
+    SVEL_ref=1540.4098538961257, C_ref=55.19754712635529,
+)
+_POINT_B = dict(
+    SP=34.5463600000422, t=5.194999999999999, p=909.0, lat=9.5, lon=183.0,
+    SA_ref=34.718723829149454, CT_ref=5.117058424764436,
+    RHO_ref=1031.4704840056474, SIG0_ref=27.309757772675766,
+    SVEL_ref=1485.6746748734474, C_ref=33.6425208551767,
+)
+_GSW_POINTS = [_POINT_A, _POINT_B]
+
+
+def _make_gsw_ds(point, with_cndc=True, with_psal=True, with_latlon=True):
+    """Build a minimal single-point xr.Dataset with the variable names
+    and structure kval's calculate_* functions expect."""
+    ds = xr.Dataset(
+        {
+            "TEMP": ("TIME", [point["t"]]),
+            "PRES": ("TIME", [point["p"]]),
+        },
+        coords={"TIME": [0]},
+    )
+    if with_cndc:
+        ds["CNDC"] = ("TIME", [point["C_ref"]])
+        ds["CNDC"].attrs["units"] = "mS/cm"
+    if with_psal:
+        ds["PSAL"] = ("TIME", [point["SP"]])
+    if with_latlon:
+        ds["LATITUDE"] = ((), point["lat"])
+        ds["LONGITUDE"] = ((), point["lon"])
+    return ds
+
+
+@pytest.mark.parametrize("point", _GSW_POINTS)
+def test_calculate_PSAL_matches_reference(point):
+    ds = _make_gsw_ds(point, with_psal=False, with_latlon=False)
+    result = calculate_PSAL(ds)
+    assert result["PSAL"].values[0] == pytest.approx(point["SP"], rel=1e-10)
+
+
+@pytest.mark.parametrize("point", _GSW_POINTS)
+def test_calculate_CNDC_matches_reference(point):
+    ds = _make_gsw_ds(point, with_cndc=False, with_latlon=False)
+    result = calculate_CNDC(ds)
+    assert result["CNDC"].values[0] == pytest.approx(point["C_ref"], rel=1e-10)
+
+
+@pytest.mark.parametrize("point", _GSW_POINTS)
+def test_calculate_PSAL_CNDC_round_trip(point):
+    """Recomputing CNDC from the recomputed PSAL should recover the
+    original CNDC -- a sanity check that these two functions are
+    consistent inverses of each other, independent of the reference data."""
+    ds = _make_gsw_ds(point, with_psal=False, with_latlon=False)
+    ds = calculate_PSAL(ds)
+    ds = calculate_CNDC(ds)
+    assert ds["CNDC"].values[0] == pytest.approx(point["C_ref"], rel=1e-8)
+
+
+def test_calculate_PSAL_converts_S_per_m_units():
+    """calculate_PSAL should detect CNDC given in S/m and apply the x10
+    conversion to mS/cm before calling gsw -- gsw.SP_from_C explicitly
+    requires input conductivity in mS/cm."""
+    point = _POINT_A
+    ds = _make_gsw_ds(point, with_psal=False, with_latlon=False)
+    ds["CNDC"].values[:] = ds["CNDC"].values / 10.0  # express as S/m instead
+    ds["CNDC"].attrs["units"] = "S m-1"
+    result = calculate_PSAL(ds)
+    assert result["PSAL"].values[0] == pytest.approx(point["SP"], rel=1e-6)
+
+
+@pytest.mark.parametrize("point", _GSW_POINTS)
+def test_calculate_SA_CT_matches_reference(point):
+    ds = _make_gsw_ds(point)
+    result = calculate_SA_CT(ds)
+    assert result["SA"].values[0] == pytest.approx(point["SA_ref"], rel=1e-8)
+    assert result["CT"].values[0] == pytest.approx(point["CT_ref"], rel=1e-8)
+
+
+@pytest.mark.parametrize("point", _GSW_POINTS)
+def test_calculate_rho_matches_reference(point):
+    ds = _make_gsw_ds(point)
+    result = calculate_rho(ds)
+    assert result["RHO"].values[0] == pytest.approx(point["RHO_ref"], rel=1e-5)
+
+
+@pytest.mark.parametrize("point", _GSW_POINTS)
+def test_calculate_sig0_matches_reference(point):
+    ds = _make_gsw_ds(point)
+    result = calculate_sig0(ds)
+    # Absolute tolerance here, not relative: SIG0 is a density *anomaly*
+    # (~20-30 kg/m3) rather than full density (~1030 kg/m3), so the same
+    # absolute algorithmic discrepancy looks like a much larger relative
+    # error here purely due to the smaller baseline magnitude.
+    assert result["SIG0"].values[0] == pytest.approx(point["SIG0_ref"], abs=5e-3)
+
+
+@pytest.mark.parametrize("point", _GSW_POINTS)
+def test_calculate_ss_matches_reference_without_existing_SA_CT(point):
+    ds = _make_gsw_ds(point)
+    assert "SA" not in ds and "CT" not in ds
+    result = calculate_ss(ds)
+    assert result["SVEL"].values[0] == pytest.approx(point["SVEL_ref"], abs=0.5)
+
+
+@pytest.mark.parametrize("point", _GSW_POINTS)
+def test_calculate_ss_matches_reference_with_existing_SA_CT(point):
+    ds = _make_gsw_ds(point)
+    ds = calculate_SA_CT(ds)
+    assert "SA" in ds and "CT" in ds
+    result = calculate_ss(ds)
+    assert result["SVEL"].values[0] == pytest.approx(point["SVEL_ref"], abs=0.5)
+
+
+def test_calculate_ss_reuses_existing_SA_CT_rather_than_recomputing():
+    """If SA/CT are already present, calculate_ss should use those values
+    directly rather than recomputing them from CNDC/TEMP/PRES -- this is
+    the documented, deliberate branch that distinguishes calculate_ss from
+    calculate_rho/calculate_sig0 (which always recompute). We prove the
+    branch is actually taken by planting deliberately wrong SA/CT values
+    and confirming the (now deliberately wrong) output reflects them."""
+    point = _POINT_A
+    ds = _make_gsw_ds(point)
+
+    correct_result = calculate_ss(ds.copy(deep=True))
+    correct_svel = correct_result["SVEL"].values[0]
+
+    ds_wrong = ds.copy(deep=True)
+    ds_wrong["SA"] = ("TIME", [point["SA_ref"] + 5.0])
+    ds_wrong["CT"] = ("TIME", [point["CT_ref"] + 5.0])
+    wrong_result = calculate_ss(ds_wrong)
+    wrong_svel = wrong_result["SVEL"].values[0]
+
+    assert abs(wrong_svel - correct_svel) > 1.0
+    assert wrong_svel != pytest.approx(point["SVEL_ref"], abs=0.5)
+
+
+@pytest.mark.parametrize(
+    "func", [calculate_PSAL, calculate_CNDC, calculate_SA_CT, calculate_rho, calculate_sig0, calculate_ss]
+)
+def test_gsw_functions_do_not_mutate_input_dataset(func):
+    ds = _make_gsw_ds(_POINT_A)
+    ds_original = ds.copy(deep=True)
+    _ = func(ds)
+    xr.testing.assert_identical(ds, ds_original)

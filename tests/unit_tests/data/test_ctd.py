@@ -3,6 +3,15 @@ import pytest
 from kval.data import ctd
 import glob2
 import numpy as np
+from kval.data.ctd import (
+    calculate_PSAL,
+    calculate_CNDC,
+    calculate_SA_CT,
+    calculate_rho,
+    calculate_sig0,
+    calculate_ss,
+)
+
 
 @pytest.fixture
 def dir_list_test_cnvs():
@@ -79,3 +88,40 @@ def test_metadata_auto_explicit_org_npi(dir_list_test_cnvs):
     ds = ctd.ctds_from_cnv_dir(dir_list_test_cnvs[0])
     ds = ctd.metadata_auto(ds, org='npi')
     assert ds.attrs.get('institution') == 'Norwegian Polar Institute (NPI)'
+
+
+
+# Testing reachability of the calculate_* functions imported from data.dataset
+
+@pytest.fixture
+def small_ctd_profile_ds():
+    n = 5
+    return xr.Dataset(
+        {
+            "TEMP": ("PRES", 10.0 - 0.5 * np.arange(n)),
+            "PSAL": ("PRES", 34.5 + 0.05 * np.arange(n)),
+            "CNDC": ("PRES", 40.0 + 0.1 * np.arange(n)),
+        },
+        coords={"PRES": np.arange(n) * 50.0},
+    ).pipe(lambda ds: ds.assign(LATITUDE=((), 70.0), LONGITUDE=((), 10.0)))
+ 
+ 
+@pytest.mark.parametrize(
+    "func,expected_var",
+    [
+        (calculate_PSAL, "PSAL"),
+        (calculate_CNDC, "CNDC"),
+        (calculate_SA_CT, "SA"),
+        (calculate_rho, "RHO"),
+        (calculate_sig0, "SIG0"),
+        (calculate_ss, "SVEL"),
+    ],
+)
+def test_ctd_can_reach_dataset_functions(small_ctd_profile_ds, func, expected_var):
+    """ctd.<func> should be reachable and work on profile-shaped (PRES-
+    dimensioned) data -- this is new functionality, ctd.py had none of
+    these six functions before."""
+    result = func(small_ctd_profile_ds)
+    assert expected_var in result
+    assert np.all(np.isfinite(result[expected_var].values))
+ 

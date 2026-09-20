@@ -19,7 +19,9 @@ import numpy as np
 from pathlib import Path
 
 # Want to be able to use these functions directly..
-from kval.data.dataset import to_netcdf
+from kval.data.dataset import (
+    to_netcdf, add_latlon, calculate_PSAL, calculate_CNDC, 
+    calculate_SA_CT, calculate_rho, calculate_sig0, calculate_ss)
 from kval.data.edit import threshold, offset
 
 

@@ -4,9 +4,22 @@ import requests
 from pathlib import Path
 import gsw
 from kval.data.moored import (
-    load_moored, assign_pressure, drop_variables, 
-    calculate_PSAL, adjust_time_for_drift, chop_by_time, 
-    combine_datasets, metadata_auto)
+    load_moored, 
+    assign_pressure, 
+    drop_variables, 
+    calculate_PSAL, 
+    adjust_time_for_drift, 
+    chop_by_time, 
+    combine_datasets, 
+    metadata_auto,
+    calculate_PSAL,
+    calculate_CNDC,
+    calculate_SA_CT,
+    calculate_rho,
+    calculate_sig0,
+    calculate_ss,
+)
+
 import re
 import pandas as pd
 import numpy as np
@@ -858,3 +871,40 @@ def test_metadata_auto_explicit_org_npi(sample_dataset_metadata_auto):
     """org='npi' should add the standard NPI global attributes."""
     ds = metadata_auto(sample_dataset_metadata_auto, org='npi')
     assert ds.attrs.get('institution') == 'Norwegian Polar Institute (NPI)'
+
+
+
+
+# Testing reachability of the *calculate* functions imported from data.dataset
+@pytest.fixture
+def small_moored_ds():
+    n = 5
+    return xr.Dataset(
+        {
+            "TEMP": ("TIME", 1.0 + 0.1 * np.arange(n)),
+            "PSAL": ("TIME", 34.8 + 0.01 * np.arange(n)),
+            "PRES": ("TIME", 99.0 + np.zeros(n)),
+            "CNDC": ("TIME", 30.2 + 0.01 * np.arange(n)),
+        },
+        coords={"TIME": np.arange(n)},
+    ).pipe(lambda ds: ds.assign(LATITUDE=((), 80.0), LONGITUDE=((), 30.0)))
+ 
+ 
+@pytest.mark.parametrize(
+    "func,expected_var",
+    [
+        (calculate_PSAL, "PSAL"),
+        (calculate_CNDC, "CNDC"),
+        (calculate_SA_CT, "SA"),
+        (calculate_rho, "RHO"),
+        (calculate_sig0, "SIG0"),
+        (calculate_ss, "SVEL"),
+    ],
+)
+def test_moored_can_reach_dataset_functions(small_moored_ds, func, expected_var):
+    """moored.<func> should be reachable and produce the expected output
+    variable, confirming the import from dataset.py is wired correctly."""
+    result = func(small_moored_ds)
+    assert expected_var in result
+    assert np.all(np.isfinite(result[expected_var].values))
+ 
