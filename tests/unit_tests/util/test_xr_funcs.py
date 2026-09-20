@@ -2,7 +2,8 @@ import pytest
 import xarray as xr
 import pandas as pd
 import numpy as np
-from kval.util import xr_funcs  # Assuming the function is in xr_funcs module
+from kval.util import xr_funcs  
+from kval.util.xr_funcs import time_average
 
 # Define a fixture for a mock dataset
 @pytest.fixture
@@ -319,3 +320,140 @@ def test_append_processing_history_deep_copy_false_mutates_in_place(mock_dataset
         mock_dataset, 'TEMP', 'Applied offset.', deep_copy=False)
     assert result is mock_dataset
     assert mock_dataset['TEMP'].attrs['processing_history'] == 'Applied offset.'
+
+
+## Testing time_average
+
+
+# ---------------------------------------------------------------------
+# Encoding-preservation behavior (the fix for the decode_cf / NameError
+# issue: this function should not silently change whether TIME is
+# CF-encoded or decoded -- it should return in the same state as the
+# input, doing any necessary decoding/re-encoding internally).
+# ---------------------------------------------------------------------
+ 
+def test_time_average_preserves_encoded_input_as_encoded_output():
+    ds = xr.Dataset({'TEMP': ('TIME', np.arange(10.0))}, coords={'TIME': np.arange(10.0)})
+    ds['TIME'].attrs['units'] = 'days since 2021-01-01'
+    ds['TIME'].attrs['calendar'] = 'standard'
+    result = time_average(ds, '1D')
+    assert np.issubdtype(result['TIME'].dtype, np.number)
+    assert result['TIME'].attrs['units'] == 'days since 2021-01-01'
+ 
+ 
+def test_time_average_preserves_decoded_input_as_decoded_output():
+    ds = xr.Dataset({'TEMP': ('TIME', np.arange(10.0))},
+                     coords={'TIME': pd.date_range('2021-01-01', periods=10)})
+    result = time_average(ds, '1D')
+    assert np.issubdtype(result['TIME'].dtype, np.datetime64)
+ 
+ 
+def test_time_average_does_not_mutate_input():
+    ds = xr.Dataset({'TEMP': ('TIME', np.arange(10.0))}, coords={'TIME': np.arange(10.0)})
+    ds['TIME'].attrs['units'] = 'days since 2021-01-01'
+    ds_original = ds.copy(deep=True)
+    _ = time_average(ds)
+    xr.testing.assert_identical(ds, ds_original)
+ 
+ 
+def test_time_average_raises_if_encoded_time_has_no_units():
+    """A numeric TIME with no 'units' attribute can't be decoded as CF
+    time at all -- this should fail clearly rather than silently doing
+    the wrong thing."""
+    ds = xr.Dataset({'TEMP': ('TIME', np.arange(10.0))}, coords={'TIME': np.arange(10.0)})
+    with pytest.raises(ValueError, match="units"):
+        time_average(ds)
+ 
+ 
+# ---------------------------------------------------------------------
+# General behavior
+# ---------------------------------------------------------------------
+ 
+def test_time_average_computes_correct_mean():
+    ds = xr.Dataset(
+        {'TEMP': ('TIME', np.array([1.0, 1.0, 3.0, 3.0, 5.0, 5.0, 7.0, 7.0]))},
+        coords={'TIME': pd.date_range('2021-01-01', periods=8, freq='12h')},
+    )
+    result = time_average(ds, '1D', label='left')
+    np.testing.assert_allclose(result['TEMP'].values, [1.0, 3.0, 5.0, 7.0])
+ 
+ 
+@pytest.mark.parametrize(
+    "label,expected_first_timestamp",
+    [
+        ("left", "2021-01-01T00:00:00"),
+        ("right", "2021-01-02T00:00:00"),
+        ("center", "2021-01-01T12:00:00"),
+    ],
+)
+def test_time_average_label_placement(label, expected_first_timestamp):
+    ds = xr.Dataset(
+        {'TEMP': ('TIME', np.array([1.0, 1.0, 3.0, 3.0]))},
+        coords={'TIME': pd.date_range('2021-01-01', periods=4, freq='12h')},
+    )
+    result = time_average(ds, '1D', label=label)
+    assert result['TIME'].values[0] == np.datetime64(expected_first_timestamp)
+ 
+ 
+def test_time_average_drops_non_numeric_time_dependent_variables():
+    ds = xr.Dataset(
+        {
+            'TEMP': ('TIME', np.array([1.0, 1.0, 3.0, 3.0])),
+            'STATION': ('TIME', np.array(['a', 'a', 'b', 'b'])),
+        },
+        coords={'TIME': pd.date_range('2021-01-01', periods=4, freq='12h')},
+    )
+    result = time_average(ds, '1D')
+    assert 'STATION' not in result
+    assert 'TEMP' in result
+ 
+ 
+def test_time_average_preserves_time_independent_variables_unbroadcast():
+    """A variable with no TIME dimension at all (e.g. ZONE(PRES)) should
+    be passed through unchanged, not broadcast across the new time bins."""
+    ds = xr.Dataset(
+        {
+            'TEMP': ('TIME', np.array([1.0, 1.0, 3.0, 3.0])),
+            'ZONE': ('PRES', np.array([1, 2, 3])),
+        },
+        coords={'TIME': pd.date_range('2021-01-01', periods=4, freq='12h')},
+    )
+    result = time_average(ds, '1D')
+    assert result['ZONE'].dims == ('PRES',)
+    np.testing.assert_array_equal(result['ZONE'].values, [1, 2, 3])
+ 
+ 
+def test_time_average_raises_for_missing_time_dim():
+    ds = xr.Dataset({'TEMP': ('TIME', np.arange(4.0))},
+                     coords={'TIME': pd.date_range('2021-01-01', periods=4)})
+    with pytest.raises(ValueError, match="not a dimension"):
+        time_average(ds, '1D', time_dim='NOTATIME')
+ 
+ 
+def test_time_average_raises_for_invalid_label():
+    ds = xr.Dataset({'TEMP': ('TIME', np.arange(4.0))},
+                     coords={'TIME': pd.date_range('2021-01-01', periods=4)})
+    with pytest.raises(ValueError, match="label must be"):
+        time_average(ds, '1D', label='bogus')
+ 
+ 
+def test_time_average_center_raises_informatively_for_calendar_based_interval():
+    """label='center' isn't well-defined for calendar-based intervals
+    (e.g. month-end 'ME') since they don't have a fixed duration -- this
+    should raise a clear, actionable error rather than a cryptic one."""
+    ds = xr.Dataset({'TEMP': ('TIME', np.arange(60.0))},
+                     coords={'TIME': pd.date_range('2021-01-01', periods=60)})
+    with pytest.raises(ValueError, match="label='left'"):
+        time_average(ds, 'ME', label='center')
+ 
+ 
+def test_time_average_origin_shifts_bin_edges():
+    ds = xr.Dataset(
+        {'TEMP': ('TIME', np.arange(8.0))},
+        coords={'TIME': pd.date_range('2021-01-01 00:00', periods=8, freq='3h')},
+    )
+    result_default = time_average(ds, '6h', label='left')
+    result_shifted = time_average(ds, '6h', label='left', origin='2021-01-01 03:00')
+    assert result_default['TIME'].values[0] != result_shifted['TIME'].values[0]
+    assert result_shifted['TIME'].values[0] == np.datetime64('2020-12-31T21:00:00')
+ 

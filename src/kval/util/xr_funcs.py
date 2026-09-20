@@ -6,7 +6,8 @@ Various generalized wrapper functions for working with xarray Datasets
 
 import xarray as xr
 import numpy as np
-
+import pandas as pd
+from xarray.coding.times import encode_cf_datetime
 
 # INDEXING
 
@@ -393,6 +394,20 @@ def time_average(
     if label not in ('center', 'left', 'right'):
         raise ValueError("label must be one of 'center', 'left', or 'right'")
 
+
+    was_encoded = np.issubdtype(ds[time_dim].dtype, np.number)
+    if was_encoded:
+        original_units = ds[time_dim].attrs.get('units')
+        original_calendar = ds[time_dim].attrs.get('calendar', 'standard')
+        if original_units is None:
+            raise ValueError(
+                f"'{time_dim}' is numeric but has no 'units' attribute, so "
+                "it can't be decoded as CF time. Expected e.g. "
+                "'days since 1970-01-01'."
+            )
+        ds = xr.decode_cf(ds, decode_timedelta=True)
+
+
     # xarray's resample only natively supports 'left'/'right' labeling;
     # for 'center' we resample as 'left' and shift the result afterward
     resample_label = 'left' if label == 'center' else label
@@ -441,5 +456,14 @@ def time_average(
         print(f"time_average: dropped non-numeric {time_dim}-dependent "
               f"variable(s) {dropped_vars} (mean is not defined for "
               "non-numeric data)")
+
+
+    if was_encoded:
+        num, units, calendar = encode_cf_datetime(
+            ds_out[time_dim].values, units=original_units, calendar=original_calendar
+        )
+        ds_out = ds_out.assign_coords({time_dim: num})
+        ds_out[time_dim].attrs['units'] = units
+        ds_out[time_dim].attrs['calendar'] = calendar
 
     return ds_out
