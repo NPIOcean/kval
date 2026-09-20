@@ -28,6 +28,8 @@ from kval.util import internals, index, time
 from kval.signal import despike, filt
 from kval.metadata import conventionalize
 from kval.metadata.compliance import compliance_checks_ioos, compliance_checks_custom
+from kval.metadata.conventionalize import convert_64_to_32, add_now_as_date_created, nans_to_fill_value
+
 import warnings
 
 # Want to be able to use these functions directly..
