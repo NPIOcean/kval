@@ -409,10 +409,12 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
     # Check required globals
     missing_required = [k for k in required_global_attrs if k not in ds.attrs]
     if missing_required:
-        raise ValueError(
-            f"{cross} Missing REQUIRED global attributes: {', '.join(missing_required)}\n"
-            f"{arrow} These must be added for CF/ACDD compliance"
+        warnings.insert(0,
+            f"{cross}{cross}{cross} MISSING REQUIRED GLOBAL ATTRIBUTES {cross}{cross}{cross}\n"
+            f"{', '.join(missing_required)}\n"
+            f"{arrow} These MUST be added for CF/ACDD compliance"
         )
+        issues += 1
     else:
         passed.append(f"{check} All required global attributes present")
 
