@@ -779,8 +779,8 @@ class drop_vars_pick:
                 ds_dropped = moored.drop_variables(
                   self.ds, drop = self.selected_options)
             else:
-                from kval.data import ctd
-                ds_dropped = ctd.drop_variables(
+                from kval.data import ctdprof
+                ds_dropped = ctdprof.drop_variables(
                   self.ds, drop = self.selected_options)
 
             for key in self.selected_options:
