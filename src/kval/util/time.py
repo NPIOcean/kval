@@ -93,7 +93,7 @@ def datetime_to_numeric_time(
         np.ndarray of numeric time value(s).
     """
     num, _, _ = xr.coding.times.encode_cf_datetime(
-        np.asarray(values), units=units, calendar=calendar
+        np.asarray(values), units=units, calendar=calendar, dtype=np.float64
     )
     return num
 

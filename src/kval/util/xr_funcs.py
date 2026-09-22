@@ -87,7 +87,7 @@ def time_as_float(ds, time_dim='TIME', units=None, calendar=None):
             f"'{units}'. Pass units= explicitly to silence this."
         )
     num, units, calendar = encode_cf_datetime(
-        ds[time_dim].values, units=units, calendar=calendar
+        ds[time_dim].values, units=units, calendar=calendar, dtype=np.float64
     )
     ds = ds.assign_coords({time_dim: num})
     ds[time_dim].attrs['units'] = units
