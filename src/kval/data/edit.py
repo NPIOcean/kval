@@ -188,11 +188,11 @@ def threshold(ds: xr.Dataset, variable: str,
         The input xarray Dataset.
     variable : str
         The name of the variable within the Dataset to be thresholded.
-    min_val : Optional[float], default=None
+    min_val : float | None, default=None
         The minimum allowed value for the variable. Values less than
         this will be set to NaN.
         If None, no lower threshold is applied.
-    max_val : Optional[float], default=None
+    max_val : float | None, default=None
         The maximum allowed value for the variable. Values greater than
         this will be set to NaN.
         If None, no upper threshold is applied.
@@ -698,7 +698,7 @@ class drop_vars_pick:
     ds : xr.Dataset
         The input dataset from which variables can be dropped. The internal 
         copy is modified interactively.
-    moored : Optional[bool], default=None
+    moored : bool | None, default=None
         If True, applies mooring-specific variable removal logic. Otherwise, 
         standard CTD variable removal is used.
 
@@ -708,7 +708,7 @@ class drop_vars_pick:
     >>> ds = xr.open_dataset("my_ctd_data.nc")
     >>> drop_vars_pick(ds)
     """
-    def __init__(self, ds, moored=None):
+    def __init__(self, ds, moored: bool | None = None):
 
         # Check that we in a notebook and with the ipympl backend..
         # (raise a warning otherwise)
