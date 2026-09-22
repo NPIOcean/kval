@@ -1856,6 +1856,37 @@ def _remove_surface_soak(
 
     return ds
 
+def _join_sensor_field(values: list) -> str:
+    """
+    Join per-sensor metadata (serial numbers, calibration dates) into a single
+    attribute string.
+
+    A derived variable can depend on more than one sensor -- PSAL, for
+    instance, depends on both the temperature and the conductivity sensor --
+    so we list one entry per contributing sensor, comma separated. On
+    instruments where those sensors share a value (an SBE37 carries the same
+    serial number for T and C) listing it once per sensor is just noise
+    ("15252, 15252"), so collapse it to a single entry.
+
+    Only collapses when *every* entry is identical; a genuine mix is left
+    alone, so no information is lost.
+
+    Parameters
+    ----------
+    values : list of str
+        One entry per contributing sensor, in sensor order.
+
+    Returns
+    -------
+    str
+        A single value if all entries are identical, otherwise the entries
+        joined with ", ".
+    """
+    if values and all(value == values[0] for value in values):
+        return values[0]
+    return ", ".join(values)
+
+
 
 def _update_variables(ds, source_file, _is_moored=False):
     """
@@ -1934,12 +1965,12 @@ def _update_variables(ds, source_file, _is_moored=False):
                             sensor_caldates += ["N/A"]
 
 
-                ds[new_name].attrs["sensor_serial_number"] = ", ".join(
-                    sensor_SNs
+                ds[new_name].attrs["sensor_serial_number"] = (
+                    _join_sensor_field(sensor_SNs)
                 )
 
-                ds[new_name].attrs["sensor_calibration_date"] = ", ".join(
-                    sensor_caldates
+                ds[new_name].attrs["sensor_calibration_date"] = (
+                    _join_sensor_field(sensor_caldates)
                 )
 
                 for key in "sensor_serial_number", "sensor_calibration_date":
