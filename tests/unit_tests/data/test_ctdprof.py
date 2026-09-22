@@ -1,9 +1,9 @@
 import xarray as xr
 import pytest
-from kval.data import ctd
 import glob2
 import numpy as np
-from kval.data.ctd import (
+from kval.data import ctdprof 
+from kval.data.ctdprof import (
     calculate_PSAL,
     calculate_CNDC,
     calculate_SA_CT,
@@ -48,8 +48,8 @@ def test_ctds_from_cnv_dir_returns_dataset(dir_list_test_cnvs):
     datasets = []
     
     for index, cnvlist in enumerate(dir_list_test_cnvs):
-        print(f"Testing ctd.ctds_from_cnv_dir function : CTD dataset  {index + 1}/{len(dir_list_test_cnvs)}")
-        dataset = ctd.ctds_from_cnv_dir(cnvlist)
+        print(f"Testing ctdprof.ctds_from_cnv_dir function : CTD dataset  {index + 1}/{len(dir_list_test_cnvs)}")
+        dataset = ctdprof.ctds_from_cnv_dir(cnvlist)
         datasets.append(dataset)
 
     assert all(isinstance(ds, xr.Dataset) for ds in datasets), "Failed to load all test .cnv file collections to xarray.Dataset"
@@ -59,13 +59,13 @@ def test_ctds_from_cnv_dir_returns_dataset(dir_list_test_cnvs):
 # Test cases for the offset function
 def test_offset_apply_fixed_offset(dir_list_test_cnvs):
     """Test applying a fixed offset to the dataset."""
-    ds = ctd.ctds_from_cnv_dir(dir_list_test_cnvs[0])
-    ds = ctd.metadata_auto(ds)
+    ds = ctdprof.ctds_from_cnv_dir(dir_list_test_cnvs[0])
+    ds = ctdprof.metadata_auto(ds)
     ds0 = ds.copy()
 
     offset = 5
 
-    ds = ctd.offset(ds0, 'TEMP', offset)
+    ds = ctdprof.offset(ds0, 'TEMP', offset)
     
     expected = ds0['TEMP'] + offset
     assert np.array_equal(ds['TEMP'].values, 
@@ -78,15 +78,15 @@ def test_offset_apply_fixed_offset(dir_list_test_cnvs):
 def test_metadata_auto_default_no_org_attrs(dir_list_test_cnvs):
     """Without org specified, no organization-specific global attrs
     (e.g. institution) should be added."""
-    ds = ctd.ctds_from_cnv_dir(dir_list_test_cnvs[0])
-    ds = ctd.metadata_auto(ds)
+    ds = ctdprof.ctds_from_cnv_dir(dir_list_test_cnvs[0])
+    ds = ctdprof.metadata_auto(ds)
     assert 'institution' not in ds.attrs
 
 
 def test_metadata_auto_explicit_org_npi(dir_list_test_cnvs):
     """org='npi' should add the standard NPI global attributes."""
-    ds = ctd.ctds_from_cnv_dir(dir_list_test_cnvs[0])
-    ds = ctd.metadata_auto(ds, org='npi')
+    ds = ctdprof.ctds_from_cnv_dir(dir_list_test_cnvs[0])
+    ds = ctdprof.metadata_auto(ds, org='npi')
     assert ds.attrs.get('institution') == 'Norwegian Polar Institute (NPI)'
 
 
@@ -118,8 +118,8 @@ def small_ctd_profile_ds():
     ],
 )
 def test_ctd_can_reach_dataset_functions(small_ctd_profile_ds, func, expected_var):
-    """ctd.<func> should be reachable and work on profile-shaped (PRES-
-    dimensioned) data -- this is new functionality, ctd.py had none of
+    """ctdprof.<func> should be reachable and work on profile-shaped (PRES-
+    dimensioned) data -- this is new functionality, ctdprof.py had none of
     these six functions before."""
     result = func(small_ctd_profile_ds)
     assert expected_var in result

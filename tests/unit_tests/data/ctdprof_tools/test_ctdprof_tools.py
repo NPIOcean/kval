@@ -1,19 +1,19 @@
 """
-Tests for kval.data.ship_ctd_tools._ctd_tools.
+Tests for kval.data.ctdprof_tools._ctdprof_tools.
 
 Focused on join_cruise_btl and its supporting helpers (_btl_files_from_path,
 _datasets_from_btllist), which previously had almost no test coverage
 (~15% of join_cruise_btl's own lines were ever exercised, vs. ~75% for its
 .cnv sibling join_cruise, which gets substantial incidental coverage via
-ctd.ctds_from_cnv_dir's existing tests).
+ctdprof.ctds_from_cnv_dir's existing tests).
 """
 import pytest
 import xarray as xr
 import numpy as np
 import warnings
 
-from kval.data import ctd
-from kval.data.ship_ctd_tools import _ctd_tools as tools
+from kval.data import ctdprof
+from kval.data.ctdprof_tools import _ctdprof_tools as tools
 
 
 DML_2020_DIR = 'tests/test_data/sbe_files/sbe911plus/dml_2020'
@@ -30,7 +30,7 @@ class TestDatasetFromBtlDir:
         TIME length 3, real station/lat/lon values, and a CRUISE
         variable (even if just the placeholder, since these files don't
         have a 'cruise' attribute set)."""
-        ds = ctd.dataset_from_btl_dir(DML_2020_DIR, verbose=False)
+        ds = ctdprof.dataset_from_btl_dir(DML_2020_DIR, verbose=False)
         assert isinstance(ds, xr.Dataset)
         assert ds.sizes['TIME'] == 3
         assert 'STATION' in ds
@@ -40,13 +40,13 @@ class TestDatasetFromBtlDir:
     def test_time_is_sorted(self):
         """join_cruise_btl explicitly sorts by TIME -- confirm the
         output actually is, regardless of input file order."""
-        ds = ctd.dataset_from_btl_dir(DML_2020_DIR, verbose=False)
+        ds = ctdprof.dataset_from_btl_dir(DML_2020_DIR, verbose=False)
         assert list(ds.TIME.values) == sorted(ds.TIME.values)
 
     def test_single_file_directory(self):
         """A directory with just one .btl file should still work (the
         join loop's first-iteration-only path)."""
-        ds = ctd.dataset_from_btl_dir(KONGSFJORDEN_DIR, verbose=False)
+        ds = ctdprof.dataset_from_btl_dir(KONGSFJORDEN_DIR, verbose=False)
         assert isinstance(ds, xr.Dataset)
         assert ds.sizes['TIME'] == 1
 
@@ -54,7 +54,7 @@ class TestDatasetFromBtlDir:
         """An existing but empty directory should raise FileNotFoundError
         with a clear message, not fail some other way."""
         with pytest.raises(FileNotFoundError, match='Did not find any .btl'):
-            ctd.dataset_from_btl_dir(str(tmp_path), verbose=False)
+            ctdprof.dataset_from_btl_dir(str(tmp_path), verbose=False)
 
     def test_no_future_warning_from_concat(self):
         """Regression test: join_cruise_btl's own xr.concat call used to
@@ -64,7 +64,7 @@ class TestDatasetFromBtlDir:
         not this one)."""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter('always')
-            ctd.dataset_from_btl_dir(DML_2020_DIR, verbose=False)
+            ctdprof.dataset_from_btl_dir(DML_2020_DIR, verbose=False)
             future_warnings = [x for x in w
                               if issubclass(x.category, FutureWarning)]
         assert not future_warnings, (
@@ -83,7 +83,7 @@ class TestJoinCruiseBtl:
 
     def test_accepts_list_of_datasets_directly(self):
         """join_cruise_btl's second documented input form -- a plain list
-        of xr.Dataset objects, not a path -- is what ctd.dataset_from_btl_dir
+        of xr.Dataset objects, not a path -- is what ctdprof.dataset_from_btl_dir
         actually uses internally, so it needs its own direct coverage."""
         btl_files = tools._btl_files_from_path(DML_2020_DIR)
         profile_datasets = tools._datasets_from_btllist(

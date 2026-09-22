@@ -12,7 +12,7 @@ import ipywidgets as widgets
 from IPython.display import display
 import cartopy.crs as ccrs
 from kval.util import time
-from kval.data.ship_ctd_tools import _ctd_tools
+from kval.data.ctdprof_tools import _ctdprof_tools
 from kval.plot import quickmap
 from matplotlib.ticker import MaxNLocator
 from matplotlib.colors import Colormap
@@ -127,7 +127,7 @@ def inspect_profiles(ds: 'xr.Dataset') -> None:
     )
 
 
-    profile_vars = _ctd_tools._get_profile_variables(
+    profile_vars = _ctdprof_tools._get_profile_variables(
         ds, profile_var=y_varnm, require_TIME=not is_single_profile)
 
     variable_dropdown = widgets.Dropdown(
@@ -195,7 +195,7 @@ def inspect_phase_space(ds: 'xr.Dataset') -> None:
     # Determine if this is a single profile
     is_single_profile = ds.sizes['TIME'] == 1
 
-    profile_vars = _ctd_tools._get_profile_variables(ds)
+    profile_vars = _ctdprof_tools._get_profile_variables(ds)
     
     def plot_profile(TIME_index: int, x_var: str, y_var: str) -> None:
         try:
@@ -661,7 +661,7 @@ def ctd_contours(ds):
         plt.show()
 
     # Get the list of available variables
-    available_variables = _ctd_tools._get_profile_variables(
+    available_variables = _ctdprof_tools._get_profile_variables(
         ds, profile_var = y_varnm)
 
     # Create dropdowns for variable selection

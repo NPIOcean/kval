@@ -11,7 +11,7 @@ Do:
 
 
 import pytest
-from kval.data import ctd
+from kval.data import ctdprof
 import xarray as xr
 
 @pytest.fixture
@@ -32,7 +32,7 @@ def test_cnv_pipeline(atwain_dir):
     '''
 
     # Loading
-    ds = ctd.ctds_from_cnv_dir(atwain_dir)
+    ds = ctdprof.ctds_from_cnv_dir(atwain_dir)
 
     # Test that we are making an xr dataset
     assert isinstance(ds, xr.Dataset) , "Failed to load all ATWAIN .cnv files to xarray.Dataset"

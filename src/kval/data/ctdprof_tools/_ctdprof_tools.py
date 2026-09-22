@@ -1,8 +1,8 @@
 '''
-## kval.data.ship_ctd.tools
+## kval.data.ctdprof_tools._ctdprof_tools
 
 Various functions for making modifications to CTD dataframes in the
-format produced by kval.file.cnv:
+format produced by kval.file.sbe:
 
 - Joining insividual profiles into one ship file.
 - Pressure binning.

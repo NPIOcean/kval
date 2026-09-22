@@ -1,13 +1,13 @@
 """
-kval.ctd
+kval.data.ctdprof
 
 """
 
 import xarray as xr
 import pandas as pd
-from kval.data.ship_ctd_tools import _ctd_tools as tools
-from kval.data.ship_ctd_tools import _ctd_visualize as viz
-from kval.data.ship_ctd_tools import _ctd_edit as ctd_edit
+from kval.data.ctdprof_tools import _ctdprof_tools as tools
+from kval.data.ctdprof_tools import _ctdprof_visualize as viz
+from kval.data.ctdprof_tools import _ctdprof_edit as ctd_edit
 from kval.file import matfile
 from kval.data import dataset, edit
 from kval.util import time, xr_funcs
@@ -530,7 +530,7 @@ def drop_variables(
 
 
 # VISUALIZATION (WRAPPER FOR FUNCTIONS IN THE
-# data.ship_ctd_tools._ctd_visualize.py MODULE)
+# data.ctdprof_tools._ctdprof_visualize.py MODULE)
 
 def map(
     ds: xr.Dataset,
@@ -737,7 +737,7 @@ def set_attr_var(ds: xr.Dataset, variable: str, attr: str) -> xr.Dataset:
 
 
 # EDITING
-# (Wrappers for functions in the data.edit and data.ship_ctd_tools._ctd_edit.py
+# (Wrappers for functions in the data.edit and data.ctdprof_tools._ctdprof_edit.py
 #  module)
 
 

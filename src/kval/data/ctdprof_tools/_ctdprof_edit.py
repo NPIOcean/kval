@@ -5,8 +5,8 @@ from matplotlib.widgets import RectangleSelector
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 from kval.util import time, internals
-from kval.data import edit, ctd
-from kval.data.ship_ctd_tools import _ctd_tools
+from kval.data import edit, ctdprof
+from kval.data.ctdprof_tools import _ctdprof_tools
 
 
 ###########################
@@ -416,7 +416,7 @@ def apply_offset(ds):
 
                 else:
                     station_string = 'all stations'
-                    ds_offset = ctd.offset(ds.copy(), varnm_sel, offset_value)
+                    ds_offset = ctdprof.offset(ds.copy(), varnm_sel, offset_value)
                     ds[varnm_sel] = ds_offset[varnm_sel]
 
                 offset_metadata = f"Applied offset of {offset_value} [{units}] ({station_string})"
