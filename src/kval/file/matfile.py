@@ -1,5 +1,5 @@
 """
-KVAL.IO.MATFILE
+KVAL.FILE.MATFILE
 Writing to and from .mat files
 
 NOTE:
@@ -357,7 +357,7 @@ def _parse_time(data_dict, time_name="time"):
     might be cleanest to just require the fields
     """
     try:
-        time_stamps = time.matlab_time_to_datetime(data_dict[time_name])
+        time_stamps = time.matlab_datenum_to_datetime(data_dict[time_name])
         return time_stamps
     except:  # May have to build other cases here, eventually.
         print(
@@ -390,8 +390,8 @@ def xr_to_mat(ds, outfile, simplify=False):
     """
 
     time_epoch = ds.TIME.units.upper().replace("DAYS SINCE ", "")[:11]
-    time_stamp = time.datenum_to_timestamp(ds.TIME, ds.TIME.units)
-    time_mat = time.timestamp_to_matlab_time(time_stamp)
+    time_stamp = time.numeric_time_to_datetime(ds.TIME.values, ds.TIME.units)
+    time_mat = time.datetime_to_matlab_datenum(time_stamp)
 
     data_dict = ds.to_dict()
 

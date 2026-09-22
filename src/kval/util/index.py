@@ -6,6 +6,7 @@ Various functions related ti slicing/indexing
 
 import pandas as pd
 import xarray as xr
+from kval.util.xr_funcs import time_as_datetime
 
 def indices_to_slices(indices):
 
@@ -43,7 +44,7 @@ def closest_index(arr, val):
 
 def closest_index_time(ds, time_stamp, time_name='TIME'):
 
-    ds_cp = xr.decode_cf(ds.copy())
+    ds_cp = time_as_datetime(ds, time_dim=time_name)
 
     # Assuming you have a dataset `ds` with a coordinate 'time'
     # First, use sel to select the value closest to a point
@@ -53,4 +54,3 @@ def closest_index_time(ds, time_stamp, time_name='TIME'):
     time_index = ds_cp.get_index(time_name).get_loc(selected_data[time_name].values)
 
     return time_index
-

@@ -7,6 +7,7 @@ exploring CTD data profiles and comparing sensor pairs.
 """
 
 import matplotlib.pyplot as plt
+import pandas as pd
 import ipywidgets as widgets
 from IPython.display import display
 import cartopy.crs as ccrs
@@ -93,12 +94,12 @@ def inspect_profiles(ds: 'xr.Dataset') -> None:
         ax.plot(profile, ds[y_varnm], '.', ms=ms, alpha=1, color='tab:orange')
 
         if not is_single_profile:
-            time_string = time.convert_timenum_to_datestring(
+            time_string = time.numeric_time_to_datestring(
                 profile.TIME, ds.TIME.units)
             station = (ds["STATION"].values[TIME_index]
                        if 'STATION' in ds else 'N/A')
         else:
-            time_string = time.convert_timenum_to_datestring(ds.TIME.item(),
+            time_string = time.numeric_time_to_datestring(ds.TIME.item(),
                                                              ds.TIME.units)
             station = ds["STATION"].values.item() if 'STATION' in ds else 'N/A'
 
@@ -226,7 +227,7 @@ def inspect_phase_space(ds: 'xr.Dataset') -> None:
         ax.plot(x, y, '.', color='tab:orange', ms=ms)
 
         # Title & axis labels
-        time_string = time.convert_timenum_to_datestring(
+        time_string = time.numeric_time_to_datestring(
             ds.TIME[TIME_index] if not is_single_profile else ds.TIME.item(),
             ds.TIME.units
         )
@@ -347,7 +348,9 @@ def inspect_dual_sensors(ds: 'xr.Dataset') -> None:
         ax[1].axvline(difference_mean, color='k', ls=':', alpha=0.5,
                       label=f'Mean: {difference_mean.values}')
 
-        station_time_string = time.convert_timenum_to_datetime(profile_1.TIME, ds.TIME.units)
+        station_time_string = pd.Timestamp(
+            time.numeric_time_to_datetime(profile_1.TIME.item(), ds.TIME.units).item()
+        )
         fig.suptitle(f'Station: {ds["STATION"].values[station_index]}, {station_time_string}')
 
         var_unit = ds[variable1].units if 'units' in ds[variable1].attrs else 'no unit specified'
@@ -603,8 +606,8 @@ def ctd_contours(ds):
             plt.xticks(rotation=0)
 
             if xvar == 'TIME':
-                x_data = result_timestamp = time.datenum_to_timestamp(
-                    ds.TIME, ds.TIME.units)
+                x_data = result_timestamp = time.numeric_time_to_datetime(
+                    ds.TIME.values, ds.TIME.units)
                 plt.xticks(rotation=90)
                 x_label = 'Time'
             elif xvar == 'LONGITUDE':

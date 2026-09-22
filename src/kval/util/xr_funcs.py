@@ -4,10 +4,98 @@ XR_FUNCS.PY
 Various generalized wrapper functions for working with xarray Datasets
 """
 
+import warnings
 import xarray as xr
 import numpy as np
 import pandas as pd
 from xarray.coding.times import encode_cf_datetime
+
+
+def time_as_datetime(ds, time_dim='TIME'):
+    """Ensure ds[time_dim] is decoded to datetime64.
+
+    If it's already datetime64, returns ds unchanged (no-op). If it's raw
+    CF-encoded numeric time (e.g. from load_moored, which loads with
+    decode_cf=False), decodes it using its 'units'/'calendar' attributes.
+    The original units/calendar are remembered in .encoding, so a later
+    call to time_as_float can round-trip back to the same representation.
+
+    Args:
+        ds (xr.Dataset): Dataset containing the time coordinate.
+        time_dim (str): Name of the time coordinate. Defaults to 'TIME'.
+
+    Returns:
+        xr.Dataset: Dataset with time_dim as datetime64.
+
+    Raises:
+        TypeError: If time_dim is neither datetime64 nor numeric.
+        ValueError: If time_dim is numeric but has no 'units' attribute.
+    """
+    ds = ds.copy(deep=True)
+    if np.issubdtype(ds[time_dim].dtype, np.datetime64):
+        return ds
+    if not np.issubdtype(ds[time_dim].dtype, np.number):
+        raise TypeError(
+            f"'{time_dim}' is neither datetime64 nor numeric "
+            f"(dtype={ds[time_dim].dtype}) -- cannot interpret as time."
+        )
+    units = ds[time_dim].attrs.get('units')
+    if units is None:
+        raise ValueError(
+            f"'{time_dim}' is numeric but has no 'units' attribute, so "
+            "it can't be decoded as CF time. Expected e.g. "
+            "'days since 1970-01-01 00:00'."
+        )
+    calendar = ds[time_dim].attrs.get('calendar', 'standard')
+    ds_decoded = xr.decode_cf(ds, decode_timedelta=True)
+    ds_decoded[time_dim].encoding['units'] = units
+    ds_decoded[time_dim].encoding['calendar'] = calendar
+    return ds_decoded
+
+
+def time_as_float(ds, time_dim='TIME', units=None, calendar=None):
+    """Ensure ds[time_dim] is raw CF-encoded numeric time.
+
+    If it's already numeric, returns ds unchanged (no-op). If it's decoded
+    datetime64, encodes it back to numeric -- using units/calendar passed
+    explicitly, or falling back to whatever time_as_datetime last
+    remembered in .encoding, or (if neither is available) defaulting to
+    'days since 1970-01-01 00:00' with a warning.
+
+    Args:
+        ds (xr.Dataset): Dataset containing the time coordinate.
+        time_dim (str): Name of the time coordinate. Defaults to 'TIME'.
+        units (str, optional): CF units to encode to, e.g.
+            'days since 1970-01-01 00:00'. Overrides any remembered units.
+        calendar (str, optional): CF calendar. Defaults to 'standard' if
+            not remembered or passed explicitly.
+
+    Returns:
+        xr.Dataset: Dataset with time_dim as raw numeric CF time.
+    """
+    ds = ds.copy(deep=True)
+    if np.issubdtype(ds[time_dim].dtype, np.number):
+        return ds
+    if units is None:
+        units = ds[time_dim].encoding.get('units')
+    if calendar is None:
+        calendar = ds[time_dim].encoding.get('calendar', 'standard')
+    if units is None:
+        units = 'days since 1970-01-01 00:00'
+        warnings.warn(
+            f"No known original units for '{time_dim}' -- defaulting to "
+            f"'{units}'. Pass units= explicitly to silence this."
+        )
+    num, units, calendar = encode_cf_datetime(
+        ds[time_dim].values, units=units, calendar=calendar
+    )
+    ds = ds.assign_coords({time_dim: num})
+    ds[time_dim].attrs['units'] = units
+    ds[time_dim].attrs['calendar'] = calendar
+    return ds
+
+
+
 
 # INDEXING
 
@@ -394,19 +482,22 @@ def time_average(
     if label not in ('center', 'left', 'right'):
         raise ValueError("label must be one of 'center', 'left', or 'right'")
 
-
+    # If TIME is still CF-encoded (raw numeric, e.g. from load_moored, which
+    # loads with decode_cf=False), decode it so resample() has a real
+    # DatetimeIndex to work with. We convert back to the original numeric
+    # units/calendar before returning (via time_as_float below), so the
+    # output matches whatever encoding state the input was in -- this
+    # function shouldn't silently change that on the caller.
+    #
+    # We capture units/calendar explicitly here (rather than relying on
+    # time_as_datetime's .encoding-based memory) because .encoding does
+    # not survive resample()/merge() below -- it gets dropped, so passing
+    # it through explicitly is the robust option for this particular
+    # decode-then-recombine-then-encode pipeline.
     was_encoded = np.issubdtype(ds[time_dim].dtype, np.number)
-    if was_encoded:
-        original_units = ds[time_dim].attrs.get('units')
-        original_calendar = ds[time_dim].attrs.get('calendar', 'standard')
-        if original_units is None:
-            raise ValueError(
-                f"'{time_dim}' is numeric but has no 'units' attribute, so "
-                "it can't be decoded as CF time. Expected e.g. "
-                "'days since 1970-01-01'."
-            )
-        ds = xr.decode_cf(ds, decode_timedelta=True)
-
+    original_units = ds[time_dim].attrs.get('units') if was_encoded else None
+    original_calendar = ds[time_dim].attrs.get('calendar', 'standard') if was_encoded else None
+    ds = time_as_datetime(ds, time_dim)
 
     # xarray's resample only natively supports 'left'/'right' labeling;
     # for 'center' we resample as 'left' and shift the result afterward
@@ -457,13 +548,7 @@ def time_average(
               f"variable(s) {dropped_vars} (mean is not defined for "
               "non-numeric data)")
 
-
     if was_encoded:
-        num, units, calendar = encode_cf_datetime(
-            ds_out[time_dim].values, units=original_units, calendar=original_calendar
-        )
-        ds_out = ds_out.assign_coords({time_dim: num})
-        ds_out[time_dim].attrs['units'] = units
-        ds_out[time_dim].attrs['calendar'] = calendar
+        ds_out = time_as_float(ds_out, time_dim, units=original_units, calendar=original_calendar)
 
     return ds_out

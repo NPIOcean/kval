@@ -514,8 +514,8 @@ def linear_drift(
 
     # Add note to processing_history attribute
     if 'units' in ds_out.TIME.attrs:
-        start_str = time.convert_timenum_to_datestring(t_start, ds_out.TIME.units) if not is_datetime else str(t_start)
-        end_str = time.convert_timenum_to_datestring(t_end, ds_out.TIME.units) if not is_datetime else str(t_end)
+        start_str = time.numeric_time_to_datestring(t_start, ds_out.TIME.units) if not is_datetime else str(t_start)
+        end_str = time.numeric_time_to_datestring(t_end, ds_out.TIME.units) if not is_datetime else str(t_end)
     else:
         start_str, end_str = str(t_start), str(t_end)
 
@@ -1219,4 +1219,3 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
 
     # Display the initial state of the title text
     display(widgets_collected)
-

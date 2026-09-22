@@ -1,10 +1,123 @@
+"""
+KVAL.UTIL.TIME
+
+Time conversions. This module deals with several genuinely different
+"kinds" of time, which is the main source of past confusion here:
+
+- ISO8601 string      e.g. '2021-06-01T12:00:00Z' -- human-readable,
+                       timezone-aware.
+- datetime.datetime    Python's standard library time object.
+- numpy.datetime64     numpy's vectorized time type.
+- pandas.Timestamp     pandas' time object (adds timezone handling).
+- CF numeric time      a plain number + a 'units' string, e.g.
+                       (18628.5, 'days since 1970-01-01'). This is how
+                       kval datasets store TIME on disk and whenever
+                       loaded with decode_cf=False -- the epoch is
+                       whatever the file says, NOT fixed.
+- matplotlib datenum   matplotlib's own num2date/date2num convention --
+                       also "days since an epoch", but matplotlib's OWN
+                       fixed epoch, not the file's. Easy to confuse with
+                       CF numeric time above since both get called
+                       "datenum" informally.
+- MATLAB datenum       MATLAB's own convention: days since 0000-01-00. A
+                       THIRD, different epoch, unrelated to either of the
+                       above despite sharing the name "datenum". Only
+                       relevant when reading MATLAB-originated files (see
+                       matfile.py). Named explicitly as "matlab_datenum"
+                       throughout this module so it's never confused with
+                       the other two.
+- decimal year         e.g. 2021.415 -- not an epoch offset at all, a
+                       fraction-of-the-way-through-the-year
+                       representation.
+
+For converting a whole xr.Dataset's TIME coordinate between CF numeric
+and datetime64, prefer kval.util.xr_funcs.time_as_datetime / time_as_float
+instead of anything in this module -- those handle a Dataset's TIME
+coordinate as a whole (including remembering/restoring the original
+units). This module is for converting bare values/arrays, and for the
+MATLAB- and ISO8601/duration-specific cases xr_funcs doesn't cover.
+"""
+
 from matplotlib.dates import num2date, date2num
 import pandas as pd
+import xarray as xr
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import numpy as np
-import numbers
 
+
+#### CANONICAL CF NUMERIC TIME <-> DATETIME CONVERSION
+#
+# Everything else in this module that converts between CF numeric time
+# (a number + a 'units' string) and datetime goes through these two
+# functions. They're thin wrappers around xarray's own CF-time coding,
+# which is more robust than hand-rolled string parsing (many more units/
+# calendar variations handled correctly).
+
+def numeric_time_to_datetime(
+    values: float | np.ndarray,
+    units: str,
+    calendar: str = "standard",
+) -> np.ndarray:
+    """
+    Convert CF numeric time (a number or array + a 'units' string, e.g.
+    'days since 1970-01-01') to datetime64.
+
+    Args:
+        values: Numeric time value(s).
+        units: CF units string, e.g. 'days since 1970-01-01'.
+        calendar: CF calendar. Defaults to 'standard'.
+
+    Returns:
+        np.ndarray of datetime64 (0-d array for scalar input).
+    """
+    return xr.coding.times.decode_cf_datetime(values, units, calendar=calendar)
+
+
+def datetime_to_numeric_time(
+    values,
+    units: str,
+    calendar: str = "standard",
+) -> np.ndarray:
+    """
+    Convert datetime-like value(s) to CF numeric time under the given
+    units/calendar.
+
+    Args:
+        values: datetime-like value(s) (datetime, datetime64, Timestamp,
+            or an array of these).
+        units: CF units string to encode to, e.g. 'days since 1970-01-01'.
+        calendar: CF calendar. Defaults to 'standard'.
+
+    Returns:
+        np.ndarray of numeric time value(s).
+    """
+    num, _, _ = xr.coding.times.encode_cf_datetime(
+        np.asarray(values), units=units, calendar=calendar
+    )
+    return num
+
+
+def numeric_time_to_datestring(
+    value: float, units: str, out_fmt: str = "%d-%b-%Y %H:%M", calendar: str = "standard"
+) -> str:
+    """
+    Convert a single CF numeric time value to a formatted datetime string.
+
+    Args:
+        value: Numeric time value.
+        units: CF units string, e.g. 'days since 1970-01-01'.
+        out_fmt: strftime format for the output string.
+        calendar: CF calendar. Defaults to 'standard'.
+
+    Returns:
+        Formatted datetime string.
+    """
+    dt = pd.Timestamp(numeric_time_to_datetime(value, units, calendar=calendar).item())
+    return dt.strftime(out_fmt)
+
+
+#### ISO8601 FORMATTING
 
 def datetime_to_ISO8601(time_dt: datetime, zone: str = "Z") -> str:
     """
@@ -17,7 +130,8 @@ def datetime_to_ISO8601(time_dt: datetime, zone: str = "Z") -> str:
 
 def datenum_to_ISO8601(datenum: float, zone: str = "Z") -> str:
     """
-    Convert datenum (time since epoch, e.g. 18634.11) to
+    Convert a matplotlib datenum (matplotlib's own num2date/date2num
+    convention, NOT CF numeric time or MATLAB datenum) to
     YYYY-MM-DDThh:mm:ss<zone>.
     """
     time_dt = num2date(datenum)
@@ -37,14 +151,12 @@ def ISO8601_to_datetime(time_str: str, to_UTC: bool = True) -> pd.Timestamp:
     else:
         return iso8601_time
 
+
 def dt64_to_datenum(dt64: np.datetime64, epoch: str = "1970-01-01") -> float:
     '''
-    Convert numpy datetime64 to timenum (days since epoch)
+    Convert numpy datetime64 to CF numeric time (days since epoch).
     '''
-    days_since_epoch = (
-        (dt64 - np.datetime64(epoch)) / np.timedelta64(1, 'D'))
-    return days_since_epoch
-
+    return datetime_to_numeric_time(dt64, units=f"days since {epoch}")
 
 
 def ISO8601_to_datenum(time_str: str, epoch: str = "1970-01-01") -> float:
@@ -52,11 +164,12 @@ def ISO8601_to_datenum(time_str: str, epoch: str = "1970-01-01") -> float:
     Convert YYYY-MM-DDThh:mm:ss<zone> to days since *epoch*.
     """
     iso8601_time = ISO8601_to_datetime(time_str, to_UTC=True)
-    start_time_DSE = (
-        iso8601_time - pd.Timestamp(epoch, tz="UTC")
-    ) / pd.to_timedelta(1, unit="D")
-    return start_time_DSE
+    return datetime_to_numeric_time(
+        iso8601_time.tz_localize(None), units=f"days since {epoch}"
+    )
 
+
+#### DURATIONS (distinct from a point in time)
 
 def start_end_times_cftime_to_duration(
     start_cftime: datetime, end_cftime: datetime
@@ -136,22 +249,26 @@ def days_to_ISO8601(days: float) -> str:
     return iso_str
 
 
-def matlab_time_to_datetime(
-    matlab_time: float | list[float] | tuple[float] | np.ndarray
+#### MATLAB DATENUM (MATLAB's own epoch: days since 0000-01-00 -- a
+#### different convention from both CF numeric time and matplotlib's
+#### datenum above. Only relevant for reading MATLAB-originated files.)
+
+def matlab_datenum_to_datetime(
+    matlab_datenum: float | list[float] | tuple[float] | np.ndarray
 ) -> datetime | np.ndarray:
     """
-    Convert Matlab datenum into Python datetime.
+    Convert a MATLAB datenum into Python datetime.
     """
-    if isinstance(matlab_time, (int, float)):
-        days = np.float64(matlab_time % 1)
+    if isinstance(matlab_datenum, (int, float)):
+        days = np.float64(matlab_datenum % 1)
         return (
-            datetime.fromordinal(int(matlab_time))
+            datetime.fromordinal(int(matlab_datenum))
             + timedelta(days=days)
             - timedelta(days=366)
         )
-    elif isinstance(matlab_time, (list, tuple, np.ndarray)):
+    elif isinstance(matlab_datenum, (list, tuple, np.ndarray)):
         result = []
-        for time in matlab_time:
+        for time in matlab_datenum:
             days = np.float64(time % 1)
             result.append(
                 datetime.fromordinal(int(time))
@@ -161,166 +278,58 @@ def matlab_time_to_datetime(
         return np.array(result)
     else:
         raise ValueError(
-            "Input must be a single value or an array of Matlab datenums."
+            "Input must be a single value or an array of MATLAB datenums."
         )
 
 
-def matlab_time_to_python_time(
-    matlab_time: float | list[float] | tuple[float] | np.ndarray
+def matlab_datenum_to_mpl_datenum(
+    matlab_datenum: float | list[float] | tuple[float] | np.ndarray
 ) -> datetime | np.ndarray:
     """
-    Convert MATLAB datenum (days) to Matplotlib dates (days).
-
-    This function converts a time value from MATLAB's datenum format,
-    which counts days from 00-Jan-0000, to Matplotlib's date format,
-    which counts days from 01-Jan-1970.
+    Convert MATLAB datenum (days since 0000-01-00) to a matplotlib
+    datenum (days since matplotlib's own epoch) -- useful for plotting
+    MATLAB-originated time values directly.
 
     Args:
-        mattime (float): MATLAB datenum in days.
+        matlab_datenum (float): MATLAB datenum in days.
 
     Returns:
-        float: Corresponding Matplotlib date in days.    """
-    time_stamp = matlab_time_to_datetime(matlab_time)
-    python_time = date2num(time_stamp)
+        float: Corresponding matplotlib datenum in days.
+    """
+    time_stamp = matlab_datenum_to_datetime(matlab_datenum)
+    mpl_datenum = date2num(time_stamp)
 
-    return python_time
+    return mpl_datenum
 
 
-def timestamp_to_matlab_time(
-    timestamp: datetime | list[datetime] | tuple[datetime] | np.ndarray
+def datetime_to_matlab_datenum(
+    timestamp: datetime | np.datetime64 | list | tuple | np.ndarray
 ) -> float | np.ndarray:
     """
-    Convert Python datetime into Matlab datenum.
+    Convert Python datetime, numpy datetime64, or pandas Timestamp (single
+    value or array-like) into MATLAB datenum.
     """
-    if isinstance(timestamp, datetime):
-        days = (timestamp - datetime.fromordinal(1)).days + 366
-        matlab_time_stamp = (
+    is_scalar = isinstance(timestamp, (datetime, np.datetime64, pd.Timestamp))
+    # Normalize everything to a pandas DatetimeIndex of Python datetimes
+    # first -- this makes the function robust to datetime, datetime64,
+    # Timestamp, and arrays/lists of any of these, rather than requiring
+    # the caller to pre-convert to one specific type.
+    pd_index = pd.DatetimeIndex(np.atleast_1d(timestamp))
+    py_datetimes = pd_index.to_pydatetime()
+
+    result = []
+    for ts in py_datetimes:
+        days = (ts - datetime.fromordinal(1)).days + 366
+        result.append(
             days
-            + (timestamp - datetime.fromordinal(days)).total_seconds()
+            + (ts - datetime.fromordinal(days)).total_seconds()
             / (24 * 60 * 60)
-        ) + 366
-        return matlab_time_stamp
-    elif isinstance(timestamp, (list, tuple, np.ndarray)):
-        result = []
-        for ts in timestamp:
-            days = (ts - datetime.fromordinal(1)).days + 366
-            result.append(
-                days
-                + (ts - datetime.fromordinal(days)).total_seconds()
-                / (24 * 60 * 60)
-            )
-        matlab_time_stamp = np.array(result) + 366
-        return matlab_time_stamp
-    else:
-        raise ValueError(
-            "Input must be a single value or an array of Python datetimes."
         )
+    matlab_datenum = np.array(result) + 366
+    return matlab_datenum[0] if is_scalar else matlab_datenum
 
 
-def timestamp_to_datenum(
-    timestamps: datetime | np.ndarray, epoch: str = "1970-01-01"
-) -> np.ndarray:
-    """
-    Convert a timestamp or an array of timestamps to the number of days since
-    the epoch.
-    """
-    try:
-        epoch_datetime = datetime.strptime(epoch, "%Y-%m-%d")
-    except ValueError:
-        try:
-            epoch_datetime = datetime.strptime(epoch, "Days since %Y-%m-%d")
-        except ValueError:
-            epoch_datetime = datetime.strptime(
-                epoch, "Days since %Y-%m-%d %H:%M"
-            )
-    timestamps = np.array(timestamps)
-    deltas = timestamps - epoch_datetime
-    if isinstance(deltas[0], np.timedelta64):
-        seconds_since_epoch = deltas.astype("timedelta64[s]").astype(float)
-    else:
-        seconds_since_epoch = np.array(
-            [delta.total_seconds() for delta in deltas]
-        )
-    days_since_epoch = seconds_since_epoch / (60 * 60 * 24)
-    return days_since_epoch
-
-
-def datenum_to_timestamp(
-    datenum: float | np.ndarray, epoch: str = "1970-01-01"
-) -> datetime | np.ndarray:
-    """
-    Convert the number of days since the epoch to a timestamp or an array of
-    timestamps.
-    """
-    try:
-        epoch_datetime = datetime.strptime(epoch, "%Y-%m-%d")
-    except ValueError:
-        try:
-            epoch_datetime = datetime.strptime(epoch, "Days since %Y-%m-%d")
-        except ValueError:
-            try:
-                epoch_datetime = datetime.strptime(
-                    epoch, "Days since %Y-%m-%d %H:%M"
-                )
-            except ValueError:
-                epoch_datetime = datetime.strptime(
-                    epoch, "Days since %Y-%m-%d %H:%M:%S"
-                )
-    datenum = np.array(datenum)
-    seconds_since_epoch = datenum * (60 * 60 * 24)
-    if isinstance(seconds_since_epoch, (numbers.Number)):
-        timedelta_object = timedelta(seconds=int(seconds_since_epoch))
-        timestamp = epoch_datetime + timedelta_object
-        return timestamp
-    else:
-        timedelta_objects = np.array(
-            [timedelta(seconds=int(sec)) for sec in seconds_since_epoch]
-        )
-        timestamps = np.array(
-            [epoch_datetime + td for td in timedelta_objects]
-        )
-        return timestamps
-
-
-
-def convert_timenum_to_datetime(
-        TIME: float, units: str, ) -> str:
-    """
-    Convert a numeric time value to a datetime object.
-    """
-    reference_date_str = units.split("since")[-1].strip()
-    try:
-        reference_date = datetime.strptime(
-            reference_date_str, "%Y-%m-%d %H:%M"
-        )
-    except ValueError:
-        try:
-            reference_date = datetime.strptime(
-                reference_date_str, "%Y-%m-%d %H:%M:%S"
-            )
-        except ValueError:
-            reference_date = datetime.strptime(reference_date_str, "%Y-%m-%d")
-
-
-    # Calculate the datetime from the reference date and numeric time
-    date_time = reference_date + timedelta(days=float(TIME))
-    return date_time
-
-
-def convert_timenum_to_datestring(
-    TIME: float, units: str, out_fmt: str = "%d-%b-%Y %H:%M"
-) -> str:
-    """
-    Convert a numeric time value to a formatted datetime string.
-    """
-
-    # Calculate the datetime from the reference date and numeric time
-    date_time = convert_timenum_to_datetime(TIME=TIME, units=units)
-    # Format the datetime string according to the specified format
-    reference_date_string = date_time.strftime(out_fmt)
-
-    return reference_date_string
-
+#### DECIMAL YEAR
 
 def time_to_decimal_year(
         time: datetime | np.datetime64 | str | int | float
@@ -358,8 +367,9 @@ def time_to_decimal_year(
 
     # If time is a numeric value, interpret it as days since 1970-01-01
     elif isinstance(time, (int, float)):
-        base_date = datetime(1970, 1, 1)
-        time = base_date + timedelta(days=time)
+        time = pd.Timestamp(
+            numeric_time_to_datetime(time, units="days since 1970-01-01").item()
+        ).to_pydatetime()
 
     # Ensure time is now a datetime object
     if not isinstance(time, datetime):

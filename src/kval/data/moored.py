@@ -33,13 +33,11 @@ from kval.metadata.conventionalize import convert_64_to_32, add_now_as_date_crea
 import warnings
 
 # Want to be able to use these functions directly..
-from kval.data.dataset import (
-    to_netcdf, add_latlon, calculate_PSAL, calculate_CNDC, 
-    calculate_SA_CT, calculate_rho, calculate_sig0, calculate_ss)
+from kval.data.dataset import to_netcdf, add_latlon, calculate_PSAL, calculate_CNDC, calculate_SA_CT, calculate_rho, calculate_sig0, calculate_ss
 from kval.plot.tsplot import  tsplot, tsplot_pick
 
 from kval.data.edit import threshold, offset, linear_drift
-from kval.util.xr_funcs import time_average, append_processing_history
+from kval.util.xr_funcs import time_average, append_processing_history, time_as_datetime, time_as_float
 if internals.is_notebook():
     from IPython.display import display
 
@@ -331,17 +329,21 @@ def chop_by_time(
     if 'TIME' not in ds.coords:
         raise ValueError(f"Dataset does not contain a 'TIME' coordinate.")
 
-    # Decode CF-compliant time if TIME is numerical
-    if isinstance(ds.TIME.values[0], float):
-        time_units = ds.TIME.units
-        ds = xr.decode_cf(ds, decode_timedelta=True)
-    else:
-        time_units = None
+    # Decode CF-compliant time if TIME is numerical. We capture the
+    # original units/calendar explicitly (rather than relying on
+    # time_as_datetime's .encoding-based memory) since .sel() below can
+    # drop .encoding, same as resample() does.
+    was_encoded = np.issubdtype(ds.TIME.dtype, np.number)
+    original_units = ds.TIME.attrs.get('units') if was_encoded else None
+    original_calendar = ds.TIME.attrs.get('calendar', 'standard') if was_encoded else None
+    ds = time_as_datetime(ds, 'TIME')
 
     # Handle the time range
     if start_time is None and end_time is None:
         if verbose:
             print("No start or end time specified, returning the original dataset.")
+        if was_encoded:
+            ds = time_as_float(ds, 'TIME', units=original_units, calendar=original_calendar)
         return ds
 
     # Define the slice based on the optional times
@@ -365,15 +367,10 @@ def chop_by_time(
         )
         print(chop_info)
 
-
-    # If initial TIME was numerical: Convert back to numerical format
-    if time_units:
-        time_attrs = ds_chopped['TIME'].attrs
-        ds_chopped['TIME'] = date2num(ds_chopped['TIME'])
-        ds_chopped['TIME'].attrs = {'units': 'Days since 1970-01-01 00:00:00'} | time_attrs
-        if 'DAYS SINCE 1970-01-01' not in time_units.upper():
-            print(f'NOTE: time units have changed from {time_units} '
-                  f'to {ds_chopped["TIME"].units}')
+    # If initial TIME was numerical: convert back to the *original* numeric
+    # format (not forced to 1970 -- preserves whatever the input actually had).
+    if was_encoded:
+        ds_chopped = time_as_float(ds_chopped, 'TIME', units=original_units, calendar=original_calendar)
 
     return ds_chopped
 
@@ -785,6 +782,8 @@ def hand_remove_points(
     ds = hand_remove.ds
 
     return ds
+
+
 
 
 # Assign pressure from adjacent instruments
@@ -1711,5 +1710,3 @@ def combine_datasets(
     ds_out = xr.Dataset(data_vars_out, coords=coords_out, attrs=combined_global_attrs)
  
     return ds_out
- 
-

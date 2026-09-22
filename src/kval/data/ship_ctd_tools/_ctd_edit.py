@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.widgets import RectangleSelector
 import ipywidgets as widgets
@@ -68,7 +69,9 @@ class hand_remove_points:
         self.ax.set_xlabel(f'{varnm} [{self.ds[varnm].units}]')
         self.ax.set_ylabel(f'PRES [{self.PRES.units}]')
         self.ax.grid()
-        station_time_string = time.convert_timenum_to_datetime(self.ds.TIME.values[TIME_index], ds.TIME.units)
+        station_time_string = pd.Timestamp(
+            time.numeric_time_to_datetime(self.ds.TIME.values[TIME_index], ds.TIME.units).item()
+        )
         self.fig.canvas.header_visible = False  # Hide the figure header
         self.ax.set_title(f'Station: {self.station}: {station_time_string}')
         plt.tight_layout()

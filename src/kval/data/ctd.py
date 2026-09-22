@@ -4,12 +4,14 @@ kval.ctd
 """
 
 import xarray as xr
+import pandas as pd
 from kval.data.ship_ctd_tools import _ctd_tools as tools
 from kval.data.ship_ctd_tools import _ctd_visualize as viz
 from kval.data.ship_ctd_tools import _ctd_edit as ctd_edit
 from kval.file import matfile
 from kval.data import dataset, edit
 from kval.util import time, xr_funcs
+from kval.util.xr_funcs import time_as_datetime, time_as_float
 from kval.metadata import conventionalize, _standard_attrs
 from kval.metadata.compliance import compliance_checks_ioos, compliance_checks_custom
 from kval.metadata.conventionalize import convert_64_to_32, add_now_as_date_created, nans_to_fill_value
@@ -19,9 +21,7 @@ import numpy as np
 from pathlib import Path
 
 # Want to be able to use these functions directly..
-from kval.data.dataset import (
-    to_netcdf, add_latlon, calculate_PSAL, calculate_CNDC, 
-    calculate_SA_CT, calculate_rho, calculate_sig0, calculate_ss)
+from kval.data.dataset import to_netcdf, calculate_PSAL, calculate_CNDC, calculate_SA_CT, calculate_rho, calculate_sig0, calculate_ss
 from kval.data.edit import threshold, offset
 
 
@@ -285,9 +285,9 @@ def to_csv(ds: xr.Dataset, outfile: str) -> None:
     with open(outfile, "w") as f:
         for time_ in ds.TIME.values:
             ds_prof = ds.sel(TIME=time_)
-            time_str = time.datenum_to_timestamp(time_).strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
+            time_str = pd.Timestamp(
+                time.numeric_time_to_datetime(time_, ds.TIME.units).item()
+            ).strftime("%Y-%m-%d %H:%M:%S")
             print("#" * 88, file=f)
             print(
                 f"#####  {ds_prof.STATION.values:<8} ###  {time_str}  "
