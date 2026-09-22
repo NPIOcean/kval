@@ -188,7 +188,7 @@ def chop_deck(
         indices = [None, None]
 
         # If we detect deck time at start of time series:
-        # find a start index
+        # find a start idx
         if chop_var[0] < chop_var_mean - sd_thr * chop_var_sd:
             indices[0] = (
                 np.where(
@@ -197,7 +197,7 @@ def chop_deck(
                 + 1
             )
         # If we detect deck time at end of time series:
-        # find an end index
+        # find an end idx
         if chop_var[-1] < chop_var_mean - sd_thr * chop_var_sd:
             indices[1] = np.where(
                 np.diff(chop_var < chop_var_mean - sd_thr * chop_var_sd)
@@ -210,15 +210,15 @@ def chop_deck(
             accept = "y"
         else:
             fig, ax = plt.subplots(figsize=(8, 4))
-            index = np.arange(len(chop_var))
+            idx = np.arange(len(chop_var))
 
             ylab = variable
             if hasattr(ds[variable], "units"):
                 ylab = f"{ylab} [{ds[variable].units}]"
 
-            ax.plot(index, chop_var, "k", label=variable)
+            ax.plot(idx, chop_var, "k", label=variable)
             ax.plot(
-                index[keep_slice],
+                idx[keep_slice],
                 chop_var[keep_slice],
                 "r",
                 label="Chopped Range",
@@ -277,7 +277,7 @@ def chop_deck(
         f"(total samples {L0} -> {L1})"
     )
     if verbose:
-        print(f"Chopping to index: {indices}")
+        print(f"Chopping to idx: {indices}")
         print(net_str)
 
 
@@ -469,8 +469,8 @@ def adjust_time_for_drift(
     """
     Adjust the TIME coordinate of an xarray Dataset to correct for instrument clock drift.
 
-    Applies a linear drift correction in time: zero correction at start_time,
-    ramping linearly (in elapsed time, not sample index) to the full specified
+    Applies a linear drift correction in time_vals: zero correction at start_time,
+    ramping linearly (in elapsed time_vals, not sample index) to the full specified
     offset at end_time. This is robust to gaps or uneven sampling intervals.
 
     By default, start_time and end_time are the first and last TIME values in
@@ -480,8 +480,8 @@ def adjust_time_for_drift(
     rate, rather than clamped.
 
     The offset can be specified in seconds, minutes, hours, or days.
-    Negative drift values indicate the instrument lags true time (offset is added),
-    positive values indicate the instrument leads true time (offset is subtracted).
+    Negative drift values indicate the instrument lags true time_vals (offset is added),
+    positive values indicate the instrument leads true time_vals (offset is subtracted).
 
     Parameters
     ----------
@@ -541,20 +541,20 @@ def adjust_time_for_drift(
 
     # Get the TIME coordinate as float; fail loudly if that's not possible
     try:
-        time = ds.coords['TIME'].values.astype(float)
+        time_vals = ds.coords['TIME'].values.astype(float)
     except (TypeError, ValueError) as e:
         raise Exception('Could not add drift because TIME values could not '
                         f'be cast to float: {e}')
 
-    # Nothing to do (and time[-1]/time[0] below would raise) on empty TIME
-    if len(time) == 0:
+    # Nothing to do (and time_vals[-1]/time_vals[0] below would raise) on empty TIME
+    if len(time_vals) == 0:
         warnings.warn('TIME coordinate is empty -> Doing nothing', UserWarning)
         return ds
 
     # Drift correction assumes TIME is non-decreasing from deployment
     # (index 0) to recovery (index -1). Duplicate timestamps are allowed;
     # reversed/out-of-order TIME is not.
-    if not np.all(np.diff(time) >= 0):
+    if not np.all(np.diff(time_vals) >= 0):
         raise Exception('Could not add drift because TIME is not sorted in '
                         'non-decreasing order')
 
@@ -576,8 +576,8 @@ def adjust_time_for_drift(
                             f'timestamp (expected e.g. "2020-01-02 00:33"): {e}')
         return (dt - ref_date).total_seconds() / 86400  # convert to days
 
-    start_num = _time_str_to_num(start_time, 'start_time') if start_time is not None else time[0]
-    end_num = _time_str_to_num(end_time, 'end_time') if end_time is not None else time[-1]
+    start_num = _time_str_to_num(start_time, 'start_time') if start_time is not None else time_vals[0]
+    end_num = _time_str_to_num(end_time, 'end_time') if end_time is not None else time_vals[-1]
 
     # Need a nonzero span to define a fractional position within it
     anchor_span = end_num - start_num
@@ -586,11 +586,11 @@ def adjust_time_for_drift(
                         '(or first/last TIME values) are identical')
 
     # Fractional position of each TIME point relative to [start_num, end_num],
-    # linear in elapsed time (not sample index). Points outside this window
+    # linear in elapsed time_vals (not sample index). Points outside this window
     # (if start_time/end_time were set explicitly) extrapolate linearly.
-    frac_elapsed = (time - start_num) / anchor_span
+    frac_elapsed = (time_vals - start_num) / anchor_span
     drift_adjustments_sec = frac_elapsed * total_drift_seconds
-    adjusted_time = time - drift_adjustments_sec / 86400
+    adjusted_time = time_vals - drift_adjustments_sec / 86400
 
     # Update the TIME coordinate in the dataset
     note = (

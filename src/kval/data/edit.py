@@ -7,6 +7,7 @@ Interactive functions toward the end
 """
 
 import numpy as np
+import warnings
 import matplotlib.pyplot as plt
 import xarray as xr
 import ipywidgets as widgets

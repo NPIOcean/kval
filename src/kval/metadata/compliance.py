@@ -33,7 +33,14 @@ def compliance_checks_ioos(file):
     button; otherwise, results print directly.
     """
     if not COMPLIANCE_CHECKER_AVAILABLE:
-        raise ImportError(...)  # unchanged
+        raise ImportError(
+            "IOOS Compliance Checker is not installed. "
+            "Please install it to use this functionality, e.g.:\n"
+            "$ conda install -c conda-forge compliance-checker\nor\n"
+            "$ pip install compliance-checker\n\n"
+            "(Note: There are some issues with getting the dependencies "
+            " of this library to work on Py3.12, MacOS and Windows..)"
+        )
 
     if _in_notebook():
         _compliance_checks_ioos_with_button(file)
