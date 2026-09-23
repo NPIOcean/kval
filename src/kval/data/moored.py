@@ -148,7 +148,7 @@ def chop_deck(
     sd_thr : float, optional
         The standard deviation threshold for determining the chop boundaries
         when `indices` is not provided. Defaults to 3.0.
-    indices : Optional[Tuple[int, int]], optional
+    indices : tuple[int, int] | None, optional
         A tuple specifying the (start, stop) indices for manually chopping the
         dataset along the TIME dimension. If not provided, the function will
         use the standard deviation threshold to determine the range
@@ -209,7 +209,7 @@ def chop_deck(
         if auto_accept:
             accept = "y"
         else:
-            fig, ax = plt.subplots(figsize=(8, 4))
+            fig, ax = plt.subplots(figsize=(11, 4))
             idx = np.arange(len(chop_var))
 
             ylab = variable
