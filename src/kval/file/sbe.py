@@ -435,7 +435,7 @@ def read_header(filename: str) -> dict:
             ):
                 if len(hdict["latitude"]) == 0:
                     lat_value = _decdeg_from_line(line)
-                    if lat_value:
+                    if lat_value is not None:
                         hdict["latitude"] = lat_value
 
             if "** LONGITUDE" in line.upper() and isinstance(
@@ -443,7 +443,7 @@ def read_header(filename: str) -> dict:
             ):
                 if len(hdict["longitude"]) == 0:
                     lon_value = _decdeg_from_line(line)
-                    if lon_value:
+                    if lon_value is not None:
                         hdict["longitude"] = lon_value
 
             # Read start time
@@ -1482,11 +1482,11 @@ def _assign_specified_lat_lon_station(ds, lat, lon, station):
     if specified by the user (not None).
     """
 
-    if lat:
+    if lat is not None:
         ds.attrs["latitude"] = lat
-    if lon:
+    if lon is not None:
         ds.attrs["longitude"] = lon
-    if station:
+    if station is not None:
         ds.attrs["station"] = station
 
     return ds
@@ -1621,7 +1621,7 @@ def _add_latlon_variables(ds, suppress_latlon_warning=False):
     missing = False
 
     if "latitude" in ds.attrs:
-        if ds.latitude:  # If not "None"
+        if ds.latitude is not None:  # If not "None"
             lat_value = ds.latitude
         else:
             lat_value = np.nan
@@ -1647,7 +1647,7 @@ def _add_latlon_variables(ds, suppress_latlon_warning=False):
     ds["LATITUDE"] = lat_array
 
     if "longitude" in ds.attrs:
-        if ds.longitude:  # If not "None"
+        if ds.longitude is not None:  # If not "None"
             lon_value = ds.longitude
         else:
             lon_value = np.nan

@@ -927,8 +927,8 @@ def test_load_moored_assigns_lat_lon_as_coordinates(tmp_path):
 
     assert 'LATITUDE' in result.coords
     assert 'LONGITUDE' in result.coords
-    assert float(result.LATITUDE) == 81.5501
-    assert float(result.LONGITUDE) == 30.8777
+    assert float(result.LATITUDE) == pytest.approx(81.5501, rel=1e-6)
+    assert float(result.LONGITUDE) == pytest.approx(30.8777, rel=1e-6)
 
 
 def test_load_moored_lat_lon_zero_not_dropped():
@@ -967,3 +967,27 @@ def test_load_moored_nc_path_applies_lat_lon(tmp_path):
     assert 'LATITUDE' in result.coords
     assert float(result.LATITUDE) == 70.0
     assert float(result.LONGITUDE) == 20.0
+
+
+
+def test_load_nc_preserves_latlon_as_coordinates_across_save_and_reload(tmp_path):
+    """Regression test: decode_cf=False (kval's own default) doesn't
+    interpret the 'coordinates' attribute to_netcdf() writes to mark
+    auxiliary coordinates -- so LATITUDE/LONGITUDE previously came back
+    as plain data variables on reload, even though they were correctly
+    set as coordinates before saving."""
+    from kval.data.dataset import add_latlon
+    from kval.data.moored import load_nc
+
+    ds = xr.Dataset({'TEMP': ('TIME', np.array([1.0, 2.0]))}, coords={'TIME': [0, 1]})
+    ds = add_latlon(ds, lon=30.0, lat=80.0)
+    assert 'LATITUDE' in ds.coords  # sanity check before saving
+
+    nc_path = str(tmp_path / 'roundtrip.nc')
+    ds.to_netcdf(nc_path)
+
+    ds_reloaded = load_nc(nc_path)
+    assert 'LATITUDE' in ds_reloaded.coords
+    assert 'LONGITUDE' in ds_reloaded.coords
+    assert float(ds_reloaded.LATITUDE) == 80.0
+    assert float(ds_reloaded.LONGITUDE) == 30.0

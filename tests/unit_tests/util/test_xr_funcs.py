@@ -457,3 +457,41 @@ def test_time_average_origin_shifts_bin_edges():
     assert result_default['TIME'].values[0] != result_shifted['TIME'].values[0]
     assert result_shifted['TIME'].values[0] == np.datetime64('2020-12-31T21:00:00')
  
+
+
+### Testing the reorder_coords_to_end() function
+
+def test_reorder_coords_to_end_moves_specified_coords_last():
+    ds = xr.Dataset(
+        {'TEMP': ('TIME', np.array([1.0]))},
+        coords={'LATITUDE': ((), 80.0), 'LONGITUDE': ((), 30.0), 'TIME': [0]},
+    )
+    assert list(ds.coords) == ['LATITUDE', 'LONGITUDE', 'TIME']  # problematic starting order
+    result = xr_funcs.reorder_coords_to_end(ds, ['LATITUDE', 'LONGITUDE'])
+    assert list(result.coords) == ['TIME', 'LATITUDE', 'LONGITUDE']
+
+
+def test_reorder_coords_to_end_accepts_single_string():
+    ds = xr.Dataset(
+        {'TEMP': ('TIME', np.array([1.0]))},
+        coords={'LATITUDE': ((), 80.0), 'TIME': [0]},
+    )
+    result = xr_funcs.reorder_coords_to_end(ds, 'LATITUDE')
+    assert list(result.coords) == ['TIME', 'LATITUDE']
+
+
+def test_reorder_coords_to_end_ignores_nonexistent_names():
+    ds = xr.Dataset({'TEMP': ('TIME', np.array([1.0]))}, coords={'TIME': [0]})
+    result = xr_funcs.reorder_coords_to_end(ds, ['NONEXISTENT'])
+    assert list(result.coords) == ['TIME']
+
+
+def test_promote_cf_coordinates_moves_newly_promoted_coords_to_end(mock_dataset):
+    """promote_cf_coordinates should place newly-promoted coordinates
+    after existing ones (e.g. after TIME/PRES dimension coordinates),
+    not wherever they happened to sit in the file's own variable order."""
+    ds = mock_dataset.copy()
+    ds['TEMP'].attrs['coordinates'] = 'ZONE'
+    result = xr_funcs.promote_cf_coordinates(ds)
+    coord_order = list(result.coords)
+    assert coord_order[-1] == 'ZONE'

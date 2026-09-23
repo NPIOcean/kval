@@ -166,3 +166,36 @@ def test_add_latlon_variables_suppress_warning():
     # cleanly and still produces the (NaN) coordinates.
     result = sbe._add_latlon_variables(ds, suppress_latlon_warning=True)
     assert 'LATITUDE' in result.coords
+
+# ===================================================================
+# Regression tests: truthy-check bugs that silently dropped lat=0/lon=0
+# (equator / prime meridian -- valid real coordinates)
+# ===================================================================
+
+def test_assign_specified_lat_lon_station_preserves_zero_values():
+    """_assign_specified_lat_lon_station's own docstring says 'if
+    specified by the user (not None)', but the code used `if lat:`
+    (plain truthiness), which silently dropped lat=0/lon=0."""
+    ds = xr.Dataset()
+    result = sbe._assign_specified_lat_lon_station(ds, lat=0.0, lon=0.0, station='EQ01')
+    assert result.attrs['latitude'] == 0.0
+    assert result.attrs['longitude'] == 0.0
+    assert result.attrs['station'] == 'EQ01'
+
+
+def test_add_latlon_variables_preserves_zero_from_attrs():
+    ds = xr.Dataset({'STATION': ('TIME', ['st01'])}, coords={'TIME': [0]})
+    ds.attrs['latitude'] = 0.0
+    ds.attrs['longitude'] = 0.0
+    result = sbe._add_latlon_variables(ds)
+    assert float(result.LATITUDE.values[0]) == 0.0
+    assert float(result.LONGITUDE.values[0]) == 0.0
+
+
+def test_decdeg_from_line_zero_value_not_dropped_by_caller():
+    """A header line parsing to exactly 0.0 (equator/prime meridian)
+    should not be treated the same as a parse failure (None)."""
+    from kval.file.sbe import _decdeg_from_line
+    # A line that genuinely parses to 0.0
+    result = _decdeg_from_line('** Latitude: 000 00.0000')
+    assert result == 0.0

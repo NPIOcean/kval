@@ -37,7 +37,7 @@ from kval.data.dataset import to_netcdf, add_latlon, calculate_PSAL, calculate_C
 from kval.plot.tsplot import  tsplot, tsplot_pick
 
 from kval.data.edit import threshold, offset, linear_drift
-from kval.util.xr_funcs import time_average, append_processing_history, time_as_datetime, time_as_float
+from kval.util.xr_funcs import time_average, append_processing_history, time_as_datetime, time_as_float, promote_cf_coordinates
 if internals.is_notebook():
     from IPython.display import display
 
@@ -111,6 +111,13 @@ def load_nc(
     Wrapper for loading nc file.
     '''
     ds = xr.open_dataset(file, decode_cf=decode_cf)
+
+    # decode_cf=False's raw read doesn't interpret the 'coordinates'
+    # attribute that to_netcdf() writes to mark auxiliary coordinates
+    # (e.g. LATITUDE/LONGITUDE) as such -- so they'd otherwise silently
+    # come back as plain data variables even if they were set_coords()
+    # before saving. Promote them back based on that attribute.
+    ds = promote_cf_coordinates(ds)
 
     return ds
 

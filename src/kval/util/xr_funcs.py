@@ -401,22 +401,54 @@ def swap_var_coord(
     return ds
 
 
+def reorder_coords_to_end(ds, coord_names):
+    """
+    Reorder a dataset's coordinates so that the given coord_names appear
+    last (in the order given), after all other coordinates and
+    variables. Purely cosmetic (affects repr/coords iteration order
+    only) -- no functional effect otherwise.
+
+    Args:
+        ds (xr.Dataset): Dataset to reorder.
+        coord_names (str | list[str]): Coordinate name(s) to move to the
+            end. Names not present in ds are silently skipped.
+
+    Returns:
+        xr.Dataset: The reordered dataset.
+    """
+    if isinstance(coord_names, str):
+        coord_names = [coord_names]
+    existing_order = list(ds.variables)
+    reordered = (
+        [v for v in existing_order if v not in coord_names]
+        + [v for v in coord_names if v in existing_order]
+    )
+    return ds[reordered]
+
+
 def promote_cf_coordinates(ds):
     """
     Promote all variables listed in any variable's 'coordinates' attribute
-    to auxiliary coordinates, if present in the dataset.
+    to auxiliary coordinates, if present in the dataset. Newly-promoted
+    coordinates are moved to the end (see reorder_coords_to_end) so they
+    consistently appear after dimension coordinates like TIME, rather
+    than wherever they happened to sit in the file's own variable order.
     """
-    # collect all coordinate names mentioned in 'coordinates' attributes
-    coord_names = set()
+    # collect all coordinate names mentioned in 'coordinates' attributes,
+    # preserving first-seen order (not a plain set, which would give
+    # LAT/LON etc. an arbitrary relative order among themselves)
+    coord_names = dict()
     for var in ds.data_vars:
         coords_attr = ds[var].attrs.get("coordinates", "")
-        coord_names.update(coords_attr.split())
+        for name in coords_attr.split():
+            coord_names.setdefault(name, None)
 
     # keep only existing variables that aren't already coords
     to_promote = [c for c in coord_names if c in ds and c not in ds.coords]
 
     if to_promote:
         ds = ds.set_coords(to_promote)
+        ds = reorder_coords_to_end(ds, to_promote)
 
     return ds
 
@@ -527,7 +559,7 @@ def time_average(
     ).mean()
 
     # Re-merge the time-independent variables, preserved exactly as they were
-    ds_out = ds_out.merge(ds_time_indep)
+    ds_out = ds_out.merge(ds_time_indep, compat="override")
 
     if label == 'center':
         try:

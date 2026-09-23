@@ -215,7 +215,7 @@ class hand_remove_points:
             pass
         self.PRES_points_selected = np.array([])
         self.var_points_selected = np.array([])
-        self.TF_indixes_selected = np.bool_(len())
+        self.TF_indixes_selected = np.bool_(np.zeros(self.Npres))
 
     def start_over_selection(self, button):
         """

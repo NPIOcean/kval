@@ -56,7 +56,9 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
         prog_bar_msg_1 = 'Loading profiles from netcdf files'
         ns_input = []
         for file in tqdm(file_list, desc=prog_bar_msg_1):
-            ns_input += [xr.open_dataset(file, decode_cf=False)]
+            ds_loaded = xr.open_dataset(file, decode_cf=False)
+            ds_loaded = xr_funcs.promote_cf_coordinates(ds_loaded)
+            ns_input += [ds_loaded]
         n_profs = len(ns_input)
 
         valid_nc_files = True
@@ -306,7 +308,9 @@ def join_cruise_btl(datasets, verbose = True,
         prog_bar_msg_1 = 'Loading profiles from netcdf files'
         ns_input = []
         for file in tqdm(file_list, desc=prog_bar_msg_1):
-            ns_input += [xr.open_dataset(file, decode_cf=False)]
+            ds_loaded = xr.open_dataset(file, decode_cf=False)
+            ds_loaded = xr_funcs.promote_cf_coordinates(ds_loaded)
+            ns_input += [ds_loaded]
         n_profs = len(ns_input)
 
         valid_nc_files = True

@@ -384,3 +384,23 @@ def test_add_latlon_zero_values_are_not_dropped():
     assert 'LONGITUDE' in result.coords
     assert float(result.LATITUDE) == 0.0
     assert float(result.LONGITUDE) == 0.0
+
+
+def test_add_latlon_forces_float32():
+    """Integer input (e.g. lat=82) previously inferred as int64; now
+    explicitly cast to float32 regardless of input type."""
+    ds = xr.Dataset({'TEMP': ('TIME', np.array([1.0]))}, coords={'TIME': [0]})
+    result = dataset.add_latlon(ds, lon=30, lat=82)  # plain ints
+    assert result.LATITUDE.dtype == np.float32
+    assert result.LONGITUDE.dtype == np.float32
+
+
+def test_add_latlon_places_coords_after_time():
+    """Purely cosmetic, but LATITUDE/LONGITUDE should consistently
+    appear after TIME in the coords listing, not wherever they happen
+    to land based on assignment order."""
+    ds = xr.Dataset({'TEMP': ('TIME', np.array([1.0]))}, coords={'TIME': [0]})
+    result = dataset.add_latlon(ds, lon=30.0, lat=80.0)
+    coord_order = list(result.coords)
+    assert coord_order.index('TIME') < coord_order.index('LATITUDE')
+    assert coord_order.index('TIME') < coord_order.index('LONGITUDE')

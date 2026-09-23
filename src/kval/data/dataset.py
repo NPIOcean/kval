@@ -13,7 +13,7 @@ import numpy as np
 from kval.metadata import compliance, conventionalize
 from kval.util import time
 import gsw
-from kval.util.xr_funcs import append_processing_history
+from kval.util.xr_funcs import append_processing_history, reorder_coords_to_end
 
 #### ADD VARIABLES
 
@@ -30,7 +30,7 @@ def add_latlon(ds, lon=None, lat=None, suppress_latlon_warning=False):
     ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     if lat is not None:
-        ds['LATITUDE'] = ((), (lat), {
+        ds['LATITUDE'] = ((), np.float32(lat), {
                 "standard_name": "latitude",
                 "units": "degree_north",
                 "long_name": "latitude",
@@ -40,7 +40,7 @@ def add_latlon(ds, lon=None, lat=None, suppress_latlon_warning=False):
         warnings.warn('No latitude value provided -- LATITUDE not set.')
 
     if lon is not None:
-        ds['LONGITUDE'] = ((), (lon), {
+        ds['LONGITUDE'] = ((), np.float32(lon), {
                 "standard_name": "longitude",
                 "units": "degree_east",
                 "long_name": "longitude",
@@ -48,6 +48,11 @@ def add_latlon(ds, lon=None, lat=None, suppress_latlon_warning=False):
         ds = ds.set_coords('LONGITUDE')
     elif not suppress_latlon_warning:
         warnings.warn('No longitude value provided -- LONGITUDE not set.')
+
+    # Purely cosmetic: keep LATITUDE/LONGITUDE at the end of the coords
+    # list (after TIME and other dimension coordinates) rather than
+    # wherever they happened to land.
+    ds = reorder_coords_to_end(ds, ['LATITUDE', 'LONGITUDE'])
 
     return ds
 

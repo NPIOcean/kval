@@ -227,3 +227,13 @@ def test_moored_hand_remove_points_supports_separate_edit_variable():
 
     assert np.isnan(editor.ds["TEMP_QC"].values[2])
     assert not np.isnan(editor.ds["TEMP"].values[2])  # visualized var untouched
+
+def test_ctd_hand_remove_points_forget_selection_does_not_crash():
+    """Regression test: forget_selection had `np.bool_(len())` -- len()
+    called with zero arguments -- which raised TypeError immediately on
+    every click of the 'Forget selection' button."""
+    ds = _make_ctd_profile_ds()
+    editor = ctd_hand_remove_points(ds, "TEMP", TIME_index=0)
+    editor.forget_selection(button=None)  # should not raise
+    assert editor.TF_indixes_selected.shape == (5,)
+    assert not editor.TF_indixes_selected.any()
