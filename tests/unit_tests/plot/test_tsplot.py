@@ -542,3 +542,57 @@ class TestTsplotPick:
         fig_number = picker.fig.number
         picker.close_button.click()
         assert fig_number not in plt.get_fignums()
+
+    def test_zoom_is_preserved_across_control_change(self, picker):
+        """A control change (e.g. toggling a checkbox) rebuilds the
+        figure from scratch -- without explicit preservation, that would
+        reset a manual zoom back to the auto-scaled default."""
+        picker.ax.set_xlim(34.4, 34.6)
+        picker.ax.set_ylim(1.0, 3.0)
+
+        picker.grid_checkbox.value = True
+
+        assert picker.ax.get_xlim() == (34.4, 34.6)
+        assert picker.ax.get_ylim() == (1.0, 3.0)
+
+    def test_zoom_is_preserved_across_mode_switch(self, picker):
+        picker.ax.set_xlim(34.4, 34.6)
+        picker.ax.set_ylim(1.0, 3.0)
+
+        picker.mode_toggle.value = 'hist2d'
+        assert picker.ax.get_xlim() == (34.4, 34.6)
+        assert picker.ax.get_ylim() == (1.0, 3.0)
+
+        picker.mode_toggle.value = 'scatter'
+        assert picker.ax.get_xlim() == (34.4, 34.6)
+        assert picker.ax.get_ylim() == (1.0, 3.0)
+
+    def test_first_draw_uses_autoscale_not_a_stale_zoom(self, picker):
+        """Nothing to preserve on the very first draw -- should just be
+        the normal auto-scaled view, not, say, matplotlib's default
+        (0, 1) axes range."""
+        assert picker.ax.get_xlim() != (0.0, 1.0)
+
+    def test_reset_button_restores_original_extent(self, picker):
+        original_xlim = picker.ax.get_xlim()
+        original_ylim = picker.ax.get_ylim()
+
+        picker.ax.set_xlim(34.4, 34.6)
+        picker.ax.set_ylim(1.0, 3.0)
+        picker.grid_checkbox.value = True  # a redraw in between, as in real use
+
+        picker.reset_button.click()
+
+        assert picker.ax.get_xlim() == original_xlim
+        assert picker.ax.get_ylim() == original_ylim
+
+    def test_reset_extent_persists_across_further_control_changes(self, picker):
+        """After resetting, the next redraw shouldn't silently bring
+        back the old zoom -- the reset view becomes the new baseline."""
+        original_xlim = picker.ax.get_xlim()
+        picker.ax.set_xlim(34.4, 34.6)
+        picker.reset_button.click()
+
+        picker.mode_toggle.value = 'hist2d'
+
+        assert picker.ax.get_xlim() == original_xlim

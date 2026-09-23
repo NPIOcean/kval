@@ -530,6 +530,9 @@ class tsplot_pick:
         self.ds = ds
         self.tsplot_kwargs = tsplot_kwargs
         self.fig = None  # tracked so _redraw can close the previous one
+        self.ax = None   # tracked so _redraw can preserve zoom across redraws
+        self.default_xlim = None  # the original auto-scaled extent, set
+        self.default_ylim = None  # once on the first draw, for the reset button
 
         color_options = [None] + list(ds.coords) + list(ds.data_vars)
 
@@ -565,6 +568,10 @@ class tsplot_pick:
             description='Close', button_style='danger',
             layout=widgets.Layout(width='70px'))
         self.close_button.on_click(self._on_close)
+        self.reset_button = widgets.Button(
+            description='Reset axes',
+            layout=widgets.Layout(width='90px'))
+        self.reset_button.on_click(self._on_reset_axes)
         self.output = widgets.Output()
 
         controls = [self.color_dropdown, self.mode_toggle,
@@ -580,7 +587,7 @@ class tsplot_pick:
         # own row that leaves an empty gap when hidden.
         self.widget_box = widgets.VBox(
             [widgets.HBox([self.mode_toggle, self.color_dropdown,
-                          self.close_button]),
+                          self.reset_button, self.close_button]),
              widgets.HBox([self.density_checkbox, self.freezing_checkbox,
                           self.grid_checkbox]),
              widgets.HBox([self.marker_dropdown, self.alpha_slider,
@@ -599,6 +606,19 @@ class tsplot_pick:
             plt.close(self.fig)
         self.widget_box.close()
 
+    def _on_reset_axes(self, _):
+        """Restore the original auto-scaled extent. The matplotlib
+        toolbar's own "home" button can't do this reliably here, since
+        every control change rebuilds the figure from scratch (see
+        _redraw) -- each new toolbar only ever knows about the view at
+        the point it was created, not the dataset's true original
+        extent from before any zooming happened."""
+        if self.ax is None or self.default_xlim is None:
+            return
+        self.ax.set_xlim(self.default_xlim)
+        self.ax.set_ylim(self.default_ylim)
+        self.fig.canvas.draw_idle()
+
     def _redraw(self, change):
         mode = self.mode_toggle.value
         # marker/alpha/color_by only do anything in scatter mode, bins
@@ -614,6 +634,12 @@ class tsplot_pick:
 
         with self.output:
             clear_output(wait=True)
+            # Capture the current view (which may be a manual zoom, not
+            # just the auto-scaled default) so it survives the rebuild
+            # below -- a fresh figure/axes would otherwise always
+            # auto-scale back to fit the full data range.
+            prev_xlim = self.ax.get_xlim() if self.ax is not None else None
+            prev_ylim = self.ax.get_ylim() if self.ax is not None else None
             if self.fig is not None:
                 plt.close(self.fig)  # don't let figures accumulate on
                                       # every control change (matplotlib
@@ -634,6 +660,17 @@ class tsplot_pick:
                 grid=self.grid_checkbox.value,
                 bins=self.bins_slider.value,
                 **self.tsplot_kwargs)
+            if prev_xlim is not None:
+                ax.set_xlim(prev_xlim)
+                ax.set_ylim(prev_ylim)
+            else:
+                # First draw -- this is the true auto-scaled extent,
+                # remembered so the reset button can always get back to
+                # it even after later redraws only preserve whatever
+                # zoom was active at the time.
+                self.default_xlim = ax.get_xlim()
+                self.default_ylim = ax.get_ylim()
+            self.ax = ax
             # tsplot() now handles displaying the figure it creates
             # internally (see its own ioff()/display() logic) -- calling
             # plt.show() again here would duplicate it
