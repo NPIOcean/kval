@@ -108,3 +108,61 @@ def test_read_csv_file_not_found():
 
     assert "File not found" in str(excinfo.value)
 
+
+
+# ===================================================================
+# _add_latlon_variables
+# ===================================================================
+
+def _make_ds_for_latlon(with_attrs=True, with_sample_vars=False):
+    ds = xr.Dataset({'STATION': ('TIME', ['st01'])}, coords={'TIME': [0]})
+    if with_attrs:
+        ds.attrs['latitude'] = 80.0
+        ds.attrs['longitude'] = 30.0
+    if with_sample_vars:
+        ds['LATITUDE_SAMPLE'] = ('TIME', [80.5])
+        ds['LONGITUDE_SAMPLE'] = ('TIME', [30.5])
+    return ds
+
+
+def test_add_latlon_variables_assigns_as_coordinates_not_data_vars():
+    """LATITUDE/LONGITUDE should be coordinate variables, not plain data
+    variables -- matches dataset.add_latlon's convention and required
+    for compliance_checks_custom's coordinate checks."""
+    ds = _make_ds_for_latlon()
+    result = sbe._add_latlon_variables(ds)
+    assert 'LATITUDE' in result.coords
+    assert 'LONGITUDE' in result.coords
+    assert 'LATITUDE' not in result.data_vars
+    assert 'LONGITUDE' not in result.data_vars
+
+
+def test_add_latlon_variables_reads_from_attrs():
+    ds = _make_ds_for_latlon(with_attrs=True)
+    result = sbe._add_latlon_variables(ds)
+    assert float(result.LATITUDE.values[0]) == 80.0
+    assert float(result.LONGITUDE.values[0]) == 30.0
+
+
+def test_add_latlon_variables_falls_back_to_sample_vars():
+    ds = _make_ds_for_latlon(with_attrs=False, with_sample_vars=True)
+    result = sbe._add_latlon_variables(ds)
+    assert float(result.LATITUDE.values[0]) == 80.5
+    assert float(result.LONGITUDE.values[0]) == 30.5
+
+
+def test_add_latlon_variables_assigns_nan_and_warns_if_missing(capsys):
+    ds = _make_ds_for_latlon(with_attrs=False, with_sample_vars=False)
+    result = sbe._add_latlon_variables(ds)
+    assert np.isnan(result.LATITUDE.values[0])
+    assert np.isnan(result.LONGITUDE.values[0])
+    out = capsys.readouterr().out
+    assert 'latitude' in out and 'longitude' in out
+
+
+def test_add_latlon_variables_suppress_warning():
+    ds = _make_ds_for_latlon(with_attrs=False, with_sample_vars=False)
+    # Should not raise/print when suppressed -- just confirm it runs
+    # cleanly and still produces the (NaN) coordinates.
+    result = sbe._add_latlon_variables(ds, suppress_latlon_warning=True)
+    assert 'LATITUDE' in result.coords

@@ -1,10 +1,11 @@
 """
-ctd.data.dataset
+kval.data.dataset
 
 Various functions for working with generalized datasets.
 """
 
 import os
+import warnings
 from pathlib import Path
 import pandas as pd
 import xarray as xr
@@ -17,25 +18,36 @@ from kval.util.xr_funcs import append_processing_history
 #### ADD VARIABLES
 
 
-def add_latlon(ds, lon, lat, suppress_latlon_warning=False):
+def add_latlon(ds, lon=None, lat=None, suppress_latlon_warning=False):
     """
-    Adds 0-d LATITUDE and LONGITUDE variables to a dataset.
+    Adds LATITUDE and LONGITUDE coordinate variables to a dataset.
 
+    Either lon or lat may be omitted -- only the one(s) actually
+    provided get assigned. If a value is omitted, a warning is issued
+    unless suppress_latlon_warning=True.
     """
 
     ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
-    ds['LATITUDE'] = ((), (lat), {
-            "standard_name": "latitude",
-            "units": "degree_north",
-            "long_name": "latitude",
-        },)
+    if lat is not None:
+        ds['LATITUDE'] = ((), (lat), {
+                "standard_name": "latitude",
+                "units": "degree_north",
+                "long_name": "latitude",
+            },)
+        ds = ds.set_coords('LATITUDE')
+    elif not suppress_latlon_warning:
+        warnings.warn('No latitude value provided -- LATITUDE not set.')
 
-    ds['LONGITUDE'] = ((), (lon), {
-            "standard_name": "longitude",
-            "units": "degree_east",
-            "long_name": "longitude",
-        },)
+    if lon is not None:
+        ds['LONGITUDE'] = ((), (lon), {
+                "standard_name": "longitude",
+                "units": "degree_east",
+                "long_name": "longitude",
+            },)
+        ds = ds.set_coords('LONGITUDE')
+    elif not suppress_latlon_warning:
+        warnings.warn('No longitude value provided -- LONGITUDE not set.')
 
     return ds
 

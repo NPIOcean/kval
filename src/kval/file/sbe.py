@@ -1677,6 +1677,8 @@ def _add_latlon_variables(ds, suppress_latlon_warning=False):
     )
     ds["LONGITUDE"] = lon_array
 
+    ds = ds.set_coords(['LATITUDE', 'LONGITUDE'])
+
     if missing and suppress_latlon_warning is False:
         warn_str = (
             f"{ds.STATION.values[0]}: Unable to find [{missing}] "

@@ -67,8 +67,7 @@ def load_moored(
     """
     # Check file type and return an error if invalid
     if file.endswith(".nc"):
-        ds = load_nc(file)
-        return ds
+        instr_type = "NC"
     elif file.endswith(".rsk"):
         instr_type = "RBR"
     elif file.endswith(".cnv"):
@@ -86,18 +85,20 @@ def load_moored(
         )
 
     # Load data
-    if instr_type == "RBR":
+    if instr_type == "NC":
+        ds = load_nc(file)
+    elif instr_type == "RBR":
         ds = rbr.read_rsk(file)
     elif instr_type in ("SBE", "SBE_asc"):
         ds = sbe.read_cnv(file)
     elif instr_type in ("SBE_csv"):
         ds = sbe.read_csv(file)
 
-    # Assign lat/lon if we have specified them
-    if lat:
-        ds["LATITUDE"] = ((), lat)
-    if lon:
-        ds["LONGITUDE"] = ((), lon)
+    # Assign lat/lon if we have specified them (suppressing the warning
+    # here since it's entirely normal to load without lat/lon at this
+    # stage and add it later).
+    if lat is not None or lon is not None:
+        ds = add_latlon(ds, lon=lon, lat=lat, suppress_latlon_warning=True)
 
     return ds
 
@@ -148,7 +149,7 @@ def chop_deck(
     sd_thr : float, optional
         The standard deviation threshold for determining the chop boundaries
         when `indices` is not provided. Defaults to 3.0.
-    indices : tuple[int, int] | None, optional
+    indices : Optional[Tuple[int, int]], optional
         A tuple specifying the (start, stop) indices for manually chopping the
         dataset along the TIME dimension. If not provided, the function will
         use the standard deviation threshold to determine the range
@@ -209,7 +210,7 @@ def chop_deck(
         if auto_accept:
             accept = "y"
         else:
-            fig, ax = plt.subplots(figsize=(11, 4))
+            fig, ax = plt.subplots(figsize=(8, 4))
             idx = np.arange(len(chop_var))
 
             ylab = variable

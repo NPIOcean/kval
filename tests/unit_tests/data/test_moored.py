@@ -1,4 +1,5 @@
 import pytest
+from unittest import mock
 import xarray as xr
 import requests
 from pathlib import Path
@@ -908,3 +909,61 @@ def test_moored_can_reach_dataset_functions(small_moored_ds, func, expected_var)
     assert expected_var in result
     assert np.all(np.isfinite(result[expected_var].values))
  
+
+
+# ===================================================================
+# load_moored: lat/lon handling
+# ===================================================================
+
+def test_load_moored_assigns_lat_lon_as_coordinates(tmp_path):
+    """Regression test for a real reported bug: load_moored had its own
+    third, independent lat/lon assignment (missed in an earlier search
+    since it used double quotes, ["LATITUDE"], not single), which set
+    them as plain data variables rather than coordinates."""
+    fake_ds = xr.Dataset({'TEMP': ('TIME', np.array([1.0, 2.0]))},
+                          coords={'TIME': [0, 1]})
+    with mock.patch('kval.data.moored.rbr.read_rsk', return_value=fake_ds):
+        result = load_moored('fake_file.rsk', lat=81.5501, lon=30.8777)
+
+    assert 'LATITUDE' in result.coords
+    assert 'LONGITUDE' in result.coords
+    assert float(result.LATITUDE) == 81.5501
+    assert float(result.LONGITUDE) == 30.8777
+
+
+def test_load_moored_lat_lon_zero_not_dropped():
+    """The original code used `if lat:`/`if lon:` (plain truthiness),
+    which would silently drop lat=0 or lon=0 -- both valid real
+    coordinates (equator / prime meridian)."""
+    fake_ds = xr.Dataset({'TEMP': ('TIME', np.array([1.0]))}, coords={'TIME': [0]})
+    with mock.patch('kval.data.moored.rbr.read_rsk', return_value=fake_ds):
+        result = load_moored('fake_file.rsk', lat=0.0, lon=0.0)
+
+    assert 'LATITUDE' in result.coords
+    assert float(result.LATITUDE) == 0.0
+    assert float(result.LONGITUDE) == 0.0
+
+
+def test_load_moored_no_lat_lon_given_does_not_add_them():
+    fake_ds = xr.Dataset({'TEMP': ('TIME', np.array([1.0]))}, coords={'TIME': [0]})
+    with mock.patch('kval.data.moored.rbr.read_rsk', return_value=fake_ds):
+        result = load_moored('fake_file.rsk')
+
+    assert 'LATITUDE' not in result.coords
+    assert 'LONGITUDE' not in result.coords
+
+
+def test_load_moored_nc_path_applies_lat_lon(tmp_path):
+    """Regression test: .nc files used to `return` immediately on load,
+    before the lat/lon-assignment code ever ran -- silently dropping
+    any lat/lon the caller passed."""
+    fake_ds = xr.Dataset({'TEMP': ('TIME', np.array([1.0, 2.0]))},
+                          coords={'TIME': [0, 1]})
+    nc_path = str(tmp_path / 'test.nc')
+    fake_ds.to_netcdf(nc_path)
+
+    result = load_moored(nc_path, lat=70.0, lon=20.0)
+
+    assert 'LATITUDE' in result.coords
+    assert float(result.LATITUDE) == 70.0
+    assert float(result.LONGITUDE) == 20.0

@@ -318,3 +318,69 @@ def test_gsw_functions_do_not_mutate_input_dataset(func):
     ds_original = ds.copy(deep=True)
     _ = func(ds)
     xr.testing.assert_identical(ds, ds_original)
+
+# ===================================================================
+# add_latlon
+# ===================================================================
+
+def test_add_latlon_assigns_as_coordinates_not_data_vars(mock_dataset):
+    """LATITUDE/LONGITUDE should be coordinate variables, not plain data
+    variables -- required for compliance_checks_custom's coordinate
+    checks, and for CF/ACDD compliance generally (they're spatial
+    identifiers, not measured data)."""
+    ds = dataset.add_latlon(mock_dataset, lon=30.0, lat=80.0)
+    assert 'LATITUDE' in ds.coords
+    assert 'LONGITUDE' in ds.coords
+    assert 'LATITUDE' not in ds.data_vars
+    assert 'LONGITUDE' not in ds.data_vars
+
+
+def test_add_latlon_correct_values_and_attrs(mock_dataset):
+    ds = dataset.add_latlon(mock_dataset, lon=30.0, lat=80.0)
+    assert float(ds['LATITUDE'].values) == 80.0
+    assert float(ds['LONGITUDE'].values) == 30.0
+    assert ds['LATITUDE'].attrs['units'] == 'degree_north'
+    assert ds['LONGITUDE'].attrs['units'] == 'degree_east'
+    assert ds['LATITUDE'].attrs['standard_name'] == 'latitude'
+    assert ds['LONGITUDE'].attrs['standard_name'] == 'longitude'
+
+
+def test_add_latlon_does_not_mutate_input(mock_dataset):
+    ds_original = mock_dataset.copy(deep=True)
+    _ = dataset.add_latlon(mock_dataset, lon=30.0, lat=80.0)
+    xr.testing.assert_identical(mock_dataset, ds_original)
+
+
+def test_add_latlon_warns_if_lat_missing():
+    ds = xr.Dataset({'TEMP': ('TIME', np.array([1.0]))}, coords={'TIME': [0]})
+    with pytest.warns(UserWarning, match="latitude"):
+        result = dataset.add_latlon(ds, lon=30.0)
+    assert 'LONGITUDE' in result.coords
+    assert 'LATITUDE' not in result.coords
+
+
+def test_add_latlon_warns_if_lon_missing():
+    ds = xr.Dataset({'TEMP': ('TIME', np.array([1.0]))}, coords={'TIME': [0]})
+    with pytest.warns(UserWarning, match="longitude"):
+        result = dataset.add_latlon(ds, lat=80.0)
+    assert 'LATITUDE' in result.coords
+    assert 'LONGITUDE' not in result.coords
+
+
+def test_add_latlon_suppress_warning():
+    ds = xr.Dataset({'TEMP': ('TIME', np.array([1.0]))}, coords={'TIME': [0]})
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # any warning -> test failure
+        dataset.add_latlon(ds, lat=80.0, suppress_latlon_warning=True)
+
+
+def test_add_latlon_zero_values_are_not_dropped():
+    """lat=0/lon=0 (equator / prime meridian) are valid coordinates and
+    must not be treated as falsy/missing."""
+    ds = xr.Dataset({'TEMP': ('TIME', np.array([1.0]))}, coords={'TIME': [0]})
+    result = dataset.add_latlon(ds, lon=0.0, lat=0.0, suppress_latlon_warning=True)
+    assert 'LATITUDE' in result.coords
+    assert 'LONGITUDE' in result.coords
+    assert float(result.LATITUDE) == 0.0
+    assert float(result.LONGITUDE) == 0.0
