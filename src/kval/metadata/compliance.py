@@ -247,7 +247,9 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
         1. Variable data types — warns if any are int64 or float64.
         2. Attribute placeholders — warns if any global or variable attributes
            contain 'TBW'.
-        3. Fill values — warns if any contain 'nn' or are missing _FillValue.
+        3. Fill values — warns if any data variable is missing _FillValue or
+           uses NaN (discouraged). Coordinates are exempt: CF 2.5.1 forbids
+           _FillValue on coordinate variables.
         4. Required attribute — 'processing_level' must exist either globally
            or on all relevant variables, but not both.
         5. Recommended attribute — 'QC_indicator' should exist globally or on
@@ -304,7 +306,7 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
 
     # 3. fill value check
     bad_fill = []
-    for v in vars_relevant:
+    for v in data_vars_relevant:
         fv = ds[v].attrs.get("_FillValue")
         if fv is None or (isinstance(fv, (float, np.floating)) and np.isnan(fv)):
             bad_fill.append(v)
@@ -485,7 +487,6 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
         "references",
         "data_set_progress",
         "cruise_name",
-        "ship",
         "area",
         "location",
         "source",
