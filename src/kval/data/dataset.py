@@ -11,7 +11,7 @@ import pandas as pd
 import xarray as xr
 import numpy as np
 from kval.metadata import compliance, conventionalize
-from kval.util import time
+from kval.util import time, netcdf
 import gsw
 from kval.util.xr_funcs import append_processing_history, reorder_coords_to_end
 
@@ -529,13 +529,17 @@ def to_netcdf(
             print(ds.attrs['history'])
             print('---')
 
+    # CF 2.5.1: coordinate variables must not carry a _FillValue. xarray adds
+    # one to every float variable by default, so strip and suppress it here.
+    ds, coord_encoding = netcdf.prepare_for_export(ds)
+
     try:
-        ds.to_netcdf(file_path)
+        ds.to_netcdf(file_path, encoding=coord_encoding)
     except PermissionError:
         user_input = input(f"The file {file_path} already exists. Overwrite? (y/n): ")
         if user_input.lower() in ['yes', 'y']:
             os.remove(file_path)
-            ds.to_netcdf(file_path)
+            ds.to_netcdf(file_path, encoding=coord_encoding)
             print(f"File {file_path} overwritten.")
         else:
             print("Operation canceled. File not overwritten.")

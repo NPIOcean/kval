@@ -15,13 +15,19 @@ conditionally and the IOOS functions raise a clear ImportError if it is
 missing.
 """
 
+import contextlib
+import io
 import os
+import re
+import sys
 import tempfile
 
 import numpy as np
 import xarray as xr
 from IPython.display import display, clear_output
 import ipywidgets as widgets
+
+from kval.util import netcdf
 
 
 # Conditional import for compliance-checker
@@ -83,21 +89,94 @@ def compliance_checks_ioos(file):
         _compliance_checks_ioos_plain(file)
 
 
-def _run_ioos_checkers(path: str) -> None:
+def _run_ioos_checkers(path: str,
+                      suppress_known_bugs: bool = True) -> None:
     """
     Run the IOOS CF and ACDD checkers on the netCDF file at *path*.
 
     Results are printed by the checker itself; nothing is returned.
+
+    Parameters
+    ----------
+    path : str
+        netCDF file to check.
+    suppress_known_bugs : bool, default=True
+        Hide reports of checks that are known to crash inside
+        compliance-checker regardless of the file (see
+        _KNOWN_CHECKER_BUGS). Genuine failures are always shown. Set
+        False to see everything the checker reports.
     """
     check_suite = CheckSuite()
     check_suite.load_all_available_checkers()
 
-    ComplianceChecker.run_checker(
-        path,
-        ["cf", "acdd"],  # checker_names
-        0,  # verbose
-        "normal",  # criteria
-    )
+    if not suppress_known_bugs:
+        ComplianceChecker.run_checker(path, ["cf", "acdd"], 0, "normal")
+        return
+
+    # The checker reports crashed checks by printing to stderr, not via
+    # the warnings machinery, so filtering means capturing the stream.
+    captured = io.StringIO()
+    try:
+        with contextlib.redirect_stderr(captured):
+            ComplianceChecker.run_checker(path, ["cf", "acdd"], 0, "normal")
+    finally:
+        # Re-emit whatever we captured, minus the known-bug lines --
+        # including when the checker raised, so nothing is swallowed.
+        remaining = _filter_checker_stderr(captured.getvalue(),
+                                           _KNOWN_CHECKER_BUGS)
+        if remaining.strip():
+            sys.stderr.write(remaining)
+
+
+# Checks that are known to raise inside compliance-checker itself, for
+# reasons that have nothing to do with the file being checked. Each entry
+# is a "<checker>.<check_name>" as it appears in the checker's own error
+# report, with a note on why it is safe to hide.
+#
+# - cf.check_domain_variables: raises "list index out of range" whenever
+#   featureType is set (6.1.0). The check is for CF 5.8 domain variables,
+#   which are irrelevant to a moored time series, and featureType is
+#   required by ACDD -- so the sensible response is to keep featureType
+#   and ignore the noise. Verified on a minimal dataset carrying nothing
+#   but featureType.
+_KNOWN_CHECKER_BUGS = ("cf.check_domain_variables",)
+
+_ERROR_HEADER = re.compile(
+    r"^WARNING: The following exceptions occurred during the .* checker")
+
+
+def _filter_checker_stderr(text: str, suppress: tuple) -> str:
+    """
+    Drop reports of known compliance-checker bugs from its stderr output.
+
+    The checker prints a header line followed by one "<checker>.<check>:
+    <message>" line per failed check. We remove the suppressed lines, and
+    the header too if nothing is left under it -- so a genuine new failure
+    still gets reported, header and all.
+    """
+    lines = text.splitlines()
+    kept, block = [], []
+
+    def flush():
+        # A header with no surviving error lines under it is dropped.
+        if len(block) > 1:
+            kept.extend(block)
+        block.clear()
+
+    for line in lines:
+        if _ERROR_HEADER.match(line):
+            flush()
+            block.append(line)
+        elif block and any(line.startswith(name + ":") for name in suppress):
+            continue  # a known bug -- drop it
+        elif block and re.match(r"^\S+\.\S+: ", line):
+            block.append(line)
+        else:
+            flush()
+            kept.append(line)
+    flush()
+
+    return "\n".join(kept) + ("\n" if text.endswith("\n") and kept else "")
 
 
 def _compliance_checks_ioos_plain(file):
@@ -118,7 +197,8 @@ def _compliance_checks_ioos_plain(file):
         # directory.
         with tempfile.TemporaryDirectory() as tempdir:
             temp_file = os.path.join(tempdir, "temp.nc")
-            file.to_netcdf(temp_file)
+            to_write, coord_encoding = netcdf.prepare_for_export(file)
+            to_write.to_netcdf(temp_file, encoding=coord_encoding)
             _run_ioos_checkers(temp_file)
     else:
         _run_ioos_checkers(file)

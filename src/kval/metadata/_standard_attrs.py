@@ -15,6 +15,7 @@ standard_var_attrs = {
         "valid_min": -3.0,
         "valid_max": 40.0,
         "reference_scale": "ITS-90",
+        "units_metadata": "temperature: on_scale",
     },
     "PSAL": {
         "standard_name": "sea_water_practical_salinity",
@@ -204,10 +205,11 @@ standard_var_attrs = {
     "TIME": {
         "standard_name": "time",
         "units": "days since 1970-01-01",
-        "long_name": "Time stamp of profile",
-        "calendar": "gregorian",
+        "long_name": "Time of measurement",
+        "calendar": "standard",
         "axis": "T",
-    },
+        "units_metadata": "leap_seconds: unknown",
+                },
 
     "PAR": {
         "standard_name":"downwelling_photosynthetic_photon_flux_in_sea_water",
@@ -242,7 +244,7 @@ standard_var_attrs = {
 
 
 standard_attrs_global_ctd = {
-    "Conventions": "ACDD-1.3, CF-1.10",
+    "Conventions": "ACDD-1.3, CF-1.11",
     "source": "CTD profiles from SBE911+",
     "instrument": "In Situ/Laboratory Instruments>Profilers/Sounders>CTD",
     "data_set_language": "eng",
@@ -255,7 +257,7 @@ standard_attrs_global_ctd = {
 }
 
 standard_attrs_global_moored = {
-    "Conventions": "ACDD-1.3, CF-1.10",
+    "Conventions": "ACDD-1.3, CF-1.11",
     "source": "Subsurface mooring",
     "instrument": "In Situ/Laboratory Instruments>Profilers/Sounders>CTD",
     "data_set_language": "eng",
@@ -401,8 +403,6 @@ global_attrs_ordered = [
     "cruise_name",
     "cruise",
     "ship",
-    "processing_level",
-    "QC_indicator",
     "license",
     "time_coverage_start",
     "time_coverage_end",
@@ -445,7 +445,6 @@ global_attrs_ordered = [
     "platform_vocabulary",
     "iso_topic_category",
     "Conventions",
-    "data_set_language",
     "naming_authority",
     "references",
     "metadata_link",
@@ -469,6 +468,7 @@ variable_attrs_ordered = [
     "valid_max",
     "sensor_mount",
     "reference_scale",
+    "units_metadata",
     "coverage_content_type",
     "axis",
 ]

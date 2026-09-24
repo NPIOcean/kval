@@ -11,10 +11,15 @@ the real external checker, so they run reliably without network access
 or a fully configured checker environment.
 """
 
+import contextlib
+import io
 import os
+import sys
 import numpy as np
 import pytest
 import xarray as xr
+
+from kval.metadata import compliance
 from unittest.mock import patch, MagicMock
 
 from kval.metadata.compliance import compliance_checks_custom, compliance_checks_ioos
@@ -371,3 +376,98 @@ def test_recommended_global_attributes_are_not_listed_twice(capsys):
     compliance_checks_custom(ds)
     out = capsys.readouterr().out
     assert out.count("platform_vocabulary") <= 1
+
+
+# ---------------------------------------------------------------------
+# Suppressing known compliance-checker bugs
+#
+# The checker reports crashed checks by printing to stderr, not through
+# the warnings machinery, so these have to be filtered out of the stream.
+# ---------------------------------------------------------------------
+
+_HEADER = ("WARNING: The following exceptions occurred during the cf checker "
+           "(possibly indicate compliance checker issues):\n")
+
+
+def test_known_bug_and_its_header_are_both_removed():
+    text = _HEADER + "cf.check_domain_variables: list index out of range\n"
+    out = compliance._filter_checker_stderr(text, ("cf.check_domain_variables",))
+    assert out.strip() == ""
+
+
+def test_a_genuine_failure_still_gets_reported():
+    text = (_HEADER
+            + "cf.check_domain_variables: list index out of range\n"
+            + "cf.check_something_real: a real problem\n")
+    out = compliance._filter_checker_stderr(text, ("cf.check_domain_variables",))
+
+    assert "check_something_real" in out
+    assert "check_domain_variables" not in out
+    assert "WARNING" in out          # header kept, since something survived
+
+
+def test_unrelated_stderr_output_passes_through_untouched():
+    text = "Using packaged standard name table v93\n"
+    out = compliance._filter_checker_stderr(text, ("cf.check_domain_variables",))
+    assert out == text
+
+
+def test_nothing_is_suppressed_when_the_list_is_empty():
+    text = _HEADER + "cf.check_domain_variables: list index out of range\n"
+    out = compliance._filter_checker_stderr(text, ())
+    assert "check_domain_variables" in out
+
+
+def test_suppression_can_be_switched_off(tmp_path):
+    """suppress_known_bugs=False must not touch stderr at all."""
+    calls = {}
+
+    def fake_run_checker(path, names, verbose, criteria):
+        calls["ran"] = True
+        sys.stderr.write(_HEADER)
+        sys.stderr.write("cf.check_domain_variables: list index out of range\n")
+
+    err = io.StringIO()
+    with patch.multiple("kval.metadata.compliance",
+                        COMPLIANCE_CHECKER_AVAILABLE=True,
+                        CheckSuite=MagicMock(),
+                        ComplianceChecker=MagicMock(run_checker=fake_run_checker)):
+        with contextlib.redirect_stderr(err):
+            compliance._run_ioos_checkers("dummy.nc", suppress_known_bugs=False)
+
+    assert calls["ran"]
+    assert "check_domain_variables" in err.getvalue()
+
+
+def test_suppression_is_on_by_default(tmp_path):
+    def fake_run_checker(path, names, verbose, criteria):
+        sys.stderr.write(_HEADER)
+        sys.stderr.write("cf.check_domain_variables: list index out of range\n")
+
+    err = io.StringIO()
+    with patch.multiple("kval.metadata.compliance",
+                        COMPLIANCE_CHECKER_AVAILABLE=True,
+                        CheckSuite=MagicMock(),
+                        ComplianceChecker=MagicMock(run_checker=fake_run_checker)):
+        with contextlib.redirect_stderr(err):
+            compliance._run_ioos_checkers("dummy.nc")
+
+    assert err.getvalue().strip() == ""
+
+
+def test_stderr_is_not_swallowed_when_the_checker_raises():
+    """A crash must not eat the output captured before it."""
+    def exploding_run_checker(path, names, verbose, criteria):
+        sys.stderr.write("something important\n")
+        raise RuntimeError("boom")
+
+    err = io.StringIO()
+    with patch.multiple("kval.metadata.compliance",
+                        COMPLIANCE_CHECKER_AVAILABLE=True,
+                        CheckSuite=MagicMock(),
+                        ComplianceChecker=MagicMock(run_checker=exploding_run_checker)):
+        with contextlib.redirect_stderr(err):
+            with pytest.raises(RuntimeError, match="boom"):
+                compliance._run_ioos_checkers("dummy.nc")
+
+    assert "something important" in err.getvalue()

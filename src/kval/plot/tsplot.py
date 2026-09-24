@@ -30,6 +30,10 @@ from kval.util import internals
 _TEXT_COLOR = '#404040'
 _FONT_FAMILY = 'Arial'  # matplotlib falls back gracefully if unavailable
 
+# Half-width of the axis range used when data has no spread at all
+# (see _padded_range).
+_ZERO_SPAN_PAD = 0.1
+
 
 def _get_sa_ct(ds: xr.Dataset,
                temp_var: str = 'TEMP', psal_var: str = 'PSAL',
@@ -242,6 +246,158 @@ def _install_background_autoredraw(ax, pres: float = 0,
     ax.callbacks.connect('xlim_changed', _redraw)
     ax.callbacks.connect('ylim_changed', _redraw)
     _redraw(ax)  # initial draw, at whatever the axis limits are right now
+
+
+def ts_axes(sa_range: tuple = None, ct_range: tuple = None,
+            datasets=None, ax=None, figsize: tuple = (6, 5),
+            pres: float = 0,
+            density_contours: bool = True, freezing_line: bool = False,
+            grid: bool = False, margin: float = 0.05,
+            temp_var: str = 'TEMP', psal_var: str = 'PSAL',
+            pres_var: str = 'PRES',
+            lat_var: str = 'LATITUDE', lon_var: str = 'LONGITUDE',
+            sa_var: str = 'SA', ct_var: str = 'CT'):
+    """
+    Create an empty, decorated T-S axis to plot onto yourself.
+
+    Where `tsplot` takes a dataset and draws it, this just builds the
+    frame (TEOS-10 axis labels, sigma0 contours, freezing line) and
+    hands it back, so you can scatter/plot whatever you like on top. 
+    
+    The axis limits are fixed on creation (see Notes), so the plotting
+    range has to be decided up front: either pass `sa_range`/`ct_range`
+    explicitly, or pass the `datasets` you intend to plot and let the
+    range be derived from them.
+
+    Parameters
+    ----------
+    sa_range, ct_range : (float, float), optional
+        (min, max) Absolute Salinity [g kg-1] / Conservative Temperature
+        [degC] range for the axis. Derived from `datasets` if not given.
+    datasets : xr.Dataset or sequence of xr.Dataset, optional
+        Dataset(s) you intend to plot. Used only to work out the axis
+        range (with `margin` added); nothing is drawn from them. SA/CT
+        are read from the datasets if present, otherwise computed via
+        gsw as in `tsplot`.
+    ax : matplotlib.axes.Axes, optional
+        Existing axis to decorate. A new figure/axis is created if not
+        given.
+    figsize : (float, float), default=(6, 5)
+        Figure size, used only when creating a new figure.
+    pres : float, default=0
+        Pressure [dbar] for the freezing line. The freezing point is
+        pressure-dependent, so for a mooring at 100 m, `pres=100` is
+        more honest than the surface default. Density contours are
+        always sigma0 regardless.
+    density_contours, freezing_line : bool
+        Which background elements to draw.
+    grid : bool, default=False
+        Whether to draw a background grid.
+    margin : float, default=0.05
+        Fractional padding added around the data range when deriving
+        limits from `datasets`. Ignored if ranges are given explicitly.
+    temp_var, psal_var, pres_var, lat_var, lon_var, sa_var, ct_var : str
+        Variable names, as in `tsplot`. Only used with `datasets`.
+
+    Returns
+    -------
+    (matplotlib.figure.Figure, matplotlib.axes.Axes)
+
+    Notes
+    -----
+    The density contours and freezing line redraw automatically on zoom
+    and pan, so they always span the visible area.
+
+    Making that work requires the axis limits to be set explicitly here,
+    which switches matplotlib's autoscaling off. Anything you plot
+    afterwards will therefore *not* expand the axis to fit -- points
+    outside the range are simply not shown. This is deliberate: with
+    autoscaling left on, adding data triggers a redraw, the redraw calls
+    `contour`, `contour` autoscales, and the callback fires again,
+    recursing until Python gives up.
+
+    If you need to widen the view afterwards, call `ax.set_xlim` /
+    `ax.set_ylim` -- the background will follow.
+
+    Examples
+    --------
+    >>> fig, ax = ts_axes(datasets=[ds_at800, ds_at200], pres=100)
+    >>> ax.scatter(ds_at800.SA, ds_at800.CT, s=1, alpha=0.03,
+    ...            label='AT800 100 m')
+    >>> ax.scatter(ds_at200.SA, ds_at200.CT, s=1, alpha=0.03,
+    ...            label='AT200 49 m')
+    >>> ax.legend()
+    """
+    if sa_range is None or ct_range is None:
+        if datasets is None:
+            raise ValueError(
+                "ts_axes needs an axis range: pass sa_range and ct_range, "
+                "or pass datasets= to derive them from the data you intend "
+                "to plot.")
+
+        if isinstance(datasets, xr.Dataset):
+            datasets = [datasets]
+
+        sa_values, ct_values = [], []
+        for ds in datasets:
+            SA, CT = _get_sa_ct(ds, temp_var=temp_var, psal_var=psal_var,
+                                pres_var=pres_var, lat_var=lat_var,
+                                lon_var=lon_var, sa_var=sa_var, ct_var=ct_var)
+            sa_values.append(np.asarray(SA).ravel())
+            ct_values.append(np.asarray(CT).ravel())
+
+        sa_all = np.concatenate(sa_values)
+        ct_all = np.concatenate(ct_values)
+
+        if not np.isfinite(sa_all).any() or not np.isfinite(ct_all).any():
+            raise ValueError(
+                "Could not derive an axis range: the datasets contain no "
+                "finite SA/CT values.")
+
+        sa_range = sa_range or _padded_range(sa_all, margin)
+        ct_range = ct_range or _padded_range(ct_all, margin)
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = ax.get_figure()
+
+    # Setting limits explicitly also turns autoscaling off, which the
+    # auto-redraw below depends on -- see Notes.
+    ax.set_xlim(sa_range)
+    ax.set_ylim(ct_range)
+
+    ax.set_xlabel('Absolute Salinity [g kg$^{-1}$]',
+                  color=_TEXT_COLOR, fontfamily=_FONT_FAMILY)
+    ax.set_ylabel('Conservative Temperature [$\\degree$C]',
+                  color=_TEXT_COLOR, fontfamily=_FONT_FAMILY)
+    ax.grid(grid)
+    ax.tick_params(axis='both', colors=_TEXT_COLOR,
+                   labelfontfamily=_FONT_FAMILY)
+
+    _install_background_autoredraw(
+        ax, pres=pres, density_contours=density_contours,
+        freezing_line=freezing_line)
+
+    return fig, ax
+
+
+def _padded_range(values, margin: float):
+    """
+    (min, max) of the finite entries in `values`, padded by `margin` as a
+    fraction of the span.
+
+    A zero span (a single point, or all values identical) is padded by a
+    small fixed amount instead, so the axis is never degenerate. It has to
+    be absolute rather than proportional: Absolute Salinity values sit
+    around 35, so a proportional pad would open the axis by well over a
+    g/kg for what is a single point.
+    """
+    finite = np.asarray(values)[np.isfinite(values)]
+    vmin, vmax = float(np.min(finite)), float(np.max(finite))
+    span = vmax - vmin
+    pad = span * margin if span > 0 else _ZERO_SPAN_PAD
+    return (vmin - pad, vmax + pad)
 
 
 def tsplot(ds: xr.Dataset,
@@ -530,9 +686,6 @@ class tsplot_pick:
         self.ds = ds
         self.tsplot_kwargs = tsplot_kwargs
         self.fig = None  # tracked so _redraw can close the previous one
-        self.ax = None   # tracked so _redraw can preserve zoom across redraws
-        self.default_xlim = None  # the original auto-scaled extent, set
-        self.default_ylim = None  # once on the first draw, for the reset button
 
         color_options = [None] + list(ds.coords) + list(ds.data_vars)
 
@@ -568,10 +721,6 @@ class tsplot_pick:
             description='Close', button_style='danger',
             layout=widgets.Layout(width='70px'))
         self.close_button.on_click(self._on_close)
-        self.reset_button = widgets.Button(
-            description='Reset axes',
-            layout=widgets.Layout(width='90px'))
-        self.reset_button.on_click(self._on_reset_axes)
         self.output = widgets.Output()
 
         controls = [self.color_dropdown, self.mode_toggle,
@@ -587,7 +736,7 @@ class tsplot_pick:
         # own row that leaves an empty gap when hidden.
         self.widget_box = widgets.VBox(
             [widgets.HBox([self.mode_toggle, self.color_dropdown,
-                          self.reset_button, self.close_button]),
+                          self.close_button]),
              widgets.HBox([self.density_checkbox, self.freezing_checkbox,
                           self.grid_checkbox]),
              widgets.HBox([self.marker_dropdown, self.alpha_slider,
@@ -606,19 +755,6 @@ class tsplot_pick:
             plt.close(self.fig)
         self.widget_box.close()
 
-    def _on_reset_axes(self, _):
-        """Restore the original auto-scaled extent. The matplotlib
-        toolbar's own "home" button can't do this reliably here, since
-        every control change rebuilds the figure from scratch (see
-        _redraw) -- each new toolbar only ever knows about the view at
-        the point it was created, not the dataset's true original
-        extent from before any zooming happened."""
-        if self.ax is None or self.default_xlim is None:
-            return
-        self.ax.set_xlim(self.default_xlim)
-        self.ax.set_ylim(self.default_ylim)
-        self.fig.canvas.draw_idle()
-
     def _redraw(self, change):
         mode = self.mode_toggle.value
         # marker/alpha/color_by only do anything in scatter mode, bins
@@ -634,12 +770,6 @@ class tsplot_pick:
 
         with self.output:
             clear_output(wait=True)
-            # Capture the current view (which may be a manual zoom, not
-            # just the auto-scaled default) so it survives the rebuild
-            # below -- a fresh figure/axes would otherwise always
-            # auto-scale back to fit the full data range.
-            prev_xlim = self.ax.get_xlim() if self.ax is not None else None
-            prev_ylim = self.ax.get_ylim() if self.ax is not None else None
             if self.fig is not None:
                 plt.close(self.fig)  # don't let figures accumulate on
                                       # every control change (matplotlib
@@ -660,17 +790,6 @@ class tsplot_pick:
                 grid=self.grid_checkbox.value,
                 bins=self.bins_slider.value,
                 **self.tsplot_kwargs)
-            if prev_xlim is not None:
-                ax.set_xlim(prev_xlim)
-                ax.set_ylim(prev_ylim)
-            else:
-                # First draw -- this is the true auto-scaled extent,
-                # remembered so the reset button can always get back to
-                # it even after later redraws only preserve whatever
-                # zoom was active at the time.
-                self.default_xlim = ax.get_xlim()
-                self.default_ylim = ax.get_ylim()
-            self.ax = ax
             # tsplot() now handles displaying the figure it creates
             # internally (see its own ioff()/display() logic) -- calling
             # plt.show() again here would duplicate it
