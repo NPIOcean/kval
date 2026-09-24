@@ -1,8 +1,27 @@
+"""
+kval.metadata.compliance
+========================
+
+Checks that a dataset is ready for publication:
+
+- ``compliance_checks_ioos``  -- runs the external IOOS compliance-checker
+  (CF and ACDD) on a netCDF file or an in-memory ``xarray.Dataset``.
+- ``compliance_checks_custom`` -- ad-hoc checks for CF/ACDD compatibility
+  and NPI practice, printed as a human-readable report.
+
+``compliance-checker`` is an optional dependency (it is awkward to install
+on some platforms, and is not installed on Windows), so it is imported
+conditionally and the IOOS functions raise a clear ImportError if it is
+missing.
+"""
+
 import os
+import tempfile
+
+import numpy as np
 import xarray as xr
 from IPython.display import display, clear_output
 import ipywidgets as widgets
-import numpy as np
 
 
 # Conditional import for compliance-checker
@@ -13,13 +32,37 @@ try:
 except ImportError:
     COMPLIANCE_CHECKER_AVAILABLE = False
 
+
+_CHECKER_MISSING_MESSAGE = (
+    "IOOS Compliance Checker is not installed. "
+    "Please install it to use this functionality, e.g.:\n"
+    "$ conda install -c conda-forge compliance-checker\nor\n"
+    "$ pip install compliance-checker\n\n"
+    "(Note: There are some issues with getting the dependencies "
+    " of this library to work on Py3.12, MacOS and Windows..)"
+)
+
+
+def _require_compliance_checker() -> None:
+    """
+    Raise a helpful ImportError if the optional compliance-checker
+    dependency is not available.
+    """
+    if not COMPLIANCE_CHECKER_AVAILABLE:
+        raise ImportError(_CHECKER_MISSING_MESSAGE)
+
+
 def _in_notebook() -> bool:
     """Check whether we're running inside a Jupyter notebook/lab (not a
     plain terminal or script), where ipywidgets will actually render."""
     try:
         from IPython import get_ipython
+
         shell = get_ipython()
-        return shell is not None and shell.__class__.__name__ == "ZMQInteractiveShell"
+        return (
+            shell is not None
+            and shell.__class__.__name__ == "ZMQInteractiveShell"
+        )
     except ImportError:
         return False
 
@@ -32,21 +75,29 @@ def compliance_checks_ioos(file):
     If running in a Jupyter notebook, results are shown with a "close"
     button; otherwise, results print directly.
     """
-    if not COMPLIANCE_CHECKER_AVAILABLE:
-        raise ImportError(
-            "IOOS Compliance Checker is not installed. "
-            "Please install it to use this functionality, e.g.:\n"
-            "$ conda install -c conda-forge compliance-checker\nor\n"
-            "$ pip install compliance-checker\n\n"
-            "(Note: There are some issues with getting the dependencies "
-            " of this library to work on Py3.12, MacOS and Windows..)"
-        )
+    _require_compliance_checker()
 
     if _in_notebook():
         _compliance_checks_ioos_with_button(file)
     else:
         _compliance_checks_ioos_plain(file)
 
+
+def _run_ioos_checkers(path: str) -> None:
+    """
+    Run the IOOS CF and ACDD checkers on the netCDF file at *path*.
+
+    Results are printed by the checker itself; nothing is returned.
+    """
+    check_suite = CheckSuite()
+    check_suite.load_all_available_checkers()
+
+    ComplianceChecker.run_checker(
+        path,
+        ["cf", "acdd"],  # checker_names
+        0,  # verbose
+        "normal",  # criteria
+    )
 
 
 def _compliance_checks_ioos_plain(file):
@@ -55,66 +106,35 @@ def _compliance_checks_ioos_plain(file):
     (https://github.com/ioos/compliance-checker-web)
     to check an nc file (CF and ACDD conventions).
 
-    Can take a file path or an xr.Dataset as input
+    Can take a file path or an xr.Dataset as input.
     """
-    if not COMPLIANCE_CHECKER_AVAILABLE:
-        raise ImportError(
-            "IOOS Compliance Checker is not installed. "
-            "Please install it to use this functionality, e.g.:\n"
-            "$ conda install -c conda-forge compliance-checker\nor\n"
-            "$ pip install compliance-checker\n\n"
-            "(Note: There are some issues with getting the dependencies "
-            " of this library to work on Py3.12, MacOS and Windows..)"
-        )
+    _require_compliance_checker()
 
-    # Load all available checker classes
-    temp = False
     if isinstance(file, xr.Dataset):
-        # Store a temp copy for checking
-        temp_file = "./temp.nc"
-        file.to_netcdf(temp_file)
-        file = temp_file
-        temp = True
-
-    check_suite = CheckSuite()
-    check_suite.load_all_available_checkers()
-
-    # Run cf and adcc checks
-    path = file
-    checker_names = ["cf", "acdd"]
-    verbose = 0
-    criteria = "normal"
-
-    return_value, errors = ComplianceChecker.run_checker(
-        path,
-        checker_names,
-        verbose,
-        criteria,
-    )
-
-    if temp:
-        os.remove(temp_file)
+        # The checker works on files, so write a temporary copy of the
+        # dataset. Using a temporary directory means (a) the copy is
+        # removed even if the check raises or the user interrupts it
+        # mid-run, and (b) it never lands in the user's working
+        # directory.
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp_file = os.path.join(tempdir, "temp.nc")
+            file.to_netcdf(temp_file)
+            _run_ioos_checkers(temp_file)
+    else:
+        _run_ioos_checkers(file)
 
 
 def _compliance_checks_ioos_with_button(file):
     """
-    (Wrapper for check_file() with a "close" button)
+    (Wrapper for _compliance_checks_ioos_plain() with a "close" button)
 
     Use the IOOS compliance checker
     (https://github.com/ioos/compliance-checker-web)
     to check an nc file (CF and ACDD conventions).
 
-    Can take a file path or an xr.Dataset as input
+    Can take a file path or an xr.Dataset as input.
     """
-    if not COMPLIANCE_CHECKER_AVAILABLE:
-        raise ImportError(
-            "IOOS Compliance Checker is not installed. "
-            "Please install it to use this functionality, e.g.:\n"
-            "$ conda install -c conda-forge compliance-checker\nor\n"
-            "$ pip install compliance-checker\n\n"
-            "(Note: There are some issues with getting the dependencies "
-            " of this library to work on Py3.12, MacOS and Windows..)"
-        )
+    _require_compliance_checker()
 
     output_widget = widgets.Output()
 
@@ -167,7 +187,7 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
     except Exception:
         check, warn, cross, arrow = "[OK]", "[!]", "[X]", "->"
 
-    warnings, passed, issues = [], [], 0
+    problems, passed, issues = [], [], 0
     skip_vars = {"STATION", "CRUISE", "DEPTH_INDEX", "NISKIN_NUMBER", "CAST"}
     vars_relevant = [v for v in ds.variables if v not in skip_vars]
     data_vars_relevant = [v for v in ds.data_vars if v not in skip_vars]
@@ -175,7 +195,7 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
     # 1. dtype check
     bad_types = [v for v in ds.variables if ds[v].dtype in (np.int64, np.float64)]
     if bad_types:
-        warnings.append(
+        problems.append(
             f"{warn} 64-bit types (32-bit is recommended):\n{', '.join(bad_types)}\n   {arrow} "
             "Suggestion: use kval.conventionalize.convert_64_to_32(ds)"
         )
@@ -197,7 +217,7 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
         if bad_v:
             msg += f"\n   – Variables:\n    {', '.join(bad_v)}"
         msg += f"\n   {arrow} Suggestion: Replace with actual metadata"
-        warnings.append(msg)
+        problems.append(msg)
         issues += 1
     else:
         passed.append(f"{check} No obvious placeholder attributes")
@@ -210,7 +230,7 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
             bad_fill.append(v)
 
     if bad_fill:
-        warnings.append(
+        problems.append(
             f"{warn} Suspicious/missing _FillValue (including NaNs, which are discouraged):\n{', '.join(bad_fill)}\n   "
             f"{arrow} Suggestion: use kval.conventionalize.nans_to_fill_value(ds)"
         )
@@ -222,11 +242,11 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
     g_proc = "processing_level" in ds.attrs
     v_proc = [v for v in data_vars_relevant if "processing_level" in ds[v].attrs]
     if g_proc and v_proc:
-        warnings.append(f"{cross} 'processing_level' exists globally and on vars")
+        problems.append(f"{cross} 'processing_level' exists globally and on vars")
         issues += 1
     elif not g_proc and len(v_proc) != len(data_vars_relevant):
         missing = [v for v in data_vars_relevant if "processing_level" not in ds[v].attrs]
-        warnings.append(
+        problems.append(
             f"{cross} Missing 'processing_level':\n{', '.join(missing)}\n   "
             f"{arrow} Suggestion: add globally or on all relevant variables"
         )
@@ -238,11 +258,11 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
     g_q = "QC_indicator" in ds.attrs
     v_q = [v for v in data_vars_relevant if "QC_indicator" in ds[v].attrs]
     if g_q and v_q:
-        warnings.append(f"{warn} 'QC_indicator' exists globally and on vars")
+        problems.append(f"{warn} 'QC_indicator' exists globally and on vars")
         issues += 1
     elif not g_q and len(v_q) != len(data_vars_relevant):
         missing = [v for v in data_vars_relevant if "QC_indicator" not in ds[v].attrs]
-        warnings.append(f"{warn} Missing 'QC_indicator' (not strictly required):\n{', '.join(missing)}")
+        problems.append(f"{warn} Missing 'QC_indicator' (not strictly required):\n{', '.join(missing)}")
         issues += 1
     else:
         passed.append(f"{check} Recommended 'QC_indicator' present correctly")
@@ -260,14 +280,14 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
         if missing_name:
             msg += f"{cross} Missing 'standard_name'/'long_name':\n{', '.join(missing_name)}"
         msg += f"\n   {arrow} Suggestion: Add 'units' and 'standard_name'/'long_name'"
-        warnings.append(msg)
+        problems.append(msg)
         issues += 1
     else:
         passed.append(f"{check} All relevant variables have 'units' and 'standard_name' or 'long_name' attributes")
 
     # 7. SBE_FLAG variable
     if "SBE_FLAG" in ds.variables:
-        warnings.append(f"{warn} 'SBE_FLAG' present\n   {arrow} Consider removing")
+        problems.append(f"{warn} 'SBE_FLAG' present\n   {arrow} Consider removing")
         issues += 1
     else:
         passed.append(f"{check} No 'SBE_FLAG' variable present")
@@ -275,7 +295,7 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
     # 8. Coordinate checks
     coord_vars = list(ds.coords)
     if not coord_vars:
-        warnings.append(f"{cross} No coordinate variables found")
+        problems.append(f"{cross} No coordinate variables found")
         issues += 1
     else:
         # (a) Check monotonicity and NaNs for *dimension* coords only
@@ -288,13 +308,13 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
                 elif not (np.all(np.diff(arr) > 0) or np.all(np.diff(arr) < 0)):
                     bad_order.append(c)
         if bad_nans:
-            warnings.append(
+            problems.append(
                 f"{cross} Dimension coordinate(s) contain NaNs: {', '.join(bad_nans)}\n   "
                 f"{arrow} Suggestion: remove or interpolate missing coordinate values"
             )
             issues += 1
         elif bad_order:
-            warnings.append(
+            problems.append(
                 f"{warn} Non-monotonic dimension coordinate(s): {', '.join(bad_order)}\n   "
                 f"{arrow} Suggestion: ensure dimensional coordinates are uniformly increasing or decreasing"
             )
@@ -309,7 +329,7 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
             and ds[c].attrs.get("coverage_content_type", "").lower() != "coordinate"
         ]
         if missing_cov:
-            warnings.append(
+            problems.append(
                 f"{warn} Missing or incorrect 'coverage_content_type' (should be 'coordinate'):\n"
                 f"{', '.join(missing_cov)}"
             )
@@ -323,7 +343,7 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
             if c.lower() != "station" and "axis" not in ds[c].attrs
         ]
         if missing_axis:
-            warnings.append(
+            problems.append(
                 f"{warn} Missing recommended 'axis' attribute for coordinates:\n{', '.join(missing_axis)}"
             )
             issues += 1
@@ -335,7 +355,7 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
         rec_coords = {"LATITUDE", "LONGITUDE", "STATION"}
         missing_from_coords = [v for v in rec_coords if v in ds.variables and v not in ds.coords]
         if missing_from_coords:
-            warnings.append(
+            problems.append(
                 f"{warn} Variables you may want to set as (non-dimensional) coordinate variables but aren't:\n{', '.join(missing_from_coords)}\n   "
                 f"{arrow} Suggestion: promote them to coordinates (ds = ds.set_coords([...]))"
             )
@@ -343,7 +363,7 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
         else:
             passed.append(f"{check} Spatial identifiers correctly treated as coordinates")
 
-        # (f) Axis sanity check
+        # (e) Axis sanity check
         axis_expected = {
             "LATITUDE": "Y",
             "LONGITUDE": "X",
@@ -357,12 +377,12 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
                 if found and found.upper() != expected:
                     axis_mismatch.append(f"{c}: expected axis='{expected}', found '{found}'")
         if axis_mismatch:
-            warnings.append(f"{warn} Axis attribute mismatches:\n" + "\n".join(f"   – {i}" for i in axis_mismatch))
+            problems.append(f"{warn} Axis attribute mismatches:\n" + "\n".join(f"   – {i}" for i in axis_mismatch))
             issues += 1
         else:
             passed.append(f"{check} Coordinate axis attributes consistent with CF expectations")
 
-# 9. Global attributes check (required vs recommended)
+    # 9. Global attributes check (required vs recommended)
     required_global_attrs = [
         "title",
         "summary",
@@ -373,8 +393,6 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
         "keywords",
         "date_created",
         "featureType",
-
-        
     ]
 
     recommended_global_attrs = [
@@ -397,7 +415,6 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
         "iso_topic_category",
         "platform",
         "platform_vocabulary",
-        "platform_vocabulary",
         "data_assembly_center",
         "creator_type",
         "creator_url",
@@ -416,7 +433,7 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
     # Check required globals
     missing_required = [k for k in required_global_attrs if k not in ds.attrs]
     if missing_required:
-        warnings.insert(0,
+        problems.insert(0,
             f"{cross}{cross}{cross} MISSING REQUIRED GLOBAL ATTRIBUTES {cross}{cross}{cross}\n"
             f"{', '.join(missing_required)}\n"
             f"{arrow} These MUST be added for CF/ACDD compliance"
@@ -428,7 +445,7 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
     # Check recommended globals
     missing_recommended = [k for k in recommended_global_attrs if k not in ds.attrs]
     if missing_recommended:
-        warnings.append(
+        problems.append(
             f"{warn} Missing recommended global attributes:\n{', '.join(missing_recommended)}\n"
             f"{arrow} Consider adding them for better metadata completeness"
         )
@@ -439,10 +456,10 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
     if "Conventions" in ds.attrs:
         conv = str(ds.attrs["Conventions"]).lower()
         if "cf" not in conv:
-            warnings.append(f"{warn} 'Conventions' does not mention CF")
+            problems.append(f"{warn} 'Conventions' does not mention CF")
             issues += 1
         elif "acdd" not in conv:
-            warnings.append(f"{warn} 'Conventions' does not mention ACDD")
+            problems.append(f"{warn} 'Conventions' does not mention ACDD")
             issues += 1
         else:
             passed.append(f"{check} 'Conventions' mentions both CF and ACDD")
@@ -455,7 +472,7 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
             if d not in ds.coords:
                 dim_issues.append(f"{v}: dimension '{d}' not a coordinate variable")
     if dim_issues:
-        warnings.append(f"{warn} Variables reference non-coordinate dimensions:\n" +
+        problems.append(f"{warn} Variables reference non-coordinate dimensions:\n" +
                         "\n".join(f"   – {i}" for i in dim_issues))
         issues += 1
     else:
@@ -469,7 +486,7 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
         if not all(k in attrs for k in ("flag_meanings", "flag_values")):
             flag_issues.append(v)
     if flag_issues:
-        warnings.append(f"{warn} FLAG variables missing 'flag_meanings' or 'flag_values':\n{', '.join(flag_issues)}")
+        problems.append(f"{warn} FLAG variables missing 'flag_meanings' or 'flag_values':\n{', '.join(flag_issues)}")
         issues += 1
     else:
         passed.append(f"{check} All FLAG variables have CF-compliant attributes")
@@ -478,8 +495,8 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
     sum_line = (f"{check} All checks passed ({issues} issues)" if issues == 0 else
                 f"----------------------------------\n{warn} Dataset has {issues} issue(s)\n----------------------------------")
     print("\n" + sum_line + "\n")
-    if warnings:
-        print("\n\n".join(warnings) + "\n")
+    if problems:
+        print("\n\n".join(problems) + "\n")
     if passed:
         print(f"----------------------------------\n{check} Passed checks\n----------------------------------\n")
         print("\n\n".join(passed) + "\n")
