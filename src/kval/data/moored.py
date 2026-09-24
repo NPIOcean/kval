@@ -190,8 +190,8 @@ def chop_deck(
     if indices is None:
         # Calculate the mean and standard deviation
         chop_var = ds[variable].data
-        chop_var_mean = np.ma.median(chop_var)
-        chop_var_sd = np.ma.std(chop_var)
+        chop_var_mean = np.nanmedian(chop_var)
+        chop_var_sd = np.nanstd(chop_var)
 
         indices = [None, None]
 

@@ -15,7 +15,7 @@ maintainers = [
   { name = "Øyvind Foss, NPI", email = "oyvind.foss@npolar.no" },
 ]
 
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.11,<3.14"
 dependencies = [
   "xarray>=2023.10.1",
   "ipykernel>=6.26.0",
@@ -33,7 +33,7 @@ dependencies = [
   "pyrsktools>=1.1.1",
   "pygeomag>=1.1.0",
   "ruamel.yaml>=0.18.15",
-  "compliance-checker>=5.1.0; sys_platform != 'win32'",
+  "compliance-checker>=6.1",
 ]
 
 classifiers = [
@@ -51,9 +51,6 @@ classifiers = [
 license = "MIT"
 
 [project.optional-dependencies]
-compliance = [
-  "compliance-checker>=5.1.0",
-]
 dev = [
   "pytest>=8.1.1",
   "requests>=2.2.1",

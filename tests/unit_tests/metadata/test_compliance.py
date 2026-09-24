@@ -11,6 +11,7 @@ the real external checker, so they run reliably without network access
 or a fully configured checker environment.
 """
 
+import os
 import numpy as np
 import pytest
 import xarray as xr
@@ -212,3 +213,161 @@ def test_compliance_checks_ioos_accepts_dataset_and_cleans_up_temp_file(tmp_path
         # The temp file used for the in-memory Dataset should be cleaned
         # up afterwards, not left behind.
         assert not (tmp_path / "temp.nc").exists()
+
+# ---------------------------------------------------------------------
+# Temporary-file handling for Dataset input.
+#
+# The checker only works on files, so a Dataset is written to a temporary
+# copy first. These tests pin down that the copy (a) never lands in the
+# user's working directory, and (b) is removed even when the check does
+# not finish -- an exception, or a user interrupting a slow/hanging run.
+# ---------------------------------------------------------------------
+
+def _patched_ioos(**kwargs):
+    """Common patches for exercising the IOOS path without the real checker."""
+    return patch.multiple(
+        "kval.metadata.compliance",
+        COMPLIANCE_CHECKER_AVAILABLE=True,
+        **kwargs,
+    )
+
+
+def test_dataset_temp_file_is_not_written_to_working_directory(tmp_path, monkeypatch):
+    ds = _make_compliant_ds()
+    monkeypatch.chdir(tmp_path)
+
+    seen = {}
+
+    def fake_run(path):
+        # Record what the checker was handed, and what the working
+        # directory looks like *while* the check is running.
+        seen["path"] = path
+        seen["cwd_contents"] = sorted(os.listdir(os.getcwd()))
+
+    with _patched_ioos(_in_notebook=lambda: False, _run_ioos_checkers=fake_run):
+        compliance_checks_ioos(ds)
+
+    assert os.path.basename(seen["path"]) == "temp.nc"
+    # The temp copy exists somewhere, but not in the working directory
+    assert os.path.dirname(seen["path"]) != str(tmp_path)
+    assert seen["cwd_contents"] == []
+    assert sorted(os.listdir(tmp_path)) == []
+
+
+def test_dataset_temp_file_removed_when_checker_raises(tmp_path, monkeypatch):
+    ds = _make_compliant_ds()
+    monkeypatch.chdir(tmp_path)
+
+    temp_dirs = []
+
+    def boom(path):
+        temp_dirs.append(os.path.dirname(path))
+        assert os.path.exists(path)  # it really was written
+        raise RuntimeError("checker blew up")
+
+    with _patched_ioos(_in_notebook=lambda: False, _run_ioos_checkers=boom):
+        with pytest.raises(RuntimeError, match="checker blew up"):
+            compliance_checks_ioos(ds)
+
+    assert not os.path.exists(temp_dirs[0])
+    assert sorted(os.listdir(tmp_path)) == []
+
+
+def test_dataset_temp_file_removed_on_keyboard_interrupt(tmp_path, monkeypatch):
+    """A hanging check that the user aborts must not leave a stale file."""
+    ds = _make_compliant_ds()
+    monkeypatch.chdir(tmp_path)
+
+    temp_dirs = []
+
+    def interrupt(path):
+        temp_dirs.append(os.path.dirname(path))
+        raise KeyboardInterrupt
+
+    with _patched_ioos(_in_notebook=lambda: False, _run_ioos_checkers=interrupt):
+        with pytest.raises(KeyboardInterrupt):
+            compliance_checks_ioos(ds)
+
+    assert not os.path.exists(temp_dirs[0])
+    assert sorted(os.listdir(tmp_path)) == []
+
+
+def test_file_path_input_writes_no_temp_file(tmp_path, monkeypatch):
+    """A path is passed straight through -- nothing should be written."""
+    ds = _make_compliant_ds()
+    nc_path = tmp_path / "source.nc"
+    ds.to_netcdf(nc_path)
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    monkeypatch.chdir(work_dir)
+
+    seen = {}
+    with _patched_ioos(
+        _in_notebook=lambda: False,
+        _run_ioos_checkers=lambda path: seen.update(path=path),
+    ):
+        compliance_checks_ioos(str(nc_path))
+
+    assert seen["path"] == str(nc_path)
+    assert sorted(os.listdir(work_dir)) == []
+
+
+# ---------------------------------------------------------------------
+# Dispatch and the optional-dependency guard
+# ---------------------------------------------------------------------
+
+def test_notebook_context_uses_the_button_wrapper():
+    with _patched_ioos(
+        _in_notebook=lambda: True,
+        _compliance_checks_ioos_with_button=MagicMock(),
+        _compliance_checks_ioos_plain=MagicMock(),
+    ):
+        from kval.metadata import compliance
+
+        compliance.compliance_checks_ioos("some_file.nc")
+        compliance._compliance_checks_ioos_with_button.assert_called_once_with(
+            "some_file.nc"
+        )
+        compliance._compliance_checks_ioos_plain.assert_not_called()
+
+
+def test_terminal_context_uses_the_plain_wrapper():
+    with _patched_ioos(
+        _in_notebook=lambda: False,
+        _compliance_checks_ioos_with_button=MagicMock(),
+        _compliance_checks_ioos_plain=MagicMock(),
+    ):
+        from kval.metadata import compliance
+
+        compliance.compliance_checks_ioos("some_file.nc")
+        compliance._compliance_checks_ioos_plain.assert_called_once_with(
+            "some_file.nc"
+        )
+        compliance._compliance_checks_ioos_with_button.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "func_name",
+    ["compliance_checks_ioos",
+     "_compliance_checks_ioos_plain",
+     "_compliance_checks_ioos_with_button"],
+)
+def test_all_ioos_entry_points_guard_the_optional_dependency(func_name):
+    from kval.metadata import compliance
+
+    with patch("kval.metadata.compliance.COMPLIANCE_CHECKER_AVAILABLE", False):
+        with pytest.raises(ImportError, match="IOOS Compliance Checker is not installed"):
+            getattr(compliance, func_name)("some_file.nc")
+
+
+# ---------------------------------------------------------------------
+# Small regressions in compliance_checks_custom
+# ---------------------------------------------------------------------
+
+def test_recommended_global_attributes_are_not_listed_twice(capsys):
+    """'platform_vocabulary' used to appear twice in the recommended list."""
+    ds = _make_compliant_ds()
+    compliance_checks_custom(ds)
+    out = capsys.readouterr().out
+    assert out.count("platform_vocabulary") <= 1

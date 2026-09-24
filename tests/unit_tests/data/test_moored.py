@@ -11,6 +11,7 @@ from kval.data.moored import (
     calculate_PSAL, 
     adjust_time_for_drift, 
     chop_by_time, 
+    chop_deck,
     combine_datasets, 
     metadata_auto,
     calculate_PSAL,
@@ -991,3 +992,54 @@ def test_load_nc_preserves_latlon_as_coordinates_across_save_and_reload(tmp_path
     assert 'LONGITUDE' in ds_reloaded.coords
     assert float(ds_reloaded.LATITUDE) == 80.0
     assert float(ds_reloaded.LONGITUDE) == 30.0
+
+# ===================================================================
+# chop_deck
+# ===================================================================
+
+def _make_chop_deck_ds(with_nan=False, seed=0):
+    np.random.seed(seed)
+    n = 2000
+    pres = 100 + 20 * np.random.randn(n)
+    pres[:20] = np.linspace(0, 100, 20)  # deck-time ramp-down at the start
+    if with_nan:
+        pres[1000] = np.nan
+    return xr.Dataset({'PRES': ('TIME', pres)}, coords={'TIME': np.arange(n)})
+
+
+def test_chop_deck_detects_deck_time_without_nans():
+    ds = _make_chop_deck_ds(with_nan=False)
+    result = chop_deck(ds, variable='PRES', auto_accept=True, verbose=False)
+    assert result.sizes['TIME'] < ds.sizes['TIME']
+
+
+def test_chop_deck_detects_deck_time_with_a_single_nan_present():
+    """Regression test: np.ma.median/np.ma.std (the original
+    implementation) only mask values explicitly marked as masked -- they
+    don't auto-detect NaN in a plain array. A single NaN anywhere in the
+    variable silently made chop_var_mean/chop_var_sd come back masked,
+    so every comparison against the threshold evaluated False with no
+    error -- meaning deck time was never detected if the record had
+    even one NaN anywhere in it. np.nanmedian/np.nanstd fix this."""
+    ds = _make_chop_deck_ds(with_nan=True)
+    assert np.isnan(ds.PRES.values).sum() == 1  # sanity check on the fixture
+
+    result = chop_deck(ds, variable='PRES', auto_accept=True, verbose=False)
+    assert result.sizes['TIME'] < ds.sizes['TIME']
+
+
+def test_chop_deck_no_deck_time_leaves_dataset_unchanged():
+    """A record with no deck-time signature shouldn't have anything
+    chopped off."""
+    np.random.seed(1)
+    n = 500
+    pres = 100 + 5 * np.random.randn(n)  # no ramp-down at start/end
+    ds = xr.Dataset({'PRES': ('TIME', pres)}, coords={'TIME': np.arange(n)})
+    result = chop_deck(ds, variable='PRES', auto_accept=True, verbose=False)
+    assert result.sizes['TIME'] == ds.sizes['TIME']
+
+
+def test_chop_deck_raises_for_missing_variable():
+    ds = xr.Dataset({'TEMP': ('TIME', np.arange(10.0))}, coords={'TIME': np.arange(10)})
+    with pytest.raises(ValueError, match="not a variable"):
+        chop_deck(ds, variable='PRES')
