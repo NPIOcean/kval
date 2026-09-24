@@ -27,7 +27,7 @@ def nans_to_fill_value(ds: xr.Dataset, fill_value: float = -9999.0) -> xr.Datase
     Returns:
         xarray.Dataset with NaNs replaced and '_FillValue' attributes updated.
     """
-    for var_name in list(ds.coords) + list(ds.data_vars):
+    for var_name in ds.data_vars:
         var = ds[var_name]
         if np.issubdtype(var.dtype, np.floating):
             ds[var_name] = var.fillna(fill_value)

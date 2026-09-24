@@ -20,12 +20,6 @@ def test_replace_nans_in_float_vars():
     assert np.all(ds_out["int_var"].values == np.array([1, 2, 3]))
     assert "_FillValue" not in ds_out["int_var"].attrs
 
-def test_coords_are_processed_if_float():
-    ds = xr.Dataset(coords={"coord_float": ("x", [1.0, np.nan, 3.0])})
-    ds_out = conventionalize.nans_to_fill_value(ds, fill_value=-9999.0)
-    assert np.all(ds_out.coords["coord_float"].values == np.array([1.0, -9999.0, 3.0]))
-    assert ds_out.coords["coord_float"].attrs.get("_FillValue") == -9999.0
-
 def test_integer_coords_not_changed():
     ds = xr.Dataset(coords={"coord_int": ("x", [1, 2, 3])})
     ds_out = conventionalize.nans_to_fill_value(ds, fill_value=-9999.0)
@@ -44,6 +38,16 @@ def test_custom_fill_value():
     ds_out = conventionalize.nans_to_fill_value(ds, fill_value=12345.6)
     assert np.all(ds_out["float_var"].values == np.array([12345.6, 2.0, 3.0]))
     assert ds_out["float_var"].attrs.get("_FillValue") == 12345.6
+
+def test_coords_are_not_processed():
+    """Coordinates are deliberately left alone: CF 2.5.1 forbids _FillValue on
+    coordinate variables, and filling a dimension coordinate would break
+    monotonicity."""
+    ds = xr.Dataset(coords={"coord_float": ("x", [1.0, np.nan, 3.0])})
+    ds_out = conventionalize.nans_to_fill_value(ds, fill_value=-9999.0)
+
+    assert np.isnan(ds_out.coords["coord_float"].values[1])
+    assert "_FillValue" not in ds_out.coords["coord_float"].attrs
 
 # Test convert_64_to_32
 
