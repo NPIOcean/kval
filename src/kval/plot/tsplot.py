@@ -197,8 +197,10 @@ def _draw_ts_background(ax, sa_range, ct_range, pres: float = 0,
     if freezing_line:
         sa_line = np.linspace(sa_range[0], sa_range[1], n_grid)
         ct_freezing = gsw.CT_freezing(sa_line, pres, 0)
+        label = ('Freezing point (surface)' if pres == 0
+                 else f'Freezing point ({pres:g} dbar)')
         line, = ax.plot(sa_line, ct_freezing, color='k',
-                        linestyle='--', linewidth=1, label='Freezing point')
+                        linestyle='--', linewidth=1, label=label)
         artists.append(line)
 
     return artists
