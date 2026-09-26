@@ -1,5 +1,7 @@
 import matplotlib as mpl
 import warnings
+import contextlib
+import traceback
 
 
 def is_notebook():
@@ -59,3 +61,52 @@ def check_interactive():
             "instead, or running the code in a Jupyter notebook (remember "
             'to execute "%matplotlib widget" at the top of your notebook).',
         )
+
+
+def make_figure(*args, **kwargs):
+    """
+    plt.subplots() with ipympl's auto-display suppressed.
+
+    Under the widget backend, creating a figure while interactive mode
+    is on schedules an immediate display of a still-empty canvas, which
+    then races with the drawing that follows. Creating it under ioff()
+    means nothing is shown until show_figure() is called explicitly.
+
+    Always pair with show_figure().
+    """
+    import matplotlib.pyplot as plt
+    with plt.ioff():
+        return plt.subplots(*args, **kwargs)
+
+
+def show_figure(fig):
+    """
+    Display a figure built with make_figure(). Outside a notebook,
+    falls back to plt.show().
+    """
+    import matplotlib.pyplot as plt
+    from IPython.display import display
+
+    if not is_notebook():
+        plt.show()
+        return
+    if getattr(fig.canvas, 'manager', None) is not None:
+        fig.canvas.draw()
+    display(fig.canvas)
+
+@contextlib.contextmanager
+def loud_output(output_widget):
+    """
+    Like `with output_widget:`, but any traceback is also printed to the
+    real stderr so real errors dont drown and cause bad silent failures..
+
+    ipywidgets' Output captures exceptions into the widget, so a failing
+    callback looks like a dead button rather than an error -- especially
+    if the widget isn't visible or gets cleared.
+    """
+    try:
+        with output_widget:
+            yield
+    except Exception:
+        traceback.print_exc()
+        raise

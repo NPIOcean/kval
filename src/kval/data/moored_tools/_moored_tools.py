@@ -174,7 +174,8 @@ class hand_remove_points:
         # Display the widgets
         display(self.widgets_all)
         display(self.output_widget)
-
+        self.fig.canvas.draw()
+        display(self.fig.canvas)      
 
     def onselect(self, eclick, erelease):
         """
@@ -434,11 +435,16 @@ def inspect_time_series(ds: xr.Dataset) -> None:
     # Clse button
     close_button = widgets.Button(description="Close")
 
+    # Holds the figure from the most recent redraw, so we can close it
+    # when redrawing or when the user hits Close. A dict rather than a
+    # plain variable because plot_time_series is a closure.
+    _current_fig = {'fig': None}
+
     def close_plot(_) -> None:
-        fig = plt.gcf()
-        fig.set_size_inches(0, 0)
         controls.close()
-        plt.close(fig)
+        if _current_fig['fig'] is not None:
+            plt.close(_current_fig['fig'])
+            _current_fig['fig'] = None
 
     close_button.on_click(close_plot)
 
@@ -453,7 +459,15 @@ def inspect_time_series(ds: xr.Dataset) -> None:
 
 
     def plot_time_series(variable, hourly_apply, hours, daily_apply, days, grid_apply):
+        # Every widget change re-runs this. Close the figure from the
+        # previous run so they don't accumulate (matplotlib keeps
+        # pyplot-created figures alive until explicitly closed, and
+        # stops rendering new ones past ~20).
+        if _current_fig['fig'] is not None:
+            plt.close(_current_fig['fig'])
+
         fig, ax = plt.subplots(figsize=(8, 5))
+        _current_fig['fig'] = fig
 
         da = ds[variable]
 
@@ -545,7 +559,8 @@ def inspect_time_series(ds: xr.Dataset) -> None:
         fig.canvas.header_visible = False  # Hide the figure header
         plt.tight_layout()
 
-        plt.show(block=False)
+        fig.canvas.draw()
+        display(fig.canvas)
 
     # Define interaction without calling display explicitly
     interact_plot = widgets.interactive(

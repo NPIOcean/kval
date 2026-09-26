@@ -9,6 +9,7 @@ import numpy as np
 import xarray as xr
 from kval.signal import filt
 import matplotlib.pyplot as plt
+from kval.util import internals
 
 
 def despike_rolling(
@@ -108,22 +109,29 @@ def despike_rolling(
         ax[0].plot(ds[dim], ds[variable], '.', color = 'tab:red', ms = 2,
                    label=f'Original {variable} data', alpha=0.6)
         ax[0].plot(var_mean[dim], var_despiked, 'k',
-                   label=f'Despiked {variable} data')
+                   label=f'Despiked {variable} data', alpha = 0.3)
         ax[1].plot(var_mean[dim], np.abs(var_mean - ds[variable]),
                    label='| Data$-$rolling mean |', lw=1)
         ax[1].plot(var_mean[dim], n_std * var_sd, 'k', lw=0.4,
-                   label=f'{n_std} $\\times$ Rolling std')
+                   label=rf'{n_std} $\times$ Rolling std')
         ax[1].plot(var_mean[dim][is_outside_criterion],
                    np.abs(var_mean - ds[variable])[is_outside_criterion],
                    '.r', label='Labelled as outlier')
         for axn in ax:
             leg = axn.legend(fontsize=9, ncol=1, handlelength = 1, bbox_to_anchor = (1, 0.5))
             leg.set_zorder(0)
-            axn.set_xlabel('Index')
+            if 'units' in ds[dim].attrs:
+                axn.set_xlabel(ds[dim].attrs['units'])
             if 'units' in ds[variable].attrs:
                 axn.set_ylabel(ds[variable].attrs['units'])
         fig.suptitle(f'Despiking `{variable}` along the dimension `{dim}`:')
         plt.tight_layout()
+
+        if internals.is_notebook():
+            fig.canvas.draw()
+            display(fig.canvas)
+        else:
+            plt.show()
 
     # Optional printing
     if verbose:

@@ -410,7 +410,7 @@ def tsplot(ds: xr.Dataset,
           color_by: str | None = None, mode: str = 'scatter',
           density_contours: bool = True, freezing_line: bool = False,
           freezing_line_pres: float = 0,
-          marker: str = 'o', alpha: float = 0.7, markersize: float = None,
+          marker: str = '.', alpha: float = 0.4, markersize: float = None,
           cmap: str = 'cividis',
           bins: int = 30, hist_cmap=None, hist_facecolor: str = 'lightgrey',
           grid: bool = False,
@@ -446,9 +446,9 @@ def tsplot(ds: xr.Dataset,
         Whether to draw the seawater freezing point line.
     freezing_line_pres : float, default=0
         Pressure [dbar] used for the freezing line calculation.
-    marker : str, default='o'
+    marker : str, default='.'
         Marker style (scatter mode only).
-    alpha : float, default=0.7
+    alpha : float, default=0.4
         Point transparency (scatter mode only).
     markersize : float, optional
         Marker size (scatter mode only). Defaults to matplotlib's own
@@ -708,10 +708,10 @@ class tsplot_pick:
             value=False, description='Grid',
             indent=False, layout=widgets.Layout(width='80px'))
         self.marker_dropdown = widgets.Dropdown(
-            options=['o', '.', '+'], value='o', description='Marker:',
+            options=['.', 'o', '+'], value='.', description='Marker:',
             layout=widgets.Layout(width='140px'))
         self.alpha_slider = widgets.FloatSlider(
-            value=0.7, min=0.01, max=1.0, step=0.01, description='Alpha:',
+            value=0.4, min=0.01, max=1.0, step=0.01, description='Alpha:',
             layout=widgets.Layout(width='260px'))
         self.markersize_slider = widgets.FloatSlider(
             value=36, min=1, max=200, step=1, description='Size:',
@@ -770,7 +770,7 @@ class tsplot_pick:
         self.color_dropdown.layout.display = scatter_display
         self.bins_slider.layout.display = hist_display
 
-        with self.output:
+        with internals.loud_output(self.output):
             clear_output(wait=True)
             if self.fig is not None:
                 plt.close(self.fig)  # don't let figures accumulate on

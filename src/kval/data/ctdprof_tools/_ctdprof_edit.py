@@ -135,7 +135,8 @@ class hand_remove_points:
         # Display the widgets
         display(self.widgets_all)
         display(self.output_widget)
-
+        self.fig.canvas.draw()
+        display(self.fig.canvas) 
 
     def onselect(self, eclick, erelease):
         """
@@ -578,7 +579,7 @@ class drop_stations_pick:
                         del ds[variable][index_to_remove]
 
             self.close_widgets()
-            with self.output_widget:
+            with internals.loud_output(self.output):
                 clear_output(wait=True)
 
                 self.close_widgets()
