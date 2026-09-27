@@ -105,15 +105,15 @@ def despike_rolling(
 
     # Optional plotting
     if plot:
-        fig, ax = plt.subplots(2, 1, figsize = (11, 5), sharex=True)
+        fig, ax = internals.make_figure(2, 1, figsize=(11, 5), sharex=True)
         ax[0].plot(ds[dim], ds[variable], '.', color = 'tab:red', ms = 2,
                    label=f'Original {variable} data', alpha=0.6)
         ax[0].plot(var_mean[dim], var_despiked, 'k',
                    label=f'Despiked {variable} data', alpha = 0.3)
         ax[1].plot(var_mean[dim], np.abs(var_mean - ds[variable]),
-                   label='| Data$-$rolling mean |', lw=1)
+                   label='| Data - rolling mean |', lw=1)
         ax[1].plot(var_mean[dim], n_std * var_sd, 'k', lw=0.4,
-                   label=rf'{n_std} $\times$ Rolling std')
+                   label=f'{n_std} x Rolling std' )
         ax[1].plot(var_mean[dim][is_outside_criterion],
                    np.abs(var_mean - ds[variable])[is_outside_criterion],
                    '.r', label='Labelled as outlier')
@@ -126,12 +126,8 @@ def despike_rolling(
                 axn.set_ylabel(ds[variable].attrs['units'])
         fig.suptitle(f'Despiking `{variable}` along the dimension `{dim}`:')
         plt.tight_layout()
-
-        if internals.is_notebook():
-            fig.canvas.draw()
-            display(fig.canvas)
-        else:
-            plt.show()
+        
+        internals.show_figure(fig)
 
     # Optional printing
     if verbose:

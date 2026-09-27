@@ -217,7 +217,7 @@ def chop_deck(
         if auto_accept:
             accept = "y"
         else:
-            fig, ax = plt.subplots(figsize=(8, 4))
+            fig, ax = internals.make_figure(figsize=(8, 4))
             idx = np.arange(len(chop_var))
 
             ylab = variable
@@ -242,14 +242,7 @@ def chop_deck(
 
             # Ensure plot updates and displays (different within notebook with
             # widget backend..)
-            if internals.is_notebook():
-                if mpl.get_backend() != "tkagg":
-                    display(fig)
-                else:
-                    plt.ion()
-                    plt.show()
-            else:
-                plt.show(block=False)
+            internals.show_figure(fig)
 
             print(
                 f"Suggested chop: [{keep_slice.start}, "
@@ -927,7 +920,7 @@ def assign_pressure(
             ds_below, "instrument_serial_number", "Unknown serial"
         )
 
-        fig, ax = plt.subplots()
+        fig, ax = internals.make_figure()
         ax.plot(
             ds_above.TIME, ds_above.PRES, label=f"{instr_above} {serial_above}"
         )
@@ -948,10 +941,7 @@ def assign_pressure(
         ax.set_ylabel("Pressure [dbar]")
         ax.legend(fontsize=8)
 
-        if internals.is_notebook() and mpl.get_backend() != "tkagg":
-            display(fig)
-        else:
-            plt.show()
+        internals.show_figure(fig)
 
     if not auto_accept:
         accept = input(

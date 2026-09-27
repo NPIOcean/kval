@@ -83,6 +83,15 @@ def show_figure(fig):
     """
     Display a figure built with make_figure(). Outside a notebook,
     falls back to plt.show().
+
+    Note the order: the canvas is displayed *before* drawing. Under
+    ipympl the canvas has to be attached to the browser before anything
+    can be painted into it -- drawing first can paint into a canvas the
+    front end hasn't connected to yet, which shows up as a blank or
+    half-rendered plot that only fills in once the user interacts with
+    it. draw_idle() rather than draw() for the same reason: it schedules
+    the draw through ipympl's own event loop instead of forcing it
+    synchronously.
     """
     import matplotlib.pyplot as plt
     from IPython.display import display
@@ -90,9 +99,12 @@ def show_figure(fig):
     if not is_notebook():
         plt.show()
         return
+
+    display(fig.canvas)
     if getattr(fig.canvas, 'manager', None) is not None:
         fig.canvas.draw()
-    display(fig.canvas)
+
+
 
 @contextlib.contextmanager
 def loud_output(output_widget):

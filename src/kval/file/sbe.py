@@ -50,7 +50,7 @@ import os
 from itertools import zip_longest
 from matplotlib.dates import num2date
 import warnings
-
+from kval.util import internals
 # KEY FUNCTIONS
 
 
@@ -2010,7 +2010,7 @@ def _inspect_extracted(ds, ds0, start_scan=None, end_scan=None):
     and/or removing upcast.
     """
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = internals.make_figure(figsize=(10, 6))
 
     ax.plot(ds0.scan_count, ds0.PRES, ".k", ms=3, label="All scans")
     ax.plot(ds.scan_count, ds.PRES, ".r", ms=4, label="Extracted for use")
@@ -2024,7 +2024,7 @@ def _inspect_extracted(ds, ds0, start_scan=None, end_scan=None):
     ax.legend()
     ax.invert_yaxis()
     ax.grid(alpha=0.5)
-    plt.show()
+    internals.show_figure(fig)
 
 
 ## INTERNAL FUNCTIONS: FORMAT CONVERSION

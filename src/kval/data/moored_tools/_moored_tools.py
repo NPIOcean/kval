@@ -80,8 +80,7 @@ class hand_remove_points:
 
         self.Npres = len(ds.TIME)
 
-        self.fig, self.ax = plt.subplots(figsize = (11, 6))
-
+        self.fig, self.ax = internals.make_figure(figsize=(11, 6))
 
         line, = self.ax.plot(self.TIME, self.var_data, )
         point = self.ax.plot(self.TIME, self.var_data, '.k', zorder=3)
@@ -174,8 +173,7 @@ class hand_remove_points:
         # Display the widgets
         display(self.widgets_all)
         display(self.output_widget)
-        self.fig.canvas.draw()
-        display(self.fig.canvas)      
+        internals.show_figure(self.fig) 
 
     def onselect(self, eclick, erelease):
         """
@@ -435,16 +433,19 @@ def inspect_time_series(ds: xr.Dataset) -> None:
     # Clse button
     close_button = widgets.Button(description="Close")
 
-    # Holds the figure from the most recent redraw, so we can close it
-    # when redrawing or when the user hits Close. A dict rather than a
-    # plain variable because plot_time_series is a closure.
+    # Track the figure currently on display, so close_plot can close the
+    # right one. plt.gcf() returns whatever figure happens to be
+    # "current", which need not be ours.
     _current_fig = {'fig': None}
 
     def close_plot(_) -> None:
-        controls.close()
+        # Closing `controls` alone left the Output widget holding the
+        # rendered canvas on screen, with nothing behind it. Closing the
+        # container removes the controls and the canvas together.
         if _current_fig['fig'] is not None:
             plt.close(_current_fig['fig'])
             _current_fig['fig'] = None
+        container.close()
 
     close_button.on_click(close_plot)
 
@@ -463,10 +464,10 @@ def inspect_time_series(ds: xr.Dataset) -> None:
         # previous run so they don't accumulate (matplotlib keeps
         # pyplot-created figures alive until explicitly closed, and
         # stops rendering new ones past ~20).
-        if _current_fig['fig'] is not None:
-            plt.close(_current_fig['fig'])
+        #if _current_fig['fig'] is not None:
+        #    plt.close(_current_fig['fig'])
 
-        fig, ax = plt.subplots(figsize=(8, 5))
+        fig, ax = internals.make_figure(figsize=(8, 5))  
         _current_fig['fig'] = fig
 
         da = ds[variable]
@@ -559,7 +560,6 @@ def inspect_time_series(ds: xr.Dataset) -> None:
         fig.canvas.header_visible = False  # Hide the figure header
         plt.tight_layout()
 
-        fig.canvas.draw()
         display(fig.canvas)
 
     # Define interaction without calling display explicitly
@@ -575,5 +575,6 @@ def inspect_time_series(ds: xr.Dataset) -> None:
 
 
     # Display controls and plot
-    display(widgets.VBox([controls, interact_plot.children[-1]],
-                         layout=widgets.Layout(padding='0px', margin='0px')))
+    container = widgets.VBox([controls, interact_plot.children[-1]],
+                             layout=widgets.Layout(padding='0px', margin='0px'))
+    display(container)

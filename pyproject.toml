@@ -18,8 +18,8 @@ maintainers = [
 requires-python = ">=3.11,<3.14"
 dependencies = [
   "xarray>=2023.10.1",
-  "ipykernel>=6.26.0",
-  "matplotlib>=3.10",
+  "ipykernel>=6.26.0,<7", # Issues with stale plots in jupyter in v7 for now
+  "matplotlib>=3.10,<3.11", # no ipympl release tested against matplotlib 3.11 yet
   "numpy>=1.23",
   "pandas>=2.1.0",
   "gsw>=3.6",

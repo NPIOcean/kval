@@ -916,9 +916,10 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
         except:
             pass
 
-        fig = plt.figure(figsize=(6, 3))
-        ax0 = plt.subplot2grid((1, 1), (0, 0))
-        fig.canvas.header_visible = False  # Hide the figure header
+        with plt.ioff():
+            fig = plt.figure(figsize=(6, 3))
+            ax0 = plt.subplot2grid((1, 1), (0, 0))
+            fig.canvas.header_visible = False  # Hide the figure header
 
         var_range = (np.nanmin(ds[variable].values),
                      np.nanmax(ds[variable].values))
@@ -964,7 +965,7 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
         # Display the updated plot
         clear_output(wait=True)
         plt.tight_layout()
-        plt.show()
+        internals.show_figure(fig)
 
         # Update the cut information text
         update_cut_info_text(variable, points_cut, points_pct)

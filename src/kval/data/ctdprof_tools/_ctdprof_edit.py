@@ -57,7 +57,7 @@ class hand_remove_points:
         self.PRES = ds.PRES
         self.Npres = len(ds.PRES)
 
-        self.fig, self.ax = plt.subplots()
+        self.fig, self.ax = internals.make_figure()
 
 
         line, = self.ax.plot(self.var_data, self.PRES)
@@ -135,8 +135,7 @@ class hand_remove_points:
         # Display the widgets
         display(self.widgets_all)
         display(self.output_widget)
-        self.fig.canvas.draw()
-        display(self.fig.canvas) 
+        internals.show_figure(self.fig)
 
     def onselect(self, eclick, erelease):
         """
