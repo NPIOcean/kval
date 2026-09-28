@@ -142,6 +142,3 @@ sanity-checking logic, writing docstrings, and writing tests. Feel free
 to use them - but dont trust them blindly. They make mistakes - sometimes
 weird or subtle ones. Good test coverage comes in really handy here as 
 it can help steer design and makes it much harder to break anything 
-
-The tool doesn't replace you actively reading and understanding the
-change — it's a fast collaborator, not an autopilot.
