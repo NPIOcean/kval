@@ -28,16 +28,39 @@ Pip [^tag] :
 
 ___
 
-About the latest release, `0.4.3`:
+About the latest release, `0.5.0`:
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17724664.svg)](https://doi.org/10.5281/zenodo.17724664)
 
+> ***NOTE*** 0.5 introduces **breaking changes** from 0.4. Existing code may need updating. See *Breaking changes* below.
 
-- Various fixes, mostly small bugs.
-- Removed jupyterlab dependency.
-- Resolved some version-related issues leading to problems with interactive plots.
-- Cleaned up the source code a bit. 
+**New**
+- `kval.plot.tsplot`: T-S diagram plotting.
+- `moored.plot` works on 2D variables.
+- Function for combining moored datasets, and time averaging (`xr_funcs.time_average`).
+- Other minor support functions.
 
+**Fixes**
+- Interactive plots no longer go blank when called more than once in the same notebook. This was caused by a bug in `ipykernel` 7 ([ipykernel#1564](https://github.com/ipython/ipykernel/issues/1564)), so `kval` now requires `ipykernel<7`.
+- Interactive hand edits are now applied correctly, and interactive figures display consistently.
+- Better drift correction (non-uniform time steps) and time utilities (fractional seconds).
+- Various fixes to SBE and RBR file reading, CF-compliance checking (now CF-1.11), and metadata.
+- Refactoring and cleaning up of the code.
+- Extended pytest coverage.
+
+**Dependencies**
+- Temporary caps: `ipykernel<7` and `matplotlib<3.11`. These will be relaxed when the upstream issues are resolved.
+- Now requires `compliance-checker>=6.1`; `gsw` and `netcdf4` are listed explicitly.
+
+**Breaking changes**
+- Python 3.10 is no longer supported (now 3.11–3.13).
+- Renamed modules:
+  - `kval.data.ctd` → `kval.data.ctdprof`
+  - `kval.maps` → `kval.plot`
+  - `kval.metadata.check_conventions` → `kval.metadata.compliance`
+- Renamed arguments: `var_name`/`varnm` → `variable`, and `D` → `ds`. Affects code that passes these as keyword arguments.
+- The `PROCESSING` variable has been removed. Processing steps are now recorded in a `processing_history` attribute.
+- Metadata functions no longer assume NPI-specific attributes.
 
 `kval` is in active development.
 
