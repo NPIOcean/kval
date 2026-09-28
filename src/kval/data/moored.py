@@ -240,9 +240,11 @@ def chop_deck(
             )
             ax.legend()
 
-            # Ensure plot updates and displays (different within notebook with
-            # widget backend..)
-            internals.show_figure(fig)
+            # instead of internals.show_figure(fig), whcih caused trouble
+            if internals.is_notebook():
+                display(fig)            # static image; works while input() blocks
+            else:
+                plt.show(block=False)
 
             print(
                 f"Suggested chop: [{keep_slice.start}, "
@@ -941,8 +943,13 @@ def assign_pressure(
         ax.set_ylabel("Pressure [dbar]")
         ax.legend(fontsize=8)
 
-        internals.show_figure(fig)
 
+        # instead of internals.show_figure(fig), whcih caused trouble
+        if internals.is_notebook():
+            display(fig)            # static image; works while input() blocks
+        else:
+            plt.show(block=False)
+            
     if not auto_accept:
         accept = input(
             f"Estimated offset: {pres_main_median - nom_pres_main:.2f} dbar. "

@@ -81,7 +81,14 @@ Contributions, issues, and PRs are welcome!
 
 ## Latest release
 
-About the latest release, `0.4.3`:
+
+About the latest release, `0.5.3`:
+
+
+## Past releases
+
+
+About release, `0.4.3`:
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17724664.svg)](https://doi.org/10.5281/zenodo.17724664)
 
@@ -91,15 +98,14 @@ About the latest release, `0.4.3`:
 - Resolved some version-related issues leading to problems with interactive plots.
 - Cleaned up the source code a bit. 
 
-## Past releases
 
-About the latest release, `0.4.2`:
+About  release, `0.4.2`:
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17723685.svg)](https://doi.org/10.5281/zenodo.17723685)
 
 
 - (issue with mpl version - created 0.4.3 to fix)
-About the latest release, `0.4.1`:
+About release, `0.4.1`:
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17723211.svg)](https://doi.org/10.5281/zenodo.17723211)
 
@@ -107,7 +113,7 @@ About the latest release, `0.4.1`:
 - (issue with python version - created new 0.4.2 to fix)
 
 
-About the latest release, `0.4.0`:
+About release, `0.4.0`:
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17353994.svg)](https://doi.org/10.5281/zenodo.17353994)
 
@@ -117,7 +123,7 @@ About the latest release, `0.4.0`:
 
 
 
-About the latest release, `0.3.2`:
+About release, `0.3.2`:
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15260487.svg)](https://doi.org/10.5281/zenodo.15260487)
 
