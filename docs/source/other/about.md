@@ -78,6 +78,7 @@ ___
 
 ## Latest release
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10360162.svg)](https://doi.org/10.5281/zenodo.10360162)
 
 About the latest release, `0.5.0`:
 
