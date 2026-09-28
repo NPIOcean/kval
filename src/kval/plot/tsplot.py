@@ -187,7 +187,16 @@ def _draw_ts_background(ax, sa_range, ct_range, pres: float = 0,
         sigma0 = gsw.sigma0(SA_mesh, CT_mesh)
         cs = ax.contour(SA_mesh, CT_mesh, sigma0, colors='grey',
                         linestyles='--', linewidths=0.7)
-        labels = ax.clabel(cs, inline=True, fontsize=8, fmt='%.1f')
+        
+        # Enough decimals for contour labels that neighbouring contour
+        # labels differ..
+        if len(cs.levels) > 1:
+            dlev = np.min(np.diff(cs.levels))
+            ndec = max(1, int(np.ceil(-np.log10(dlev))))
+        else:
+            ndec = 1
+        labels = ax.clabel(cs, inline=True, fontsize=8, fmt=f'%.{ndec}f')
+
         for label in labels:
             label.set_color(_TEXT_COLOR)
             label.set_fontfamily(_FONT_FAMILY)
