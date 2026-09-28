@@ -55,7 +55,7 @@ def despike_rolling(
     dim : str
         The dimension along which to calculate the rolling statistics.
     filter_type : str, optional
-        The type of filter to apply ('mean' or 'median'). Default is 'mean'.
+        The type of filter to apply ('mean' or 'median'). Default is 'median'.
     min_periods : int or None, optional
         The minimum number of observations in the window required to return
         a valid result. Default is None.
