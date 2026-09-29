@@ -363,21 +363,24 @@ def _ds_with_numeric_time(freq="15min", n=31000, tname="TIME",
 @pytest.mark.parametrize("freq", ["1s", "1min", "15min", "1h"])
 def test_convert_64_to_32_keeps_time_as_exact_float64(freq):
     ds = _ds_with_numeric_time(freq)
-    with pytest.warns(UserWarning, match="time variable"):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # keeping time as float64 is silent
         out = conventionalize.convert_64_to_32(ds)
     assert out.TIME.dtype == np.float64
     np.testing.assert_array_equal(out.TIME.values, ds.TIME.values)
 
 
 def test_convert_64_to_32_keeps_time_even_with_force():
-    with pytest.warns(UserWarning):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
         out = conventionalize.convert_64_to_32(_ds_with_numeric_time(), force=True)
     assert out.TIME.dtype == np.float64
 
 
 def test_convert_64_to_32_detects_time_by_units_not_name():
     ds = _ds_with_numeric_time(tname="t_obs")
-    with pytest.warns(UserWarning):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
         assert conventionalize.convert_64_to_32(ds).t_obs.dtype == np.float64
 
 
@@ -386,7 +389,8 @@ def test_convert_64_to_32_keeps_int64_epoch_seconds():
         {"X": ("TIME", np.arange(5.0))},
         coords={"TIME": ("TIME", (np.arange(5) + 1_700_000_000).astype("int64"),
                          {"units": "seconds since 1970-01-01"})})
-    with pytest.warns(UserWarning):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
         assert conventionalize.convert_64_to_32(ds).TIME.dtype == np.int64
 
 

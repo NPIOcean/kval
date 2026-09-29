@@ -89,19 +89,20 @@ def convert_64_to_32(ds: xr.Dataset, force: bool = False, relative_tol: float = 
 
         # Never down-cast time (see docstring)
         if time.is_time_like(varnm, arr):
-            if dtype in (np.float64, np.int64):
-                warnings.warn(
-                    f"'{varnm}' is a time variable and is kept as {dtype}: "
-                    "32-bit cannot resolve the sampling interval.",
-                    UserWarning,
-                )
+           # Desired, shoudl not be a warning..
+           # if dtype in (np.float64, np.int64):
+           #     warnings.warn(
+           #         f"'{varnm}' is a time variable and is kept as {dtype}: "
+           #         "32-bit cannot resolve the sampling interval.",
+           #         UserWarning,
+           #     )
             continue
 
         # Determine the new dtype
         if dtype == np.float64:
             rel_diff = max_relative_diff(arr.values)
             target_dtype = np.float32
-            
+
             step_ratio = roundtrip_error_vs_step(arr.values)
             if step_ratio > step_tol and not force:
                 warnings.warn(
