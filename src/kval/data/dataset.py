@@ -15,6 +15,38 @@ from kval.util import time, netcdf
 import gsw
 from kval.util.xr_funcs import append_processing_history, reorder_coords_to_end
 
+#### HELPERS
+
+
+def _cndc_factor_to_mS_cm(units):
+    """Factor that converts conductivity in `units` to mS/cm (gsw's unit).
+
+    Recognised: 'S m-1' / 'S/m' (x10) and 'mS cm-1' / 'mS/cm' (x1). No units
+    attribute is treated as mS/cm (as before). Anything else raises, rather
+    than being silently taken as mS/cm (a factor-10 error).
+    """
+    if units is None:
+        return 1.0
+    u = str(units).strip()
+    if u in ('S m-1', 'S/m'):
+        return 10.0
+    if u in ('mS cm-1', 'mS/cm'):
+        return 1.0
+    raise ValueError(
+        f"Unrecognised conductivity units {units!r}: expected 'S m-1' or "
+        "'mS cm-1'. Fix the 'units' attribute of the conductivity variable.")
+
+
+def _warn_cndc_var_ignored(cndc_var, func_name):
+    """`cndc_var` is kept in some signatures only for backwards compatibility:
+    those functions compute from the salinity variable, not conductivity."""
+    if cndc_var is not None:
+        warnings.warn(
+            f"{func_name}: `cndc_var` is ignored (the calculation uses the "
+            "salinity, temperature and pressure variables) and will be removed "
+            "in a future release.", FutureWarning, stacklevel=3)
+
+
 #### ADD VARIABLES
 
 
@@ -106,17 +138,13 @@ def calculate_PSAL(
 
     ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
-    CNDC_ = ds[cndc_var].copy()
-    if 'units' in CNDC_.attrs:
-        if CNDC_.units == 'S m-1':
-            print('Detected S m-1 unit - applying an x10 factor to CNDC.')
-            CNDC_.values *= 10
-
-
+    # gsw wants conductivity in mS/cm. Raises for unrecognised units.
+    CNDC_mS_cm = (ds[cndc_var].values
+                  * _cndc_factor_to_mS_cm(ds[cndc_var].attrs.get('units')))
 
     # Calculate PSAL
     PSAL = gsw.SP_from_C(
-        CNDC_.values, ds[temp_var].values, ds[pres_var].values)
+        CNDC_mS_cm, ds[temp_var].values, ds[pres_var].values)
 
     # Retain NaNs if applicable
     if retain_nans and psal_var in ds:
@@ -145,25 +173,29 @@ def calculate_PSAL(
 # Recalculate SA & CT
 def calculate_SA_CT(
     ds: xr.Dataset,
-    cndc_var: str = "CNDC",
+    cndc_var: str | None = None,
     temp_var: str = "TEMP",
     pres_var: str = "PRES",
     psal_var: str = "PSAL",
 ) -> xr.Dataset:
-    """Recalculate absolute salinity (SA) and coneservative temperature (CT)
-    from conductivity, temperature, and pressure using the GSW-Python module
-    (https://teos-10.github.io/GSW-Python/).
+    """Recalculate Absolute Salinity (SA) and Conservative Temperature (CT)
+    from practical salinity, temperature, and pressure using the GSW-Python
+    module (https://teos-10.github.io/GSW-Python/). Requires LATITUDE and
+    LONGITUDE in the dataset.
 
     This function adds or updates the SA and CT variables in the dataset with
     newly computed values.
 
+    NOTE: The calculation uses the *existing* practical salinity variable
+    (`psal_var`), not conductivity. If you have corrected CNDC, run
+    `calculate_PSAL` first.
+
     Args:
         ds (xr.Dataset):
-            The input dataset containing conductivity, temperature, and
+            The input dataset containing salinity, temperature, and
             pressure variables.
-        cndc_var (str):
-            The name of the conductivity variable in the dataset.
-            Defaults to 'CNDC'.
+        cndc_var (None):
+            Deprecated and ignored (kept so old calls do not break).
         temp_var (str):
             The name of the temperature variable in the dataset.
             Defaults to 'TEMP'.
@@ -179,6 +211,7 @@ def calculate_SA_CT(
 
     """
 
+    _warn_cndc_var_ignored(cndc_var, 'calculate_SA_CT')
     ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     # Calculate absolute salinity
@@ -197,8 +230,8 @@ def calculate_SA_CT(
                  'long_name': 'Conservative Temperature'})
 
     note = (
-        f"Computed from {cndc_var}, {temp_var}, {pres_var} "
-        "using the Python gsw module."
+        f"Computed from {psal_var}, {temp_var}, {pres_var}, LATITUDE, "
+        "LONGITUDE using the Python gsw module."
     )
     for varname in ['CT', 'SA']:
         ds = append_processing_history(ds, varname, note, deep_copy=False)
@@ -210,25 +243,28 @@ def calculate_SA_CT(
 # Recalculate RHO
 def calculate_rho(
     ds: xr.Dataset,
-    cndc_var: str = "CNDC",
+    cndc_var: str | None = None,
     temp_var: str = "TEMP",
     pres_var: str = "PRES",
     psal_var: str = "PSAL",
 ) -> xr.Dataset:
-    """Recalculate Density (RHO) from conductivity, temperature,
+    """Recalculate in-situ density (RHO) from practical salinity, temperature,
     and pressure using the GSW-Python module
-    (https://teos-10.github.io/GSW-Python/).
+    (https://teos-10.github.io/GSW-Python/). Requires LATITUDE and LONGITUDE.
 
     This function adds or updates the RHO variable in the dataset with newly
     computed density value.
 
+    NOTE: The calculation uses the *existing* practical salinity variable
+    (`psal_var`), not conductivity. If you have corrected CNDC, run
+    `calculate_PSAL` first.
+
     Args:
         ds (xr.Dataset):
-            The input dataset containing conductivity, temperature, and
+            The input dataset containing salinity, temperature, and
             pressure variables.
-        cndc_var (str):
-            The name of the conductivity variable in the dataset.
-            Defaults to 'CNDC'.
+        cndc_var (None):
+            Deprecated and ignored (kept so old calls do not break).
         temp_var (str):
             The name of the temperature variable in the dataset.
             Defaults to 'TEMP'.
@@ -244,6 +280,7 @@ def calculate_rho(
 
     """
 
+    _warn_cndc_var_ignored(cndc_var, 'calculate_rho')
     ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     # Calculate absolute salinity
@@ -259,8 +296,8 @@ def calculate_rho(
 
 
     note = (
-        f"Computed from {cndc_var}, {temp_var}, {pres_var} "
-        "using the Python gsw module."
+        f"Computed from {psal_var}, {temp_var}, {pres_var}, LATITUDE, "
+        "LONGITUDE using the Python gsw module."
     )
     ds = append_processing_history(ds, 'RHO', note, deep_copy=False)
 
@@ -274,16 +311,20 @@ def calculate_sig0(
     pres_var: str = "PRES",
     psal_var: str = "PSAL",
 ) -> xr.Dataset:
-    """Recalculate potential density anomaly (SIG0) from
-    conductivity, temperature, and pressure using the GSW-Python module
-    (https://teos-10.github.io/GSW-Python/).
+    """Recalculate potential density anomaly (SIG0, referenced to 0 dbar) from
+    practical salinity, temperature, and pressure using the GSW-Python module
+    (https://teos-10.github.io/GSW-Python/). Requires LATITUDE and LONGITUDE.
 
     This function adds or updates the SIG0 variable in the dataset with newly
     computed density value.
 
+    NOTE: The calculation uses the *existing* practical salinity variable
+    (`psal_var`), not conductivity. If you have corrected CNDC, run
+    `calculate_PSAL` first.
+
     Args:
         ds (xr.Dataset):
-            The input dataset containing conductivity, temperature, and
+            The input dataset containing salinity, temperature, and
             pressure variables.
         temp_var (str):
             The name of the temperature variable in the dataset.
@@ -315,8 +356,8 @@ def calculate_sig0(
                                 'minus 1000 kg m-3.')})
 
     note = (
-        f"Computed from {temp_var}, {pres_var} "
-        "using the Python gsw module."
+        f"Computed from {psal_var}, {temp_var}, {pres_var}, LATITUDE, "
+        "LONGITUDE using the Python gsw module."
     )
     ds = append_processing_history(ds, 'SIG0', note, deep_copy=False)
     return ds
@@ -379,9 +420,12 @@ def calculate_CNDC(
     if retain_nans and cndc_var in ds:
         CNDC = np.where(np.isnan(ds[cndc_var]), np.nan, CNDC)
 
-    # Overwrite or create CNDC variable
+    # Overwrite or create CNDC variable. gsw gives mS/cm; an existing variable
+    # may be in another unit (e.g. 'S m-1'), so convert to ITS units before
+    # overwriting (otherwise values and units attribute disagree by a factor).
     if cndc_var in ds:
-        ds[cndc_var][:] = CNDC
+        ds[cndc_var][:] = CNDC / _cndc_factor_to_mS_cm(
+            ds[cndc_var].attrs.get('units'))
     else:
         ds[cndc_var] = (ds[psal_var].dims, CNDC.data, {'units': 'mS/cm'})
         if ('sensor_calibration_date' in ds[temp_var].attrs
@@ -402,24 +446,27 @@ def calculate_CNDC(
 
 def calculate_ss(
     ds: xr.Dataset,
-    cndc_var: str = "CNDC",
+    cndc_var: str | None = None,
     temp_var: str = "TEMP",
     pres_var: str = "PRES",
     psal_var: str = "PSAL",
 ) -> xr.Dataset:
-    """Calculate sound speed (SVEL) from conductivity, temperature, and
+    """Calculate sound speed (SVEL) from practical salinity, temperature, and
     pressure using the GSW-Python module
-    (https://teos-10.github.io/GSW-Python/).
+    (https://teos-10.github.io/GSW-Python/). Requires LATITUDE and LONGITUDE.
 
     If SA and CT are already present in the dataset (e.g. from a prior
-    call to calculate_SA_CT), they are reused rather than recomputed.
-    Otherwise they are computed internally first.
+    call to calculate_SA_CT), they are reused rather than recomputed
+    (NOTE: then they are NOT updated from the current PSAL/TEMP -- recompute
+    them with `calculate_SA_CT` after any correction). Otherwise they are
+    computed internally first from `psal_var`, not from conductivity.
 
     Args:
         ds (xr.Dataset):
-            The input dataset containing conductivity, temperature, and
+            The input dataset containing salinity, temperature, and
             pressure variables.
-        cndc_var (str): Defaults to 'CNDC'.
+        cndc_var (None): Deprecated and ignored (kept so old calls do not
+            break).
         temp_var (str): Defaults to 'TEMP'.
         pres_var (str): Defaults to 'PRES'.
         psal_var (str): Defaults to 'PSAL'.
@@ -428,9 +475,11 @@ def calculate_ss(
         xr.Dataset: The updated dataset with SVEL values.
     """
 
+    _warn_cndc_var_ignored(cndc_var, 'calculate_ss')
     ds = ds.copy(deep=True)
 
-    if "SA" in ds and "CT" in ds:
+    reused_SA_CT = "SA" in ds and "CT" in ds
+    if reused_SA_CT:
         SA, CT = ds["SA"], ds["CT"]
     else:
         SA = gsw.SA_from_SP(ds[psal_var], ds[pres_var], ds.LONGITUDE, ds.LATITUDE)
@@ -443,10 +492,16 @@ def calculate_ss(
                    "standard_name": "speed_of_sound_in_sea_water",
                    "long_name": "Sound velocity"})
 
-    note = (
-        f"Computed from {cndc_var}, {temp_var}, {pres_var} "
-        "using the Python gsw module."
-    )
+    if reused_SA_CT:
+        note = (
+            f"Computed from the existing SA and CT variables and {pres_var} "
+            "using the Python gsw module."
+        )
+    else:
+        note = (
+            f"Computed from {psal_var}, {temp_var}, {pres_var}, LATITUDE, "
+            "LONGITUDE using the Python gsw module."
+        )
     ds = append_processing_history(ds, "SVEL", note, deep_copy=False)
 
     return ds

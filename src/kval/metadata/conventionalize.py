@@ -36,10 +36,23 @@ def nans_to_fill_value(ds: xr.Dataset, fill_value: float = -9999.0) -> xr.Datase
     return ds
 
 
-def convert_64_to_32(ds: xr.Dataset, force: bool = False, relative_tol: float = 1e-7) -> xr.Dataset:
+def convert_64_to_32(ds: xr.Dataset, force: bool = False, relative_tol: float = 1e-7,
+                     step_tol: float = 0.01) -> xr.Dataset:
     """
     Convert float64 and int64 variables (including coords) in an xarray.Dataset
     to float32 and int32, updating related metadata attributes (valid_min, valid_max, valid_range).
+
+    Safeguards (a variable that fails either is kept at 64 bit, with a warning):
+
+    - Time variables (name TIME, a "... since ..." units attribute, standard_name
+      "time" or axis "T") are NEVER converted, not even with ``force=True``.
+      Numeric time is a large offset from an epoch, so float32 cannot resolve the
+      sampling interval (about 170 s at ~19 000 days since 1970), and int32
+      seconds overflow in 2038.
+    - Resolution check: the largest round-trip error must be well below the typical
+      step between neighbouring samples (``step_tol``, default 1 %). The
+      ``relative_tol`` test (error relative to the largest absolute value) alone
+      cannot catch offset-dominated variables.
     """
     ds = ds.copy(deep=True)
     
@@ -56,14 +69,48 @@ def convert_64_to_32(ds: xr.Dataset, force: bool = False, relative_tol: float = 
         max_diff = np.nanmax(diff) if not np.isnan(diff).all() else 0.0
         return max_diff / scale
 
+    def roundtrip_error_vs_step(arr64: np.ndarray) -> float:
+        """Max float32 round-trip error divided by the median non-zero step
+        between neighbouring samples (0 if no step can be defined)."""
+        a = np.asarray(arr64, dtype=np.float64).ravel()
+        if a.size < 2:
+            return 0.0
+        err = np.abs(a - a.astype(np.float32).astype(np.float64))
+        steps = np.abs(np.diff(a))
+        steps = steps[np.isfinite(steps) & (steps > 0)]
+        if steps.size == 0 or np.isnan(err).all():
+            return 0.0
+        return float(np.nanmax(err) / np.median(steps))
+
+
     for varnm in list(ds.data_vars) + list(ds.coords):
         arr = ds[varnm]
         dtype = arr.dtype
+
+        # Never down-cast time (see docstring)
+        if time.is_time_like(varnm, arr):
+            if dtype in (np.float64, np.int64):
+                warnings.warn(
+                    f"'{varnm}' is a time variable and is kept as {dtype}: "
+                    "32-bit cannot resolve the sampling interval.",
+                    UserWarning,
+                )
+            continue
 
         # Determine the new dtype
         if dtype == np.float64:
             rel_diff = max_relative_diff(arr.values)
             target_dtype = np.float32
+            
+            step_ratio = roundtrip_error_vs_step(arr.values)
+            if step_ratio > step_tol and not force:
+                warnings.warn(
+                    f"Float64 → Float32 conversion would lose resolution in variable "
+                    f"'{varnm}' (rounding error is {100 * step_ratio:.1f} % of the typical "
+                    "sample-to-sample step); kept as float64.",
+                    UserWarning,
+                )
+                continue
             if rel_diff > relative_tol and not force:
                 warnings.warn(
                     f"Float64 → Float32 conversion may lose precision in variable '{varnm}' "

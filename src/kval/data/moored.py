@@ -44,7 +44,6 @@ if internals.is_notebook():
 
 def load_moored(
     file: str,
-    processing_variable=True,
     lat=None,
     lon=None,
 ) -> xr.Dataset:
@@ -58,9 +57,9 @@ def load_moored(
     Parameters:
     - file (str):
         Path to the file.
-    - processing_variable (bool):
-        Whether to add processing history to the dataset.
-
+    - lat, lon (float, optional):
+        Position of the instrument [degrees north/east]. Stored as the
+        LATITUDE and LONGITUDE coordinates; needed for e.g. Absolute Salinity.
     Returns:
     - xr.Dataset:
         The loaded dataset.
@@ -133,9 +132,10 @@ def chop_deck(
     """
     Chop away start and end parts of a time series (xarray Dataset).
     Default behaviour is to look for the indices to remove. Looks for
-    the indices where `variable` (e.g. temperature or pressure) is a
-    specified number of standard deviations away from the mean (the user can
-    also specify the indices to cut).
+    the indices where `variable` (e.g. temperature or pressure) is more than
+    `sd_thr` standard deviations below the median (the user can also specify
+    the indices to keep). The standard deviation is that of the whole record,
+    deck time included.
 
     Typical application: Remove data from a mooring record during which the
     instrument was on deck or being lowered/raised through the water column.
@@ -155,12 +155,15 @@ def chop_deck(
         Defaults to 'PRES'.
     sd_thr : float, optional
         The standard deviation threshold for determining the chop boundaries
-        when `indices` is not provided. Defaults to 3.0.
+        when `indices` is not provided. Defaults to 1.0.
     indices : Optional[Tuple[int, int]], optional
-        A tuple specifying the (start, stop) indices for manually chopping the
-        dataset along the TIME dimension. If not provided, the function will
-        use the standard deviation threshold to determine the range
-        automatically. Defaults to None.
+        A tuple (first, last) of the indices to KEEP along the TIME dimension.
+        Both are inclusive (`indices=(200, 20420)` keeps samples 200 through
+        20420); use None for either to keep everything up to that edge. This
+        is the same convention as the "Suggested chop" that the automatic
+        mode prints. If not provided, the function will use the standard
+        deviation threshold to determine the range automatically.
+        Defaults to None.
     auto_accept : bool, optional
         If `True`, automatically accepts the suggested chop based on the
         pressure record without prompting the user. Defaults to False.
@@ -211,8 +214,11 @@ def chop_deck(
                 np.diff(chop_var < chop_var_mean - sd_thr * chop_var_sd)
             )[0][-1]
 
-        # A slice defining the suggested "good" range
-        keep_slice = slice(*indices)
+        # A slice defining the suggested "good" range. `indices` holds
+        # (first kept, last kept), both inclusive -- the same convention as
+        # the user-supplied `indices` argument.
+        keep_slice = slice(
+            indices[0], None if indices[1] is None else indices[1] + 1)
 
         if auto_accept:
             accept = "y"
@@ -235,8 +241,8 @@ def chop_deck(
             ax.set_ylabel(ylab)
             ax.invert_yaxis()
             ax.set_title(
-                f"Suggested chop: [{keep_slice.start}, "
-                f"{keep_slice.stop}] (to red curve)."
+                f"Suggested chop: [{indices[0]}, {indices[1]}] "
+                "(to red curve; both indices inclusive)."
             )
             ax.legend()
 
@@ -247,8 +253,8 @@ def chop_deck(
                 plt.show(block=False)
 
             print(
-                f"Suggested chop: [{keep_slice.start}, "
-                f"{keep_slice.stop}] (to red curve)."
+                f"Suggested chop: [{indices[0]}, {indices[1]}] "
+                "(to red curve; both indices inclusive)."
             )
             accept = input("Accept (y/n)?: ")
 
@@ -257,7 +263,8 @@ def chop_deck(
 
         if accept.lower() == "n":
             print("Not accepted -> Not chopping anything now.")
-            print("NOTE: run chop(ds, indices =[A, B]) to manually set chop.")
+            print("NOTE: run chop_deck(ds, indices=(A, B)) to set the chop manually "
+                  "(A and B are the first and last samples to keep).")
             return ds
 
         elif accept.lower() == "y":
@@ -268,7 +275,8 @@ def chop_deck(
                 '. Only "y" or "n" works. -> Exiting.'
             )
     else:
-        keep_slice = slice(indices[0], indices[1] + 1)
+        keep_slice = slice(
+            indices[0], None if indices[1] is None else indices[1] + 1)
 
     L0 = ds.sizes["TIME"]
 
@@ -414,8 +422,12 @@ def despike_rolling(
     filter_type : str, default='median'
         Rolling filter type, either 'mean' or 'median'.
     min_periods : int or None, optional
-        Minimum number of observations required in a window to compute a value.
-        Default is None.
+        Minimum number of valid (non-NaN) observations required in a window to
+        compute the rolling statistic and standard deviation. If None
+        (default), `window_size // 2` is used, so that spikes next to gaps or
+        next to points removed by an earlier pass can still be detected.
+        Use `min_periods=window_size` to require complete windows. The first
+        and last half-window of the record are never tested.
     plot : bool, default=False
         If True, plots the original and despiked data.
     verbose : bool, default=False
@@ -1318,11 +1330,10 @@ def adjust_PSAL_from_CNDC_TEMP(
 
     ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
+    # Convert CNDC to mS/cm (raises on unrecognised units)
     CNDC_mS_cm = ds.CNDC.copy()
-
-    if 'units' in CNDC_mS_cm.attrs:
-        if CNDC_mS_cm.units == 'S m-1':
-            CNDC_mS_cm.values *= 10
+    CNDC_mS_cm.values = (ds.CNDC.values
+        * dataset._cndc_factor_to_mS_cm(ds.CNDC.attrs.get('units')))
 
     # Rolling mean (applied on CNDC and TEMP for computing PSAL):
     # Parameters
@@ -1443,10 +1454,6 @@ def get_median_depth(ds: xr.Dataset, lat: float = None, decimals: int = 1) -> fl
     return median_depth
 
 
-
-
-
-
 def _split_attrs(var_attr_sets, all_labels):
     """
     var_attr_sets: list of (label, attrs_dict) for instruments that are
@@ -1496,6 +1503,7 @@ def combine_datasets(
     instr_dim: str = 'INSTR',
     instr_names: list = None,
     time_dim: str = 'TIME',
+    min_fraction: float | None = None,
 ) -> xr.Dataset:
     """
     Combine multiple xarray Datasets (e.g. different instruments on a
@@ -1555,6 +1563,11 @@ def combine_datasets(
         falling back to an integer index for any dataset lacking it.
     time_dim : str, default='TIME'
         Name of the time dimension/coordinate in the input datasets.
+    min_fraction : float in (0, 1], optional
+        Only for method='time_average': drop averaging bins that contain
+        less than this fraction of the expected samples (their values become
+        NaN in the combined dataset). See `time_average`. Default None keeps
+        all bins but warns about incomplete first/last bins.
  
     Returns
     -------
@@ -1573,7 +1586,9 @@ def combine_datasets(
         raise ValueError("combine_datasets requires at least 2 datasets")
     if method not in ('time_average', 'interpolate'):
         raise ValueError("method must be 'time_average' or 'interpolate'")
- 
+    if min_fraction is not None and method != 'time_average':
+        raise ValueError("min_fraction is only used with method='time_average'")
+    
     n = len(datasets)
  
     # --- Resolve instrument labels ---
@@ -1629,7 +1644,7 @@ def combine_datasets(
         for ds in decoded:
             ds_avg = time_average(
                 ds, interval=interval, label='left', origin=origin,
-                time_dim=time_dim)
+                    time_dim=time_dim, min_fraction=min_fraction)
             ds_avg = ds_avg.reindex({time_dim: common_time})
             averaged.append(ds_avg)
     else:  # method == 'interpolate'

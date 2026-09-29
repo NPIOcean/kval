@@ -388,3 +388,50 @@ def time_to_decimal_year(
     decimal_year = time.year + time_elapsed / year_length
 
     return decimal_year
+
+
+
+
+# Seconds per CF time unit (for judging resolution of numeric time variables).
+_CF_UNIT_SECONDS = {
+    "second": 1.0, "seconds": 1.0, "s": 1.0,
+    "minute": 60.0, "minutes": 60.0, "min": 60.0,
+    "hour": 3600.0, "hours": 3600.0, "h": 3600.0,
+    "day": 86400.0, "days": 86400.0, "d": 86400.0,
+}
+
+
+def is_time_like(name, var) -> bool:
+    """True if a variable is a time variable (by name or CF metadata).
+
+    Time variables must never be down-cast: values are large offsets from an
+    epoch (e.g. ~19 000 days since 1970), so float32 cannot resolve the
+    sampling interval (see `numeric_time_resolution_seconds`).
+    """
+    attrs = getattr(var, "attrs", {}) or {}
+    units = str(attrs.get("units", "")).lower()
+    return (
+        str(name).upper() == "TIME"
+        or " since " in units
+        or attrs.get("standard_name") == "time"
+        or attrs.get("axis") == "T"
+        or getattr(var.dtype, "kind", "") in ("M", "m")
+    )
+
+
+def numeric_time_resolution_seconds(values, units: str, dtype=None) -> float:
+    """Smallest step [s] that `dtype` can represent at the largest time value.
+
+    For float32 and ~19 000 days since 1970 this is ~170 s.
+    Returns np.nan if the unit cannot be interpreted.
+    """
+    unit = str(units).split(" since ")[0].strip().lower()
+    factor = _CF_UNIT_SECONDS.get(unit)
+    values = np.asarray(values)
+    if factor is None or values.size == 0 or np.isnan(values).all():
+        return np.nan
+    dtype = np.dtype(dtype or values.dtype)
+    if dtype.kind != "f":
+        return factor  # integer time: one unit
+    vmax = np.nanmax(np.abs(values))
+    return float(np.spacing(dtype.type(vmax))) * factor

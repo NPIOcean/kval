@@ -158,7 +158,7 @@ class hand_remove_points:
         try:
             self.temp_scatter.remove()
             plt.draw()
-        except:
+        except Exception:
             pass
 
         self.temp_scatter = self.ax.scatter(self.var_points_selected,
@@ -187,7 +187,7 @@ class hand_remove_points:
         try:
             self.remove_scatter.remove()
             plt.draw()
-        except:
+        except Exception:
             pass
 
         self.remove_scatter = self.ax.scatter(self.var_points_remove,
@@ -211,7 +211,7 @@ class hand_remove_points:
         try:
             self.temp_scatter.remove()
             plt.draw()
-        except:
+        except Exception:
             pass
         self.PRES_points_selected = np.array([])
         self.var_points_selected = np.array([])
@@ -227,7 +227,7 @@ class hand_remove_points:
         try:
             self.temp_scatter.remove()
             plt.draw()
-        except:
+        except Exception:
             pass
         self.var_points_remove = np.array([])
         self.var_points_selected = np.array([])
@@ -237,7 +237,7 @@ class hand_remove_points:
         try:
             self.remove_scatter.remove()
             plt.draw()
-        except:
+        except Exception:
             pass
 
 

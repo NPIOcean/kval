@@ -913,7 +913,7 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
         try:
             previous_fig = plt.gcf()
             plt.close(previous_fig)
-        except:
+        except Exception:
             pass
 
         with plt.ioff():
@@ -925,9 +925,9 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
                      np.nanmax(ds[variable].values))
         var_span = var_range[1] - var_range[0]
 
-        hist_all = ax0.hist(ds[variable].values.flatten(), bins=100,
-                            range= var_range, color='tab:orange',
-                            alpha=0.7, label='Distribution outside range')
+        ax0.hist(ds[variable].values.flatten(), bins=100,
+            range= var_range, color='tab:orange',
+            alpha=0.7, label='Distribution outside range')
 
         condition = ((ds[variable] >= min_value)
                     & (ds[variable] <= max_value))
@@ -1035,7 +1035,7 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
             # Calculate the number of points that would be dropped by the
             # threshold cut
             points_cut = count_valid_before - count_valid_after
-            points_pct = points_cut / count_valid_before * 100
+            #points_pct = points_cut / count_valid_before * 100
 
 
             # Update plots
@@ -1157,13 +1157,13 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
         try:
             max_slider.min = slider_min
             max_slider.max = slider_max
-        except:
+        except Exception:
             max_slider.max = slider_max
             max_slider.min = slider_min
         try:
             min_slider.min = slider_min
             min_slider.max = slider_max
-        except:
+        except Exception:
             min_slider.max = slider_max
             min_slider.min = slider_min
 

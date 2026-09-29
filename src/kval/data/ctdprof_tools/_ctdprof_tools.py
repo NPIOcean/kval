@@ -614,7 +614,7 @@ def _datasets_from_cnvlist(cnv_list,
                             suppress_latlon_warning=not verbose,
                             start_time_NMEA = start_time_NMEA,
                             remove_duplicates=remove_duplicates)]
-        except:
+        except Exception:
             print(f'\n*NOTE*: Could not read file {fn}.')
             print('(This usually indicates some sort of problem with the file.'
                   ' For example, sensor setup may not match variables.) '
@@ -689,12 +689,12 @@ def _dates_from_history(ds):
         sbe_pattern = r"(\d{4}-\d{2}-\d{2}): Processed to .cnv using SBE software"
         sbe_time_match_str = re.search(sbe_pattern, ds.history).group(1)
         sbe_timestamp = pd.Timestamp(sbe_time_match_str)
-    except:
+    except Exception:
         try:
             sbe_pattern = r"(\d{4}-\d{2}-\d{2}): Processed to .btl using SBE software"
             sbe_time_match_str = re.search(sbe_pattern, ds.history).group(1)
             sbe_timestamp = pd.Timestamp(sbe_time_match_str)
-        except:
+        except Exception:
             sbe_timestamp = None
 
 
@@ -702,7 +702,7 @@ def _dates_from_history(ds):
         proc_pattern = r"(\d{4}-\d{2}-\d{2}): Post-processing"
         proc_time_match_str = re.search(proc_pattern, ds.history).group(1)
         proc_timestamp = pd.Timestamp(proc_time_match_str)
-    except:
+    except Exception:
         proc_timestamp = None
     return sbe_timestamp, proc_timestamp
 

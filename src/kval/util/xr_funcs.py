@@ -20,6 +20,12 @@ def time_as_datetime(ds, time_dim='TIME'):
     The original units/calendar are remembered in .encoding, so a later
     call to time_as_float can round-trip back to the same representation.
 
+    Only variables with "<units> since <date>" units are decoded to datetimes.
+    Variables whose units merely look like a duration ("seconds", "days", ...)
+    are left exactly as they are. Note that xarray's CF decoding also replaces
+    values equal to a variable's `_FillValue` by NaN in all variables, and
+    `time_as_float` does not put them back.
+
     Args:
         ds (xr.Dataset): Dataset containing the time coordinate.
         time_dim (str): Name of the time coordinate. Defaults to 'TIME'.
@@ -47,7 +53,7 @@ def time_as_datetime(ds, time_dim='TIME'):
             "'days since 1970-01-01 00:00'."
         )
     calendar = ds[time_dim].attrs.get('calendar', 'standard')
-    ds_decoded = xr.decode_cf(ds, decode_timedelta=True)
+    ds_decoded = xr.decode_cf(ds, decode_timedelta=False)
     ds_decoded[time_dim].encoding['units'] = units
     ds_decoded[time_dim].encoding['calendar'] = calendar
     return ds_decoded
@@ -458,6 +464,7 @@ def time_average(
     label: str = 'center',
     origin: str | None = None,
     time_dim: str = 'TIME',
+    min_fraction: float | None = None,     
     **resample_kwargs,
 ) -> xr.Dataset:
     """
@@ -491,6 +498,17 @@ def time_average(
         (e.g. 'ME', 'YE').
     time_dim : str, default='TIME'
         Name of the time dimension/coordinate to resample along.
+    min_fraction : float in (0, 1], optional
+        Drop averaging bins that contain fewer than this fraction of the
+        samples expected for a full bin (expected = interval divided by the
+        median sampling interval; samples are counted by timestamp, whether
+        or not their values are NaN). E.g. `min_fraction=0.9` removes the
+        incomplete first/last bin and interior bins with >10 % missing
+        samples. Only for fixed-duration intervals. Default None: keep all
+        bins, but warn if the first or last bin is less than 95 % full,
+        because its mean is then not representative of the full interval
+        (and with label='center' it is stamped at the bin centre, not at the
+        mean time of its samples).
     **resample_kwargs
         Additional keyword arguments passed through to xr.Dataset.resample
         (e.g. `closed`).
@@ -540,6 +558,48 @@ def time_average(
         resample_kwargs_full['origin'] = origin
     resample_kwargs_full.update(resample_kwargs)
 
+    # --- How full is each bin? (fixed-duration intervals only) ---
+    try:
+        interval_td = pd.Timedelta(interval)
+    except ValueError:
+        interval_td = None
+    if min_fraction is not None:
+        if not (0 < min_fraction <= 1):
+            raise ValueError("min_fraction must be in (0, 1]")
+        if interval_td is None:
+            raise ValueError(
+                f"min_fraction needs a fixed-duration interval; '{interval}' "
+                "is calendar-based.")
+
+    # Fixed-duration intervals are handed to pandas as an exact number of
+    # nanoseconds. In pandas >= 3 a '1D' (or '2D', ...) frequency is a
+    # *calendar* day, and `origin=` is then silently ignored, so bins would no
+    # longer line up with the origin that combine_datasets relies on (all-NaN
+    # result). A fixed nanosecond frequency behaves the same in pandas 2 and 3.
+    resample_freq = interval if interval_td is None else f"{interval_td.value}ns"
+
+    bin_fraction = None
+    tidx = pd.DatetimeIndex(ds[time_dim].values)
+    if interval_td is not None and len(tidx) > 1:
+        dt_med = pd.Series(tidx).diff().median()
+        if pd.notna(dt_med) and dt_med > pd.Timedelta(0):
+            expected = interval_td / dt_med
+            bin_counts = pd.Series(1, index=tidx).resample(
+                resample_freq, **resample_kwargs_full).sum()
+            bin_fraction = bin_counts / expected
+            if min_fraction is None:
+                for which, pos in (('first', 0), ('last', -1)):
+                    frac = bin_fraction.iloc[pos]
+                    if frac < 0.95:
+                        warnings.warn(
+                            f"time_average: the {which} '{interval}' bin "
+                            f"({bin_fraction.index[pos]}) contains only "
+                            f"{int(bin_counts.iloc[pos])} of ~{expected:.0f} "
+                            f"expected samples ({100 * frac:.0f} %). Its mean "
+                            "is not representative of the full interval; use "
+                            "min_fraction=... to drop incomplete bins.",
+                            UserWarning, stacklevel=2)
+
     # Split off variables that don't depend on time_dim at all -- xarray's
     # resample().mean() otherwise broadcasts them across the new time bins
     # (e.g. ZONE(PRES) becomes ZONE(TIME, PRES)), which is not desired.
@@ -555,8 +615,18 @@ def time_average(
     ds_numeric = ds.drop_vars(dropped_vars + time_indep_vars)
 
     ds_out = ds_numeric.resample(
-        {time_dim: interval}, **resample_kwargs_full
+        {time_dim: resample_freq}, **resample_kwargs_full
     ).mean()
+
+    # Drop incomplete bins if requested
+    if min_fraction is not None and bin_fraction is not None:
+        frac_out = bin_fraction.reindex(ds_out[time_dim].values).fillna(0.0)
+        keep = (frac_out >= min_fraction).values
+        n_drop = int((~keep).sum())
+        ds_out = ds_out.isel({time_dim: keep})
+        if n_drop:
+            print(f"time_average: dropped {n_drop} of {len(keep)} bin(s) with "
+                  f"less than {100 * min_fraction:.0f} % of the expected samples.")
 
     # Re-merge the time-independent variables, preserved exactly as they were
     ds_out = ds_out.merge(ds_time_indep, compat="override")

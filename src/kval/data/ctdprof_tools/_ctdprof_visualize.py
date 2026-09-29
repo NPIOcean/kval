@@ -72,7 +72,7 @@ def inspect_profiles(ds: 'xr.Dataset') -> None:
         except Exception:
             pass
 
-        fig, ax = plt.subplots()
+        fig, ax = internals.make_figure()
 
         # Plot all profiles in black in the background
         if not is_single_profile:
@@ -112,7 +112,7 @@ def inspect_profiles(ds: 'xr.Dataset') -> None:
         ax.grid()
         fig.canvas.header_visible = False  # Hide the figure header
         plt.tight_layout()
-        plt.show()
+        internals.show_figure(fig)
 
     # Create interactive widgets
     time_values = list(range(ds.sizes['TIME']))
@@ -203,7 +203,7 @@ def inspect_phase_space(ds: 'xr.Dataset') -> None:
         except Exception:
             pass
 
-        fig, ax = plt.subplots()
+        fig, ax = internals.make_figure()
 
         # Plot all other profiles in background
         if not is_single_profile:
@@ -247,7 +247,7 @@ def inspect_phase_space(ds: 'xr.Dataset') -> None:
         ax.grid()
         fig.canvas.header_visible = False
         plt.tight_layout()
-        plt.show()
+        internals.show_figure(fig)
 
     # Widgets
     time_values = list(range(ds.sizes['TIME']))
@@ -328,7 +328,7 @@ def inspect_dual_sensors(ds: 'xr.Dataset') -> None:
         """
         variable1, variable2 = variable_pair
 
-        fig, ax = plt.subplots(1, 2, sharey=True, figsize=(10, 5))
+        fig, ax = internals.make_figure(1, 2, sharey=True, figsize=(10, 5))
 
         profile_1 = ds[variable1].isel(TIME=station_index)
         profile_2 = ds[variable2].isel(TIME=station_index)
@@ -367,7 +367,7 @@ def inspect_dual_sensors(ds: 'xr.Dataset') -> None:
         plt.tight_layout()
         ax[0].legend(fontsize=10)
         ax[1].legend(fontsize=8)
-        plt.show()
+        internals.show_figure(fig)
 
     def _find_variable_pairs(ds: 'xr.Dataset') -> list:
         """
@@ -595,10 +595,10 @@ def ctd_contours(ds):
         try:
             previous_fig = plt.gcf()
             plt.close(previous_fig)
-        except:
+        except Exception:
             pass
 
-        fig, ax = plt.subplots(2, 1, sharex=True, sharey=True)
+        fig, ax = internals.make_figure(2, 1, sharex=True, sharey=True)
         fig.canvas.header_visible = False  # Hide the figure header
 
         for axn, varnm in zip(ax, [variable1, variable2]):
@@ -658,7 +658,7 @@ def ctd_contours(ds):
         ax[0].set_ylim(max_depth, 0)
         plt.tight_layout()
 
-        plt.show()
+        internals.show_figure(fig)
 
     # Get the list of available variables
     available_variables = _ctdprof_tools._get_profile_variables(

@@ -28,7 +28,7 @@ from IPython.display import display, clear_output
 import ipywidgets as widgets
 
 from kval.util import netcdf
-
+from kval.util import time as _time
 
 # Conditional import for compliance-checker
 try:
@@ -275,7 +275,10 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
     data_vars_relevant = [v for v in ds.data_vars if v not in skip_vars]
 
     # 1. dtype check
-    bad_types = [v for v in ds.variables if ds[v].dtype in (np.int64, np.float64)]
+    # Time variables are exempt: they must stay 64-bit (see convert_64_to_32).
+    bad_types = [v for v in ds.variables
+                 if ds[v].dtype in (np.int64, np.float64)
+                 and not _time.is_time_like(v, ds[v])]
     if bad_types:
         problems.append(
             f"{warn} 64-bit types (32-bit is recommended):\n{', '.join(bad_types)}\n   {arrow} "
@@ -284,6 +287,25 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
         issues += 1
     else:
         passed.append(f"{check} No 64-bit variable types")
+
+
+    # 1b. numeric time stored with too little resolution (e.g. float32)
+    for v in ds.variables:
+        var = ds[v]
+        if _time.is_time_like(v, var) and var.dtype.kind in "fi" and var.dtype.itemsize < 8:
+            res = _time.numeric_time_resolution_seconds(
+                var.values, var.attrs.get("units", ""), var.dtype)
+            if np.isnan(res) or res > 1.0:
+                res_txt = "unknown" if np.isnan(res) else f"~{res:.0f} s"
+                problems.append(
+                    f"{cross} Time variable '{v}' is stored as {var.dtype} "
+                    f"(resolution {res_txt}); timestamps are rounded.\n   {arrow} "
+                    "Suggestion: store time as float64 (do NOT use convert_64_to_32 on it)"
+                )
+                issues += 1
+            else:
+                passed.append(f"{check} Time variable '{v}' has adequate resolution")
+
 
     # 2. TBW attributes
     bad_g = [k for k, v in ds.attrs.items()

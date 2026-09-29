@@ -30,11 +30,12 @@ ___
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10360162.svg)](https://doi.org/10.5281/zenodo.10360162)
 
-About the latest release, `0.5.0`:
-
+About the latest release, `0.5.1`:
 
 
 > ***NOTE*** 0.5 introduces **breaking changes** from 0.4. Existing code may need updating. See *Breaking changes* below.
+
+*(0.5.0 was immediately superceded by 0.5.1 after finding some errors)
 
 **New**
 - `kval.plot.tsplot`: T-S diagram plotting.
@@ -47,7 +48,9 @@ About the latest release, `0.5.0`:
 - Interactive hand edits are now applied correctly, and interactive figures display consistently.
 - Better drift correction (non-uniform time steps) and time utilities (fractional seconds).
 - Various fixes to SBE and RBR file reading, CF-compliance checking (now CF-1.11), and metadata.
+- Time coordinates are never converted to 32-bit (`convert_64_to_32`), and the compliance check flags 32-bit time.
 - Refactoring and cleaning up of the code.
+- Minor fixes/improvements to despiking and time averaging functions. 
 - Extended pytest coverage.
 
 **Dependencies**

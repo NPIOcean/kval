@@ -15,7 +15,7 @@ The mat_to_xr functions are specifically designed to read time series data.
 import xarray as xr
 from scipy.io import matlab
 import numpy as np
-import datetime
+import warnings
 from matplotlib.dates import date2num
 from kval.util import time
 from typing import Any
@@ -76,10 +76,11 @@ def mat_to_xr_1D(
 
         # Remove time variable if we successfully parsed time
         data_dict.pop(time_name)
-    except:
+    except Exception as e:
         raise Exception(
             f'NOTE: Unable to parse time from the "{time_name}" variable. '
-            "\nTo try reading time from another variable, use the time_name flag.")
+            "\nTo try reading time from another variable, use the time_name flag."
+        ) from e
 
     # Collect in an xr Dataset
     ds = xr.Dataset(coords={"TIME": time_num})
@@ -88,14 +89,12 @@ def mat_to_xr_1D(
     for varnm in data_dict:
         try:
             ds[varnm] = (("TIME"), data_dict[varnm])
-        except:
-            if verbose:
-                print(
-                    f'NOTE: Could not parse the variable "{varnm}" '
-                    f" with shape: {data_dict[varnm].shape} as a TIME variable"
-                    f' - expected shape ({ds.sizes["TIME"]}). '
-                    " -> Skipping this variable."
-                )
+        except (ValueError, TypeError, AttributeError):
+            warnings.warn(
+                f'Could not parse the variable "{varnm}" '
+                f" with shape: {getattr(data_dict[varnm], 'shape', None)} as a TIME variable"
+                f' - expected shape ({ds.sizes["TIME"]}). '
+                " -> Skipping this variable.", UserWarning)
     # Add metadata
     for attrnm in attr_dict:
         ds.attrs[attrnm] = attr_dict[attrnm]
@@ -166,10 +165,11 @@ def mat_to_xr_2D(
 
         # Remove time variable if we successfully parsed time
         data_dict.pop(time_name)
-    except:
+    except Exception as e:
         raise Exception(
             f'NOTE: Unable to parse time from the "{time_name}" variable. '
-            "\nTo try reading time from another variable, use the time_name flag.")
+            "\nTo try reading time from another variable, use the time_name flag."
+        ) from e
 
     # Check whether dim2_name_in actually exists in the dataset
     if dim2_name_in not in data_dict.keys():
@@ -359,7 +359,7 @@ def _parse_time(data_dict, time_name="time"):
     try:
         time_stamps = time.matlab_datenum_to_datetime(data_dict[time_name])
         return time_stamps
-    except:  # May have to build other cases here, eventually.
+    except Exception:  # May have to build other cases here, eventually.
         print(
             f'Unable to parse time from the "{time_name}" variable. '
             "(Expecting existing variable and Matlab datenum format)"

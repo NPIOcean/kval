@@ -57,8 +57,12 @@ def despike_rolling(
     filter_type : str, optional
         The type of filter to apply ('mean' or 'median'). Default is 'median'.
     min_periods : int or None, optional
-        The minimum number of observations in the window required to return
-        a valid result. Default is None.
+        The minimum number of valid (non-NaN) observations in the window
+        required to compute the rolling statistic and standard deviation. If
+        None (default), `window_size // 2` is used, so that spikes near gaps
+        (or near points removed by an earlier pass) can still be detected.
+        Use `min_periods=window_size` to require complete windows. The first
+        and last half-window are never tested.
     return_ds : bool, optional
         If True, returns the updated dataset with the despiked variable.
         If False, returns only the despiked variable. Default is True.
@@ -83,6 +87,13 @@ def despike_rolling(
         - If `return_ds` is False and `return_index` is True: returns a tuple
           of the despiked variable and a mask of outliers.
     """
+
+    # With min_periods=None a single NaN anywhere in a window makes the
+    # window's statistic NaN, and nothing near a gap could ever be flagged.
+    if min_periods is None:
+        min_periods = max(1, window_size // 2)
+
+
     # Calculate the rolling mean using the specified filter type
     var_mean = filt.rolling(
         ds, variable=variable, dim=dim,

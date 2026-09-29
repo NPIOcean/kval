@@ -854,20 +854,20 @@ def _read_btl_column_data_xr(source_file, header_info, verbose=False):
                 df_combined[sbe_name_.replace("/", "_")] = df_first_subrow[
                     sbe_name_
                 ].astype(float)
-            except:
-                if verbose:
-                    print(f"Could not read {sbe_name_} as float - > dropping")
+            except (ValueError, TypeError, KeyError):
+                warnings.warn(
+                    f"Could not read {sbe_name_} as float -> dropping it.",
+                    UserWarning)
 
             # Read second subrow
             try:
                 df_combined[f'{sbe_name_.replace("/", "_")}_std'] = (
                     df_second_subrow[sbe_name_].astype(float)
                 )
-            except:
-                if verbose:
-                    print(
-                        f"Could not read {sbe_name_}_std as float - > dropping"
-                    )
+            except (ValueError, TypeError, KeyError):
+                warnings.warn(
+                    f"Could not read {sbe_name_}_std as float -> dropping it.",
+                    UserWarning)
 
     ## Add bottle number (assuming it is the first column)
     bottle_num_name = df_first_subrow.keys()[0]  # Name of the bottle column
@@ -968,6 +968,8 @@ def _read_SBE_proc_steps(ds, header_info, _is_moored=False):
         return ds
 
     ct = 1  # Step counter, SBE steps
+    SBE_binned = None  # Set below if the header describes bin averaging
+    src_files_raw = "N/A"  # Set below if the header lists the input files
     dmy_fmt = "%Y-%m-%d"
 
     sbe_proc_str = [
@@ -992,16 +994,24 @@ def _read_SBE_proc_steps(ds, header_info, _is_moored=False):
 
         # Get input file names (without paths)
         if "datcnv_in" in line.lower():
-            match = re.search(r"\\([^\\]+)\.(HEX|DAT)", line, re.IGNORECASE)
+            # File names may come with Windows (\\) or POSIX (/) paths, or
+            # bare; never crash if a name is not found.
+            match = (re.search(r"[\\/]([^\\/]+)\.(HEX|DAT)", line, re.IGNORECASE)
+                     or re.search(r"(?:^|[\s=])([^\\/\s]+)\.(HEX|DAT)", line,
+                                  re.IGNORECASE))
             if match:
-                hex_fn = match.group(0).split("\\")[-1]  # Just the filename
+                hex_fn = re.split(r"[\\/]", match.group(0))[-1].strip(" =")
             else:
-                hex_fn = None  # Or handle this case as needed
+                hex_fn = "N/A"
 
-            try:
-                xmlcon_fn = re.search(r"\\([^\\]+\.XMLCON)", line.upper()).group(1)
-            except:
-                xmlcon_fn = re.search(r"\\([^\\]+\.CON)", line.upper()).group(1)
+            up = line.upper()
+            match_con = (
+                re.search(r"[\\/]([^\\/]+\.XMLCON)", up)
+                or re.search(r"(?:^|[\s=])([^\\/\s]+\.XMLCON)", up)
+                or re.search(r"[\\/]([^\\/]+\.CON)", up)
+                or re.search(r"(?:^|[\s=])([^\\/\s]+\.CON)", up)
+            )
+            xmlcon_fn = match_con.group(1) if match_con else "N/A"
         
         # thinf: try to include .dat files
         # Get input file names (without paths)
@@ -1050,9 +1060,9 @@ def _read_SBE_proc_steps(ds, header_info, _is_moored=False):
 
         # Get low pass filter details
         if "filter_low_pass_tc_A" in line:
-            lp_A = float(re.search(r" = (\d+\.\d+)", line).group(1))
+            lp_A = float(re.search(r" = (\d+(?:\.\d+)?)", line).group(1))
         if "filter_low_pass_tc_B" in line:
-            lp_B = float(re.search(r" = (\d+\.\d+)", line).group(1))
+            lp_B = float(re.search(r" = (\d+(?:\.\d+)?)", line).group(1))
         if "filter_low_pass_A_vars" in line:
             try:
                 lp_vars_A = re.search(r" = (.+)$", line).group(1).split()
@@ -1061,7 +1071,7 @@ def _read_SBE_proc_steps(ds, header_info, _is_moored=False):
                     + f' seconds applied to: {" ".join(lp_vars_A)}.'
                 ]
                 ct += 1
-            except:
+            except (AttributeError, NameError):
                 print(
                     "FYI: Looks like filter A was not applied to any variables."
                 )
@@ -1073,7 +1083,7 @@ def _read_SBE_proc_steps(ds, header_info, _is_moored=False):
                     + f' seconds applied to: {" ".join(lp_vars_B)}.'
                 ]
                 ct += 1
-            except:
+            except (AttributeError, NameError):
                 print(
                     "FYI: Looks like filter B was not applied to any variables."
                 )
@@ -1239,39 +1249,43 @@ def _read_SBE_proc_steps(ds, header_info, _is_moored=False):
         if "binavg_binsize" in line:
             bin_size = re.search(r" = (.+)$", line).group(1)
         if "binavg_excl_bad_scans" in line:
-            binavg_excl_bad_scans = re.search(r"= (.+)", line)
+            binavg_excl_bad_scans = (
+                re.search(r"= (.+)", line).group(1).strip().lower())
             if binavg_excl_bad_scans == "yes":
                 binavg_excl_str = "Bad scans excluded"
             else:
                 binavg_excl_str = "Bad scans not excluded"
         if "binavg_skipover" in line:
-            bin_skipover = re.search(r" = (.+)$", line).group(1)
-            if bin_skipover != 0:
+            bin_skipover = re.search(r" = (.+)$", line).group(1).strip()
+            try:
+                _skip_nonzero = float(bin_skipover) != 0
+            except ValueError:
+                _skip_nonzero = True
+            if _skip_nonzero:
                 bin_skipover_str = (
                     f", skipped over {bin_skipover} initial scans"
                 )
             else:
-                bin_skipover = ""
+                bin_skipover_str = ""
         if "binavg_surface_bin" in line:
-            surfbin_yn = (
+            surfbin_toks = (
                 re.search(r"surface_bin = (.+)$", line).group(1).split()
             )
-            if surfbin_yn != "yes":
+            if not surfbin_toks or surfbin_toks[0].strip(",").lower() != "yes":
                 surfbin_str = "(No surface bin)"
             else:
-                surfbin_params = (
-                    re.search(r"yes, (.+)$", line).group(1).split().upper()
-                )
+                _m = re.search(r"yes,\s*(.+)$", line)
+                surfbin_params = _m.group(1).strip() if _m else ""
                 surfbin_str = f"Surface bin parameters: {surfbin_params}"
             sbe_proc_str += [f"{ct}. Bin averaged ({bin_size} {bin_unit})."]
             sbe_proc_str += [f"   > {binavg_excl_str}{bin_skipover_str}."]
             sbe_proc_str += [f"   > {surfbin_str}."]
             SBE_binned = f"{bin_size} {bin_unit} (SBE software)"
             ct += 1
-    try:
+
+    if SBE_binned is not None:
         ds.attrs["binned"] = SBE_binned
-    except:
-        pass
+
     ds.attrs["SBE_processing"] = "\n".join(sbe_proc_str)
     ds.attrs["SBE_processing_date"] = proc_date_ISO8601
     ds.attrs["history"] += f"\n{history_str}"
@@ -1518,14 +1532,14 @@ def _add_start_time(ds, header_info, start_time_NMEA=False):
             )
             ds.attrs["start_time_source"] = '"NMEA UTC" header line'
 
-        except:
+        except (KeyError, TypeError, ValueError, AttributeError):
             try:
                 ds.attrs["start_time"] = time.datetime_to_ISO8601(
                     header_info["start_time"]
                 )
                 ds.attrs["start_time_source"] = '"start_time" header line'
 
-            except:
+            except (KeyError, TypeError, ValueError, AttributeError):
                 raise Warning(
                     "Did not find a start time!"
                     ' (no "start_time" or NMEA UTC" header lines).'
@@ -1954,7 +1968,7 @@ def _update_variables(ds, source_file, _is_moored=False):
                         sensor_SNs += [sensor_info[sensor]["SN"]]
                         sensor_caldates += [sensor_info[sensor]["cal_date"]]
 
-                    except:
+                    except KeyError:
                         if _is_moored:
                             pass
                         else:
@@ -2149,7 +2163,7 @@ def _decdeg_from_line_old(line):
                 # Test if we have a number
                 float(deg_min_str[0])
                 is_number = True
-            except:
+            except ValueError:
                 # Flip the sign is S or W (convention is positive N/E)
                 if deg_min_str[0] in ["S", "W"]:
                     deg_min_str[1] = str(-float(deg_min_str[1]))

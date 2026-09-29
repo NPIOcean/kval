@@ -34,7 +34,8 @@ def rolling(ds: xr.Dataset, variable: str, dim: str,
         If `None` (default), all windows with a NaN will be set to Nan.
     - nan_edges: bool, optional
         Whether to set edge values (half of the window length) to NaN.
-        (Redundant if min_periods is set to `None`)
+        Applies whether or not `min_periods` is set (with `min_periods=None`
+        the edge windows are incomplete and already NaN).
         Defaults to `True`.
 
     Returns:
@@ -100,7 +101,7 @@ def rolling_sd(ds: xr.Dataset, variable: str, dim: str,
     nan_edges : bool, optional
         If `True`, the edge values of the output (half the window length)
         will be set to NaN, which is useful to avoid edge effects when
-        rolling. Ignored if `min_periods` is set to a non-None value.
+        rolling. Applies whether or not `min_periods` is set.
         Defaults to `True`.
 
     Returns:

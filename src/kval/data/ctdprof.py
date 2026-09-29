@@ -33,7 +33,6 @@ def ctds_from_cnv_dir(
     verbose: bool = False,
     start_time_NMEA: bool = False,
     profile: str = "downcast",
-    processing_variable: bool = True,
     remove_duplicates: bool = True,
 ) -> xr.Dataset:
     """
@@ -53,8 +52,6 @@ def ctds_from_cnv_dir(
     profile : str, default='downcast'
         Specify the profile type (only relevant for unbinned input data). 
         Options: 'upcast', 'downcast', 'none'.
-    processing_variable : bool, default=True
-        Whether to include processing variables in the output dataset.
     remove_duplicates : bool, default=True
         Remove duplicate columns (identical names). If not removed, duplicate columns 
         will be assigned suffixes: DUPLICATE, DUPLICATE2, etc.
@@ -95,7 +92,6 @@ def ctds_from_cnv_list(
     time_warnings: bool = True,
     verbose: bool = True,
     start_time_NMEA: bool = False,
-    processing_variable: bool = True,
     remove_duplicates: bool = True,
 ) -> xr.Dataset:
     """
@@ -117,8 +113,6 @@ def ctds_from_cnv_list(
     start_time_NMEA : bool, default=False
         If True, get the `start_time` attribute from the "NMEA UTC (Time)" 
         header line. Otherwise, use the "start_time" line (may occasionally cause issues).
-    processing_variable : bool, default=True
-        Whether to include a processing history variable in the dataset.
     remove_duplicates : bool, default=True
         Remove duplicate columns (identical names). If not removed, duplicates 
         will be assigned suffixes: DUPLICATE, DUPLICATE2, etc.
