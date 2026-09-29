@@ -446,7 +446,7 @@ def test_time_average_center_raises_informatively_for_calendar_based_interval():
     with pytest.raises(ValueError, match="label='left'"):
         time_average(ds, 'ME', label='center')
  
- 
+@pytest.mark.filterwarnings("ignore:time_average:UserWarning")  # partial edge bins are expected here
 def test_time_average_origin_shifts_bin_edges():
     ds = xr.Dataset(
         {'TEMP': ('TIME', np.arange(8.0))},
@@ -495,3 +495,78 @@ def test_promote_cf_coordinates_moves_newly_promoted_coords_to_end(mock_dataset)
     result = xr_funcs.promote_cf_coordinates(ds)
     coord_order = list(result.coords)
     assert coord_order[-1] == 'ZONE'
+
+
+# ---------------------------------------------------------------------
+# 0.5.1 fixes: time_average partial bins, min_fraction, pandas 3 day bins,
+# time_as_datetime only decoding the time coordinate
+# ---------------------------------------------------------------------
+import warnings
+
+
+def test_time_average_warns_about_partial_edge_bins(make_ctd_ds):
+    ds = make_ctd_ds()  # starts 11:20 -> partial first and last bin for '1D'
+    with pytest.warns(UserWarning) as record:
+        time_average(ds, "1D")
+    messages = [str(w.message) for w in record]
+    assert any("first" in m for m in messages)
+    assert any("last" in m for m in messages)
+
+
+def test_time_average_no_warning_for_complete_bins(make_ctd_ds):
+    ds = make_ctd_ds(start="2021-11-09 00:00", n=144 * 5)  # 5 full days
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        out = time_average(ds, "1D")
+    assert out.sizes["TIME"] == 5
+
+
+def test_time_average_min_fraction_drops_incomplete_edge_bins(make_ctd_ds):
+    ds = make_ctd_ds()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        full = xr_funcs.time_as_datetime(time_average(ds, "1D"))
+    kept = xr_funcs.time_as_datetime(time_average(ds, "1D", min_fraction=0.9))
+    assert kept.sizes["TIME"] == full.sizes["TIME"] - 2  # first and last bin
+    np.testing.assert_allclose(
+        kept.TEMP.values, full.TEMP.sel(TIME=kept.TIME.values).values)
+
+
+def test_time_average_min_fraction_validation(make_ctd_ds):
+    ds = make_ctd_ds()
+    with pytest.raises(ValueError):
+        time_average(ds, "1D", min_fraction=1.5)
+    with pytest.raises(ValueError):  # calendar-based interval
+        time_average(ds, "1ME", min_fraction=0.5)
+
+
+def test_time_average_day_interval_honours_origin(make_ctd_ds):
+    ds = make_ctd_ds()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        out = xr_funcs.time_as_datetime(time_average(
+            ds, "1D", label="left", origin="2021-11-09 11:20"))
+    assert out.TIME.values[0] == np.datetime64("2021-11-09T11:20:00")
+    assert out.TIME.values[1] == np.datetime64("2021-11-10T11:20:00")
+
+
+def test_time_average_1D_and_24h_agree(make_ctd_ds):
+    ds = make_ctd_ds()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        a = time_average(ds, "1D")
+        b = time_average(ds, "24h")
+    np.testing.assert_allclose(a.TEMP.values, b.TEMP.values)
+
+
+def test_time_as_datetime_leaves_duration_variables_alone(make_ctd_ds):
+    ds = make_ctd_ds()
+    ds["DUR"] = ("TIME", np.arange(ds.sizes["TIME"], dtype=float),
+                 {"units": "seconds"})
+    decoded = xr_funcs.time_as_datetime(ds)
+    assert decoded.DUR.dtype == np.float64
+    assert decoded.DUR.attrs["units"] == "seconds"
+    assert np.issubdtype(decoded.TIME.dtype, np.datetime64)
+    back = xr_funcs.time_as_float(decoded)
+    np.testing.assert_array_equal(back.TIME.values, ds.TIME.values)
+    assert back.DUR.attrs["units"] == "seconds"

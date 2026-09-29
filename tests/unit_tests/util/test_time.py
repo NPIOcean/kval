@@ -212,3 +212,18 @@ def test_time_to_decimal_year_start_of_year():
 def test_time_to_decimal_year_end_of_year():
     result = time.time_to_decimal_year(datetime(2021, 12, 31, 23, 59, 59))
     assert result == pytest.approx(2022.0, abs=1e-4)
+
+
+# ---------------------------------------------------------------------
+# 0.5.1: numeric-time helpers used to protect the time coordinate
+# ---------------------------------------------------------------------
+def test_numeric_time_resolution_seconds_float32_days_since_1970():
+    res = time.numeric_time_resolution_seconds(
+        np.array([19300.0]), "days since 1970-01-01", np.float32)
+    assert 150 < res < 200  # spacing 2**-9 d ~ 169 s
+
+
+def test_numeric_time_resolution_seconds_float64_is_sub_microsecond():
+    res = time.numeric_time_resolution_seconds(
+        np.array([19300.0]), "days since 1970-01-01", np.float64)
+    assert res < 1e-5

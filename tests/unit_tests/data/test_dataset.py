@@ -404,3 +404,17 @@ def test_add_latlon_places_coords_after_time():
     coord_order = list(result.coords)
     assert coord_order.index('TIME') < coord_order.index('LATITUDE')
     assert coord_order.index('TIME') < coord_order.index('LONGITUDE')
+
+
+def test_cndc_factor_to_mS_cm_recognised_units():
+    f = dataset._cndc_factor_to_mS_cm
+    assert f("mS cm-1") == 1.0
+    assert f("mS/cm") == 1.0
+    assert f("S m-1") == 10.0
+    assert f("S/m") == 10.0
+    assert f(None) == 1.0  # no units attribute: treated as mS/cm
+
+
+def test_cndc_factor_to_mS_cm_unrecognised_units_raise():
+    with pytest.raises(ValueError, match="conductivity units"):
+        dataset._cndc_factor_to_mS_cm("uS/cm")

@@ -74,3 +74,40 @@ def test_despike_min_periods(sample_dataset):
         ds, variable="temp", window_size=11, n_std=1.5, dim="time", min_periods=3
     )
     assert isinstance(result, xr.Dataset), "Result should be a Dataset."
+
+
+# ---------------------------------------------------------------------
+# 0.5.1: NaNs in the window no longer blind the detection
+# ---------------------------------------------------------------------
+def _noisy_series(n=3000, seed=3):
+    rng = np.random.default_rng(seed)
+    return xr.Dataset(
+        {'x': ('time', 34.8 + 0.01 * rng.standard_normal(n))},
+        coords={'time': np.arange(n)})
+
+
+def test_despike_catches_spike_next_to_nan():
+    ds = _noisy_series()
+    ds['x'].values[500] += 0.5
+    ds['x'].values[498] = np.nan
+    out = despike.despike_rolling(ds, 'x', window_size=9, n_std=3, dim='time')
+    assert np.isnan(out['x'].values[500])
+
+
+def test_despike_strict_min_periods_restores_old_behaviour():
+    ds = _noisy_series()
+    ds['x'].values[500] += 0.5
+    ds['x'].values[498] = np.nan
+    out = despike.despike_rolling(
+        ds, 'x', window_size=9, n_std=3, dim='time', min_periods=9)
+    assert not np.isnan(out['x'].values[500])
+
+
+def test_despike_few_false_positives_in_gappy_clean_data():
+    ds = _noisy_series(n=20000, seed=4)
+    rng = np.random.default_rng(5)
+    ds['x'].values[rng.random(20000) < 0.05] = np.nan  # 5 % scattered gaps
+    n_valid = int(np.isfinite(ds['x'].values).sum())
+    out = despike.despike_rolling(ds, 'x', window_size=9, n_std=3, dim='time')
+    removed = n_valid - int(np.isfinite(out['x'].values).sum())
+    assert removed / n_valid < 0.005

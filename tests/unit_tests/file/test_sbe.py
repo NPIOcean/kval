@@ -5,6 +5,10 @@ from kval.file import sbe
 import glob2
 import os
 
+# The SBE loader warns when it drops a column it cannot read as float
+# (e.g. avg_std in bottle files). Expected for the test files.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:Could not read .* as float:UserWarning")
 
 @pytest.fixture
 def file_list_test_cnvs_single():
@@ -199,3 +203,68 @@ def test_decdeg_from_line_zero_value_not_dropped_by_caller():
     # A line that genuinely parses to 0.0
     result = _decdeg_from_line('** Latitude: 000 00.0000')
     assert result == 0.0
+
+
+# ---------------------------------------------------------------------
+# 0.5.1: robustness of the processing-step parsing of the .cnv header
+# ---------------------------------------------------------------------
+def _proc_steps(lines):
+    ds = xr.Dataset(attrs={"history": ""})
+    header_info = {"SBEproc_hist": lines, "source_file_type": "cnv",
+                   "source_file": "cast001.cnv"}
+    return sbe._read_SBE_proc_steps(ds, header_info, _is_moored=False)
+
+
+_BASE = ["# datcnv_date = Jan 05 2022 10:11:12, 7.2.5"]
+
+
+@pytest.mark.parametrize("datcnv_in, hex_name, con_name", [
+    (r"C:\Data\cast001.hex C:\Data\cast001.XMLCON", "cast001.hex", "CAST001.XMLCON"),
+    ("/Users/me/data/cast001.hex /Users/me/data/cast001.XMLCON", "cast001.hex", "CAST001.XMLCON"),
+    ("cast001.hex cast001.XMLCON", "cast001.hex", "CAST001.XMLCON"),
+    (r"C:\Data\cast001.hex C:\Data\cast001.CON", "cast001.hex", "CAST001.CON"),
+])
+def test_read_SBE_proc_steps_file_names_any_path_style(datcnv_in, hex_name, con_name):
+    ds = _proc_steps(_BASE + [f"# datcnv_in = {datcnv_in}"])
+    assert hex_name in ds.attrs["source_file"]
+    assert con_name in ds.attrs["source_file"]
+
+
+def test_read_SBE_proc_steps_unparseable_file_names_do_not_crash():
+    ds = _proc_steps(_BASE + ["# datcnv_in = something odd"])
+    assert "N/A" in ds.attrs["source_file"]
+
+
+def _binavg_lines(excl="yes", skip="0",
+                  surf="yes, min = 0.000, max = 1.000, value = 0.500"):
+    return _BASE + [
+        "# binavg_bintype = decibars", "# binavg_binsize = 1",
+        f"# binavg_excl_bad_scans = {excl}", f"# binavg_skipover = {skip}",
+        f"# binavg_surface_bin = {surf}"]
+
+
+def test_read_SBE_proc_steps_binavg_text_reflects_header():
+    ds = _proc_steps(_binavg_lines())
+    text = ds.attrs["SBE_processing"]
+    assert "Bad scans excluded" in text and "skipped over" not in text
+    assert "Surface bin parameters" in text and "min = 0.000" in text
+    assert "binned" in ds.attrs
+
+
+def test_read_SBE_proc_steps_binavg_other_options():
+    text = _proc_steps(
+        _binavg_lines(excl="no", skip="5", surf="no")).attrs["SBE_processing"]
+    assert "Bad scans not excluded" in text
+    assert "skipped over 5 initial scans" in text
+    assert "No surface bin" in text
+
+
+def test_read_SBE_proc_steps_not_binned_has_no_binned_attribute():
+    ds = _proc_steps(_BASE + [r"# datcnv_in = C:\a\b.hex C:\a\b.XMLCON"])
+    assert "binned" not in ds.attrs
+
+
+def test_read_SBE_proc_steps_lowpass_time_constant_without_decimals():
+    lines = _BASE + ["# filter_low_pass_tc_A = 1",
+                     "# filter_low_pass_A_vars = c0S/m"]
+    assert "time constant 1.0" in _proc_steps(lines).attrs["SBE_processing"]

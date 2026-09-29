@@ -343,3 +343,62 @@ def test_add_standard_glob_attrs_org_override_true_replaces_existing():
     ds_out = conventionalize.add_standard_glob_attrs_org(
         ds, org='npi', override=True)
     assert ds_out.attrs['institution'] == 'Norwegian Polar Institute (NPI)'
+
+
+# ---------------------------------------------------------------------
+# 0.5.1: convert_64_to_32 must never round the time coordinate
+# ---------------------------------------------------------------------
+def _ds_with_numeric_time(freq="15min", n=31000, tname="TIME",
+                          units="days since 1970-01-01"):
+    t = pd.date_range("2021-11-07", periods=n, freq=freq)
+    days = (t - pd.Timestamp("1970-01-01")).total_seconds().values / 86400
+    rng = np.random.default_rng(0)
+    return xr.Dataset(
+        {"TEMP": (tname, 1 + 0.5 * rng.standard_normal(n), {"units": "degC"}),
+         "PRES": (tname, 49 + 0.3 * rng.standard_normal(n).round(3), {"units": "dbar"}),
+         "CNDC": (tname, 29 + 0.2 * rng.standard_normal(n).round(4), {"units": "mS/cm"})},
+        coords={tname: (tname, days, {"units": units, "calendar": "standard"})})
+
+
+@pytest.mark.parametrize("freq", ["1s", "1min", "15min", "1h"])
+def test_convert_64_to_32_keeps_time_as_exact_float64(freq):
+    ds = _ds_with_numeric_time(freq)
+    with pytest.warns(UserWarning, match="time variable"):
+        out = conventionalize.convert_64_to_32(ds)
+    assert out.TIME.dtype == np.float64
+    np.testing.assert_array_equal(out.TIME.values, ds.TIME.values)
+
+
+def test_convert_64_to_32_keeps_time_even_with_force():
+    with pytest.warns(UserWarning):
+        out = conventionalize.convert_64_to_32(_ds_with_numeric_time(), force=True)
+    assert out.TIME.dtype == np.float64
+
+
+def test_convert_64_to_32_detects_time_by_units_not_name():
+    ds = _ds_with_numeric_time(tname="t_obs")
+    with pytest.warns(UserWarning):
+        assert conventionalize.convert_64_to_32(ds).t_obs.dtype == np.float64
+
+
+def test_convert_64_to_32_keeps_int64_epoch_seconds():
+    ds = xr.Dataset(
+        {"X": ("TIME", np.arange(5.0))},
+        coords={"TIME": ("TIME", (np.arange(5) + 1_700_000_000).astype("int64"),
+                         {"units": "seconds since 1970-01-01"})})
+    with pytest.warns(UserWarning):
+        assert conventionalize.convert_64_to_32(ds).TIME.dtype == np.int64
+
+
+def test_convert_64_to_32_still_converts_ordinary_variables():
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        out = conventionalize.convert_64_to_32(_ds_with_numeric_time())
+    assert {out[v].dtype for v in ("TEMP", "PRES", "CNDC")} == {np.dtype("float32")}
+
+
+def test_convert_64_to_32_step_guard_keeps_offset_dominated_variable():
+    x = 1e6 + np.arange(1000) * 0.01  # float32 spacing at 1e6 is 0.0625
+    ds = xr.Dataset({"X": ("N", x)})
+    with pytest.warns(UserWarning, match="lose resolution"):
+        assert conventionalize.convert_64_to_32(ds).X.dtype == np.float64

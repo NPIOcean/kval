@@ -1043,3 +1043,139 @@ def test_chop_deck_raises_for_missing_variable():
     ds = xr.Dataset({'TEMP': ('TIME', np.arange(10.0))}, coords={'TIME': np.arange(10)})
     with pytest.raises(ValueError, match="not a variable"):
         chop_deck(ds, variable='PRES')
+
+
+# ---------------------------------------------------------------------
+# 0.5.1 fixes
+# ---------------------------------------------------------------------
+import inspect
+import warnings
+from kval.util import xr_funcs
+from kval.data.moored import adjust_PSAL_from_CNDC_TEMP
+
+
+def _deck_ds(make_ctd_ds):
+    ds = make_ctd_ds(n=1000)
+    P = np.full(1000, 49.0)
+    P[:100] = 0.1
+    P[-50:] = 0.1
+    ds["PRES"].values[:] = P
+    return ds
+
+
+def test_chop_deck_auto_keeps_last_good_sample(make_ctd_ds):
+    ds = _deck_ds(make_ctd_ds)
+    out = chop_deck(ds, auto_accept=True, verbose=False)
+    assert out.sizes["TIME"] == 850  # samples 100..949 inclusive
+    assert out.TIME.values[0] == ds.TIME.values[100]
+    assert out.TIME.values[-1] == ds.TIME.values[949]
+
+
+def test_chop_deck_auto_equals_manual_indices(make_ctd_ds):
+    ds = _deck_ds(make_ctd_ds)
+    auto = chop_deck(ds, auto_accept=True, verbose=False)
+    manual = chop_deck(ds, indices=(100, 949), verbose=False)
+    np.testing.assert_array_equal(auto.TIME.values, manual.TIME.values)
+
+
+def test_chop_deck_indices_open_ends(make_ctd_ds):
+    ds = _deck_ds(make_ctd_ds)
+    assert chop_deck(ds, indices=(100, None), verbose=False).sizes["TIME"] == 900
+    assert chop_deck(ds, indices=(None, 949), verbose=False).sizes["TIME"] == 950
+
+
+def test_combine_datasets_1D_interval_is_not_all_nan(make_ctd_ds):
+    # With pandas 3, '1D' is a calendar frequency and resample(origin=...) is
+    # silently ignored; this used to give an all-NaN result.
+    a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)  # partial-bin warnings
+        c = combine_datasets(a, b, interval="1D", instr_names=["a", "b"])
+    assert np.isfinite(c.TEMP.sel(INSTR="a").values).all()
+    assert np.isfinite(c.TEMP.sel(INSTR="b").values).all()
+
+
+def test_combine_datasets_min_fraction_drops_incomplete_last_bin(make_ctd_ds):
+    a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2)
+    c = combine_datasets(a, b, interval="1D", instr_names=["a", "b"],
+                         min_fraction=0.9)
+    # The common grid starts at the first sample, so only the last bin
+    # (44 of 144 samples) is incomplete.
+    t = c.TEMP.sel(INSTR="a").values
+    assert np.isfinite(t[:-1]).all() and np.isnan(t[-1])
+
+
+def test_combine_datasets_min_fraction_requires_time_average(make_ctd_ds):
+    a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2)
+    with pytest.raises(ValueError):
+        combine_datasets(a, b, interval="1D", method="interpolate",
+                         min_fraction=0.9)
+
+
+@pytest.mark.parametrize("units", ["mS cm-1", "mS/cm", "S m-1", "S/m"])
+def test_calculate_PSAL_no_factor_10_error_for_recognised_units(
+        make_ctd_ds, units):
+    ds = make_ctd_ds(cndc_units=units)
+    reference = ds.PSAL.values.copy()
+    ds["PSAL"].values[:] = 0.0
+    out = calculate_PSAL(ds)
+    np.testing.assert_allclose(out.PSAL.values, reference, atol=1e-6)
+
+
+def test_calculate_PSAL_unrecognised_units_raise(make_ctd_ds):
+    ds = make_ctd_ds()
+    ds["CNDC"].attrs["units"] = "mmhos per foot"
+    with pytest.raises(ValueError, match="conductivity units"):
+        calculate_PSAL(ds)
+
+
+@pytest.mark.parametrize("units", ["S m-1", "mS cm-1"])
+def test_calculate_CNDC_written_in_the_variables_own_units(make_ctd_ds, units):
+    ds = make_ctd_ds(cndc_units=units)
+    reference = ds.CNDC.values.copy()
+    ds["CNDC"].values[:] = 0.0
+    out = calculate_CNDC(ds)
+    assert out.CNDC.attrs["units"] == units
+    np.testing.assert_allclose(out.CNDC.values, reference, rtol=1e-9)
+
+
+def test_adjust_PSAL_from_CNDC_TEMP_same_result_for_S_m_and_mS_cm(make_ctd_ds):
+    a = adjust_PSAL_from_CNDC_TEMP(
+        xr_funcs.time_as_datetime(make_ctd_ds(cndc_units="S m-1", n=500)),
+        max_diff=100)
+    b = adjust_PSAL_from_CNDC_TEMP(
+        xr_funcs.time_as_datetime(make_ctd_ds(cndc_units="mS cm-1", n=500)),
+        max_diff=100)
+    np.testing.assert_allclose(a.PSAL.values, b.PSAL.values, rtol=1e-9)
+
+
+def _history_text(ds, var):
+    return " ".join(str(v) for v in ds[var].attrs.values())
+
+
+@pytest.mark.parametrize("func, var", [
+    (calculate_SA_CT, "SA"), (calculate_rho, "RHO"),
+    (calculate_sig0, "SIG0"), (calculate_ss, "SVEL")])
+def test_derived_variable_history_names_the_actual_inputs(make_ctd_ds, func, var):
+    text = _history_text(func(make_ctd_ds()), var)
+    assert "PSAL" in text and "CNDC" not in text
+
+
+def test_calculate_ss_history_says_when_SA_CT_are_reused(make_ctd_ds):
+    ds = calculate_SA_CT(make_ctd_ds())
+    assert "existing SA and CT" in _history_text(calculate_ss(ds), "SVEL")
+
+
+@pytest.mark.parametrize("func", [calculate_SA_CT, calculate_rho, calculate_ss])
+def test_cndc_var_is_deprecated_but_still_accepted(make_ctd_ds, func):
+    ds = make_ctd_ds()
+    with pytest.warns(FutureWarning, match="cndc_var"):
+        func(ds, cndc_var="CNDC")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        func(ds)  # no warning by default
+
+
+def test_processing_variable_argument_removed():
+    assert list(inspect.signature(load_moored).parameters) == [
+        "file", "lat", "lon"]

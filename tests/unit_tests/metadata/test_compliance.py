@@ -471,3 +471,34 @@ def test_stderr_is_not_swallowed_when_the_checker_raises():
                 compliance._run_ioos_checkers("dummy.nc")
 
     assert "something important" in err.getvalue()
+
+
+# ---------------------------------------------------------------------
+# 0.5.1: time variables and the 64-bit / resolution checks
+# ---------------------------------------------------------------------
+def _ds_numeric_time(dtype=np.float64):
+    import pandas as pd
+    t = pd.date_range("2021-11-07", periods=100, freq="15min")
+    days = ((t - pd.Timestamp("1970-01-01")).total_seconds().values / 86400
+            ).astype(dtype)
+    return xr.Dataset(
+        {"TEMP": ("TIME", np.zeros(100, dtype=np.float32))},
+        coords={"TIME": ("TIME", days, {"units": "days since 1970-01-01"})})
+
+
+def _custom_report(ds):
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        compliance_checks_custom(ds)
+    return buf.getvalue()
+
+
+def test_custom_checks_flag_float32_time():
+    text = _custom_report(_ds_numeric_time(np.float32))
+    assert "Time variable 'TIME' is stored as float32" in text
+
+
+def test_custom_checks_accept_float64_time():
+    text = _custom_report(_ds_numeric_time(np.float64))
+    assert "is stored as float32" not in text
+    assert "64-bit" not in text or "TIME" not in text.split("64-bit")[1][:200]

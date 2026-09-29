@@ -16,6 +16,12 @@ from kval.data import ctdprof
 from kval.data.ctdprof_tools import _ctdprof_tools as tools
 
 
+# The SBE loader warns when it drops a column it cannot read as float
+# (e.g. avg_std in bottle files). Expected for the test files.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:Could not read .* as float:UserWarning")
+
+
 DML_2020_DIR = 'tests/test_data/sbe_files/sbe911plus/dml_2020'
 KONGSFJORDEN_DIR = 'tests/test_data/sbe_files/sbe911plus/kongsfjorden_ctds'
 
