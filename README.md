@@ -35,7 +35,7 @@ About the latest release, `0.5.1`:
 
 > ***NOTE*** 0.5 introduces **breaking changes** from 0.4. Existing code may need updating. See *Breaking changes* below.
 
-*(0.5.0 was immediately superceded by 0.5.1 after finding some errors)
+*(0.5.0 was immediately superseded by 0.5.1 after finding some errors)*
 
 **New**
 - `kval.plot.tsplot`: T-S diagram plotting.

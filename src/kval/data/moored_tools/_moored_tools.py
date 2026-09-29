@@ -104,7 +104,7 @@ class hand_remove_points:
             else:
                 try:
                     self.ax.set_xlabel(f'TIME [{time_units}]')
-                except:
+                except Exception:
                     self.ax.set_xlabel(f'TIME [no units]')
 
         self.ax.grid()
@@ -203,7 +203,7 @@ class hand_remove_points:
         try:
             self.temp_scatter.remove()
             plt.draw()
-        except:
+        except Exception:
             pass
 
         self.temp_scatter = self.ax.scatter(
@@ -235,7 +235,7 @@ class hand_remove_points:
         try:
             self.remove_scatter.remove()
             plt.draw()
-        except:
+        except Exception:
             pass
 
         self.remove_scatter = self.ax.scatter(
@@ -261,7 +261,7 @@ class hand_remove_points:
         try:
             self.temp_scatter.remove()
             plt.draw()
-        except:
+        except Exception:
             pass
         self.TIME_points_selected = np.array([])
         self.var_points_selected = np.array([])
@@ -277,7 +277,7 @@ class hand_remove_points:
         try:
             self.temp_scatter.remove()
             plt.draw()
-        except:
+        except Exception:
             pass
         self.var_points_remove = np.array([])
         self.var_points_selected = np.array([])
@@ -287,7 +287,7 @@ class hand_remove_points:
         try:
             self.remove_scatter.remove()
             plt.draw()
-        except:
+        except Exception:
             pass
 
     def exit_and_apply_var(self, button):
