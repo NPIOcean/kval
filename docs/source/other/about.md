@@ -80,9 +80,9 @@ ___
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10360162.svg)](https://doi.org/10.5281/zenodo.10360162)
 
-About the latest release, `0.5.0`:
+About the latest release, `0.5.1`:
 
-> ***NOTE*** 0.5 in> ***NOTE*** 0.5 introduces **breaking changes** from 0.4. Existing code may need updating. See *Breaking changes* below.
+> ***NOTE*** 0.5 introduces **breaking changes** from 0.4. Existing code may need updating. See *Breaking changes* below.
 
 *(0.5.0 was immediately superseded by 0.5.1 after finding some errors)*
 
