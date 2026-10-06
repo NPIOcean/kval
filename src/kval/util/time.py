@@ -369,7 +369,7 @@ def time_to_decimal_year(
     elif isinstance(time, (int, float)):
         time = pd.Timestamp(
             numeric_time_to_datetime(time, units="days since 1970-01-01").item()
-        ).to_pydatetime()
+        ).round("us").to_pydatetime()
 
     # Ensure time is now a datetime object
     if not isinstance(time, datetime):
