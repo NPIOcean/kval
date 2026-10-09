@@ -107,6 +107,7 @@ standard_var_attrs = {
         ),
     },
     "CDOM_instr": {
+        "standard_name": "concentration_of_colored_dissolved_organic_matter_in_sea_water",
         "long_name": (
             "Colored dissolved organic matter (CDOM) from CTD fluorometer. "
             "Not calibrated with water sample chlorophyll measurements."
