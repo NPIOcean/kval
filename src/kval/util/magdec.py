@@ -40,7 +40,7 @@ def get_declination(
         Altitude in meters above sea level (default is 0.0).
     model: str
         Which WMM version to use.
-        Options: ['2010', '2015', '2020'], otherwise determined based on the
+        Options: ['2010', '2015', '2020', '2025'], otherwise determined based on the
         data.
 
     Returns:
@@ -106,7 +106,7 @@ def get_declination_point(
 
     Notes:
     -----
-    - The World Magnetic Model (WMM) data covers the years 2010-2025.
+    - The World Magnetic Model (WMM) data covers the years 2010-2030.
     - Specifying the *model* will allow computing the declination outside
       the model range (e.g 2010-2015 for WMM2010). Be careful!
     """
@@ -127,10 +127,12 @@ def get_declination_point(
             wmm_coefficients_file = 'wmm/WMM_2015.COF'
         elif model == '2020':
             wmm_coefficients_file = 'wmm/WMM_2020.COF'
+        elif model == '2025':
+            wmm_coefficients_file = 'wmm/WMM_2025.COF'
         else:
             raise ValueError(
                 f'Invalid option model={model} for choice of World Magnetic '
-                'Model version. Options are ["2010", "2015", "2020"].'
+                'Model version. Options are ["2010", "2015", "2020", "2025"].'
             )
 
     # Initialize the GeoMag object with the coefficients file
