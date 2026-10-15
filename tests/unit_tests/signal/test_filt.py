@@ -193,3 +193,52 @@ def test_rolling_sd_small_dataset():
 
     assert isinstance(result, xr.DataArray), "Result should be a DataArray."
     assert result.count() == 1, "Only one valid value should be present due to the small dataset size."
+
+# ---------------------------------------------------------------------
+# rolling_sd for multi-dimensional variables
+# ---------------------------------------------------------------------
+
+def _noisy(n=200, seed=0):
+    rng = np.random.default_rng(seed)
+    x = rng.standard_normal(n)
+    x[[10, 11, 50]] = np.nan
+    return x
+
+
+def test_rolling_sd_1d_matches_reference_loop():
+    """Same values as computing np.nanstd window by window."""
+    x = _noisy()
+    ds = xr.Dataset({"T": ("TIME", x)}, coords={"TIME": np.arange(x.size)})
+    sd = filt.rolling_sd(ds, "T", "TIME", window_size=7, min_periods=3,
+                         nan_edges=False)
+    expected = np.full(x.size, np.nan)
+    for i in range(x.size):
+        win = x[max(0, i - 3):i + 4]
+        if np.isfinite(win).sum() >= 3:
+            expected[i] = np.nanstd(win)
+    np.testing.assert_allclose(sd.values, expected)
+
+
+def test_rolling_sd_2d_equals_column_by_column():
+    """Used to raise ValueError for any 2-D variable."""
+    data = np.stack([_noisy(seed=1), _noisy(seed=2)], axis=0)  # (INSTR, TIME)
+    ds2 = xr.Dataset({"T": (("INSTR", "TIME"), data)},
+                     coords={"TIME": np.arange(data.shape[1]), "INSTR": [0, 1]})
+    sd2 = filt.rolling_sd(ds2, "T", "TIME", window_size=7, min_periods=3)
+    assert sd2.dims == ("INSTR", "TIME")
+    for i in range(2):
+        ds1 = xr.Dataset({"T": ("TIME", data[i])},
+                         coords={"TIME": np.arange(data.shape[1])})
+        sd1 = filt.rolling_sd(ds1, "T", "TIME", window_size=7, min_periods=3)
+        np.testing.assert_allclose(sd2.values[i], sd1.values)
+
+
+def test_rolling_sd_all_nan_window_gives_nan_without_warning():
+    import warnings
+    x = np.ones(50)
+    x[20:30] = np.nan
+    ds = xr.Dataset({"T": ("TIME", x)}, coords={"TIME": np.arange(50)})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        sd = filt.rolling_sd(ds, "T", "TIME", window_size=5, min_periods=1)
+    assert np.isnan(sd.values[25])

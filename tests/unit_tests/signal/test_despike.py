@@ -111,3 +111,20 @@ def test_despike_few_false_positives_in_gappy_clean_data():
     out = despike.despike_rolling(ds, 'x', window_size=9, n_std=3, dim='time')
     removed = n_valid - int(np.isfinite(out['x'].values).sum())
     assert removed / n_valid < 0.005
+
+def test_despike_rolling_2d_equals_per_instrument():
+    """despike_rolling used to fail on 2-D variables (e.g. INSTR x TIME
+    after combine_datasets)."""
+    rng = np.random.default_rng(3)
+    data = rng.standard_normal((2, 300))
+    data[0, 100] += 20
+    data[1, 200] -= 20
+    ds2 = xr.Dataset({"T": (("INSTR", "TIME"), data)},
+                     coords={"INSTR": [0, 1], "TIME": np.arange(300)})
+    out2 = despike.despike_rolling(ds2, "T", window_size=21, n_std=4, dim="TIME")
+    assert np.isnan(out2["T"].values[0, 100]) and np.isnan(out2["T"].values[1, 200])
+    for i in range(2):
+        ds1 = xr.Dataset({"T": ("TIME", data[i])}, coords={"TIME": np.arange(300)})
+        out1 = despike.despike_rolling(ds1, "T", window_size=21, n_std=4, dim="TIME")
+        np.testing.assert_array_equal(np.isnan(out2["T"].values[i]),
+                                      np.isnan(out1["T"].values))

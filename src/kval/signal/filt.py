@@ -3,6 +3,7 @@ SIGNAL.FILT.PY
 
 Functions for filtering data.
 '''
+import warnings
 import xarray as xr
 import numpy as np
 
@@ -113,19 +114,15 @@ def rolling_sd(ds: xr.Dataset, variable: str, dim: str,
     # Extract the variable to be filtered
     data_var = ds[variable]
 
-    def nan_std(var, **kwargs):
+    def nan_std(var, axis=-1, **kwargs):
         '''
-        Wrapper for np.nanstd that returns NaN for all-NaN slices and,
-        crucially, does not return an annoying warning.
+        np.nanstd over the window axis, returning NaN for all-NaN windows
+        without the "Degrees of freedom <= 0" warning. Works for variables
+        with any number of dimensions.
         '''
-
-        var_sd = np.ones(var.shape[0])*np.nan
-
-        for nn in np.arange(var.shape[0]):
-            if not np.isnan(var[nn]).all():
-                var_sd[nn] = np.nanstd(var[nn])
-
-        return var_sd
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            return np.nanstd(var, axis=axis)
 
     # Apply the rolling standard deviation
     sd_var = data_var.rolling(
