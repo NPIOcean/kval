@@ -490,3 +490,208 @@ def test_metadata_auto_keeps_sig0():
         warnings.simplefilter("ignore")
         out = moored.metadata_auto(ds)
     assert set(out.data_vars) == {"SIG0", "PSAL"}
+
+
+# ---------------------------------------------------------------------
+# geospatial_bounds (ACDD 1.3: WKT, "lat lon" order for EPSG:4326)
+
+def _ds_with_ranges(lat_min, lat_max, lon_min, lon_max):
+    ds = xr.Dataset()
+    ds.attrs.update(geospatial_lat_min=lat_min, geospatial_lat_max=lat_max,
+                    geospatial_lon_min=lon_min, geospatial_lon_max=lon_max)
+    return ds
+
+
+def test_geospatial_bounds_polygon_is_lat_lon_like_the_acdd_example():
+    """Used to be written lon lat, i.e. with the axes swapped for EPSG:4326."""
+    ds = _ds_with_ranges(40.26, 41.26, -111.29, -110.29)
+    assert conventionalize._get_geospatial_bounds_wkt_str(ds) == (
+        "POLYGON ((40.26 -111.29, 41.26 -111.29, 41.26 -110.29, "
+        "40.26 -110.29, 40.26 -111.29))")
+
+
+def test_geospatial_bounds_polygon_rounds_outwards():
+    ds = _ds_with_ranges(78.123, 79.871, -5.555, 10.001)
+    assert conventionalize._get_geospatial_bounds_wkt_str(ds) == (
+        "POLYGON ((78.12 -5.56, 79.88 -5.56, 79.88 10.01, "
+        "78.12 10.01, 78.12 -5.56))")
+
+
+def test_geospatial_bounds_single_position_is_a_point():
+    ds = _ds_with_ranges(81.0, 81.0, 31.25, 31.25)
+    assert conventionalize._get_geospatial_bounds_wkt_str(ds) == "POINT (81 31.25)"
+    ds = _ds_with_ranges(78.9583333, 78.9583333, -0.123456, -0.123456)
+    assert (conventionalize._get_geospatial_bounds_wkt_str(ds)
+            == "POINT (78.95833 -0.12346)")
+
+
+def test_geospatial_bounds_one_varying_coordinate_is_a_line():
+    ds = _ds_with_ranges(80.0, 81.5, 30.0, 30.0)
+    assert (conventionalize._get_geospatial_bounds_wkt_str(ds)
+            == "LINESTRING (80 30, 81.5 30)")
+
+
+def test_add_range_attrs_mooring_gets_point_bounds():
+    ds = create_basic_ds()
+    ds["LATITUDE"] = (("x",), [79.5, 79.5])
+    ds["LONGITUDE"] = (("x",), [-3.25, -3.25])
+    out = conventionalize.add_range_attrs(ds)
+    assert out.attrs["geospatial_bounds"] == "POINT (79.5 -3.25)"
+    assert out.attrs["geospatial_bounds_crs"] == "EPSG:4326"
+
+
+# ---------------------------------------------------------------------
+# GCMD keywords
+
+def _kw_ds(*names):
+    return xr.Dataset({name: ("x", [1.0]) for name in names})
+
+
+def test_gmdc_keywords_are_in_dictionary_order_without_duplicates():
+    """The order used to come from a set, so it changed from run to run."""
+    ds = conventionalize.add_gmdc_keywords_ctd(
+        _kw_ds("VCUR", "PSAL", "TEMP", "UCUR"), moored=True)
+    assert ds.attrs["keywords"] == ",".join([
+        "OCEANS>OCEAN TEMPERATURE>WATER TEMPERATURE",
+        "OCEANS>SALINITY/DENSITY>SALINITY",
+        "OCEANS>OCEAN CIRCULATION>OCEAN CURRENTS",
+    ])
+    ds2 = conventionalize.add_gmdc_keywords_moor(
+        _kw_ds("UCUR", "TEMP", "PSAL", "VCUR"))
+    assert ds2.attrs["keywords"] == ds.attrs["keywords"]
+
+
+def test_gmdc_keywords_existing_keywords_are_left_alone_by_default():
+    """Existing keywords used to be overwritten whatever `reset` was."""
+    ds = _kw_ds("TEMP")
+    ds.attrs["keywords"] = "my own keyword"
+    out = conventionalize.add_gmdc_keywords_ctd(ds)
+    assert out.attrs["keywords"] == "my own keyword"
+    out = conventionalize.add_gmdc_keywords_moor(ds)
+    assert out.attrs["keywords"] == "my own keyword"
+
+
+def test_gmdc_keywords_override_replaces_existing_keywords():
+    ds = _kw_ds("TEMP")
+    ds.attrs["keywords"] = "my own keyword"
+    out = conventionalize.add_gmdc_keywords_ctd(ds, override=True)
+    assert out.attrs["keywords"] == (
+        "OCEANS>OCEAN TEMPERATURE>OCEAN TEMPERATURE PROFILES")
+
+
+def test_gmdc_keywords_empty_keywords_are_filled():
+    ds = _kw_ds("TEMP")
+    ds.attrs["keywords"] = ""
+    out = conventionalize.add_gmdc_keywords_moor(ds)
+    assert out.attrs["keywords"] == "OCEANS>OCEAN TEMPERATURE>WATER TEMPERATURE"
+
+
+@pytest.mark.parametrize("reset, expected", [
+    (True, "OCEANS>OCEAN TEMPERATURE>WATER TEMPERATURE"),
+    (False, "my own keyword"),
+])
+def test_gmdc_keywords_reset_is_deprecated_but_honoured(reset, expected):
+    ds = _kw_ds("TEMP")
+    ds.attrs["keywords"] = "my own keyword"
+    with pytest.warns(DeprecationWarning, match="override"):
+        out = conventionalize.add_gmdc_keywords_moor(ds, reset=reset)
+    assert out.attrs["keywords"] == expected
+
+
+def test_gmdc_keywords_with_a_comma_are_quoted(monkeypatch):
+    """ACDD: keywords are comma-separated, so one containing a comma is
+    put in quotes."""
+    monkeypatch.setattr(conventionalize._standard_attrs,
+                        "gmdc_keyword_dict_moored",
+                        {"TEMP": "A>B, C", "PSAL": "D>E"})
+    out = conventionalize.add_gmdc_keywords_moor(_kw_ds("TEMP", "PSAL"))
+    assert out.attrs["keywords"] == '"A>B, C",D>E'
+
+
+# ---------------------------------------------------------------------
+# add_range_attrs: time coverage
+
+def _time_ds(time_values, units=None):
+    ds = xr.Dataset({"LATITUDE": 80.0, "LONGITUDE": 30.0},
+                    coords={"TIME": ("TIME", time_values)})
+    if units is not None:
+        ds["TIME"].attrs["units"] = units
+    return ds
+
+
+def test_add_range_attrs_datetime_time():
+    """datetime64 TIME used to fail in the resolution/duration part (it
+    needed TIME.units), so these attributes were not set."""
+    times = pd.date_range("2024-01-01", periods=97, freq="15min").values
+    out = conventionalize.add_range_attrs(_time_ds(times))
+    assert out.attrs["time_coverage_start"] == "2024-01-01T00:00:00Z"
+    assert out.attrs["time_coverage_end"] == "2024-01-02T00:00:00Z"
+    assert out.attrs["time_coverage_resolution"] == "P0000-00-00T00:15:00"
+    assert out.attrs["time_coverage_duration"] == "P0000-00-01T00:00:00"
+
+
+def test_add_range_attrs_resolution_uses_the_time_units():
+    """The step of numeric TIME used to be taken as days whatever the
+    units were: 6-hourly data in 'hours since' got a resolution of 6 days."""
+    out = conventionalize.add_range_attrs(
+        _time_ds(np.array([0.0, 6.0, 12.0]), "hours since 2000-01-01"))
+    assert out.attrs["time_coverage_resolution"] == "P0000-00-00T06:00:00"
+    out = conventionalize.add_range_attrs(
+        _time_ds(np.array([0.0, 600.0, 1200.0]), "seconds since 2000-01-01"))
+    assert out.attrs["time_coverage_resolution"] == "P0000-00-00T00:10:00"
+
+
+@pytest.mark.parametrize("numeric", [True, False])
+def test_add_range_attrs_time_coverage_from_time_bounds(numeric):
+    """With CF time bounds (e.g. daily averages) and
+    time_coverage_from_bounds=True, the coverage runs from the start of the
+    first to the end of the last interval. By default it runs from the first
+    to the last time stamp (ACDD; what the IOOS checker tests)."""
+    times = pd.to_datetime(["2024-03-01 12:00", "2024-03-02 12:00",
+                            "2024-03-03 12:00"]).values
+    bnds = np.stack([times - np.timedelta64(12, "h"),
+                     times + np.timedelta64(12, "h")], axis=1)
+    if numeric:
+        epoch = np.datetime64("1970-01-01")
+        times = (times - epoch) / np.timedelta64(1, "D")
+        bnds = (bnds - epoch) / np.timedelta64(1, "D")
+        ds = _time_ds(times, "days since 1970-01-01")
+    else:
+        ds = _time_ds(times)
+    ds["TIME"].attrs["bounds"] = "TIME_bnds"
+    ds["TIME_bnds"] = (("TIME", "bnds"), bnds)
+
+    out = conventionalize.add_range_attrs(ds.copy())
+    assert out.attrs["time_coverage_start"] == "2024-03-01T12:00:00Z"
+    assert out.attrs["time_coverage_end"] == "2024-03-03T12:00:00Z"
+    assert out.attrs["time_coverage_duration"] == "P0000-00-02T00:00:00"
+    assert out.attrs["time_coverage_resolution"] == "P0000-00-01T00:00:00"
+
+    out = conventionalize.add_range_attrs(ds.copy(),
+                                          time_coverage_from_bounds=True)
+    assert out.attrs["time_coverage_start"] == "2024-03-01T00:00:00Z"
+    assert out.attrs["time_coverage_end"] == "2024-03-04T00:00:00Z"
+    assert out.attrs["time_coverage_duration"] == "P0000-00-03T00:00:00"
+    assert out.attrs["time_coverage_resolution"] == "P0000-00-01T00:00:00"
+
+
+def test_add_range_attrs_after_kval_time_average():
+    from kval.util.xr_funcs import time_average
+    times = pd.date_range("2024-03-01 00:30", periods=72, freq="1h")
+    ds = _time_ds(times.values)
+    ds["TEMP"] = ("TIME", np.arange(72.0))
+    out = conventionalize.add_range_attrs(time_average(ds, "1D"),
+                                          time_coverage_from_bounds=True)
+    assert out.attrs["time_coverage_start"] == "2024-03-01T00:00:00Z"
+    assert out.attrs["time_coverage_end"] == "2024-03-04T00:00:00Z"
+
+
+def test_add_range_attrs_does_not_set_vertical_crs():
+    """geospatial_bounds is 2-D, so ACDD's geospatial_bounds_vertical_crs
+    (the CRS of its Z coordinates) does not apply. It used to be set to
+    EPSG:5831 (depth in m), also for a vertical range in dbar."""
+    ds = create_basic_ds(vertical_var="PRES")
+    ds["PRES"].attrs["units"] = "dbar"
+    out = conventionalize.add_range_attrs(ds)
+    assert out.attrs["geospatial_vertical_units"] == "dbar"
+    assert "geospatial_bounds_vertical_crs" not in out.attrs

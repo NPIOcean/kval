@@ -154,7 +154,7 @@ def convert_64_to_32(ds: xr.Dataset, force: bool = False, relative_tol: float = 
     return ds
 
 
-def add_range_attrs(ds, vertical_var=None):
+def add_range_attrs(ds, vertical_var=None, time_coverage_from_bounds=False):
     """
     Add global attributes for spatial and temporal ranges based on dataset variables.
 
@@ -165,11 +165,30 @@ def add_range_attrs(ds, vertical_var=None):
     vertical_var : str, optional
         Name of vertical coordinate variable to extract vertical range attributes from.
         If None, looks for a variable with attribute `axis="Z"`.
+    time_coverage_from_bounds : bool, default False
+        Only matters if TIME has CF bounds (a "bounds" attribute naming
+        e.g. "TIME_bnds", as written by kval's time averaging).
+        If False, time_coverage_start/end are the first and last time
+        stamp. This is what ACDD 1.3 describes ("the time of the first
+        data point") and what the IOOS compliance checker tests for.
+        If True, they are the start of the first and the end of the last
+        averaging interval (the checker then reports a mismatch).
 
     Notes
     -----
     - Requires `LATITUDE` and `LONGITUDE` variables for geospatial range attributes.
-    - Requires `TIME` variable for time coverage attributes.
+    - Requires `TIME` variable for time coverage attributes. TIME can be
+      numeric (with a "units" attribute) or datetime64. Times are taken to
+      be UTC.
+    - time_coverage_duration is the time from time_coverage_start to
+      time_coverage_end.
+    - geospatial_bounds is written as WKT following ACDD 1.3, with
+      latitude before longitude as EPSG:4326 (geospatial_bounds_crs)
+      specifies: a POINT for a single position, otherwise a POLYGON
+      (or a LINESTRING if only one of latitude and longitude varies).
+    - The vertical range is that of the vertical variable, in its units
+      (e.g. PRES in dbar, which ACDD allows). geospatial_bounds_vertical_crs
+      is not set, since geospatial_bounds has no vertical coordinate.
     - Requires vertical coordinate variable (see above) for vertical range attributes.
     """
 
@@ -209,7 +228,10 @@ def add_range_attrs(ds, vertical_var=None):
             ds.attrs["geospatial_vertical_max"] = np.round(np.nanmax(vertical_var_da.values), 3)
             ds.attrs["geospatial_vertical_units"] = vertical_var_da.units
             ds.attrs["geospatial_vertical_positive"] = "down"
-            ds.attrs["geospatial_bounds_vertical_crs"] = "EPSG:5831"
+            # geospatial_bounds_vertical_crs is not set: in ACDD it is the
+            # CRS of the Z coordinates in geospatial_bounds, which has none
+            # here (2-D). (It used to be set to EPSG:5831, depth in metres,
+            # even when the vertical range was pressure in dbar.)
 
     except (AttributeError, KeyError, ValueError) as e:
         print(
@@ -220,11 +242,8 @@ def add_range_attrs(ds, vertical_var=None):
 
     # Time coverage attributes
     try:
-        if ds.TIME.dtype == np.dtype("datetime64[ns]"):
-            start_time, end_time = ds.TIME.min(), ds.TIME.max()
-        else:
-            start_time = cftime.num2date(ds.TIME.min().values, ds.TIME.units)
-            end_time = cftime.num2date(ds.TIME.max().values, ds.TIME.units)
+        start_time, end_time = _time_coverage_start_end(
+            ds, use_bounds=time_coverage_from_bounds)
 
         ds.attrs["time_coverage_start"] = time.datetime_to_ISO8601(start_time)
         ds.attrs["time_coverage_end"] = time.datetime_to_ISO8601(end_time)
@@ -233,6 +252,9 @@ def add_range_attrs(ds, vertical_var=None):
             tdiff = np.diff(ds.TIME.values)
             if np.issubdtype(tdiff.dtype, np.timedelta64):
                 tdiff = tdiff / np.timedelta64(1, "D")  # -> days
+            else:
+                # Numeric TIME: convert the step to days
+                tdiff = tdiff * _days_per_time_unit(ds.TIME.units)
             tdiff_std = np.std(tdiff)
             tdiff_median = np.median(tdiff)
             if tdiff_std / tdiff_median < 1e-5:
@@ -242,7 +264,8 @@ def add_range_attrs(ds, vertical_var=None):
                 # Variable time intervals
                 ds.attrs["time_coverage_resolution"] = "variable"
 
-        ds.attrs["time_coverage_duration"] = _get_time_coverage_duration_str(ds)
+        ds.attrs["time_coverage_duration"] = (
+            time.start_end_times_cftime_to_duration(start_time, end_time))
 
     except (AttributeError, KeyError, ValueError) as e:
         print(
@@ -373,47 +396,109 @@ def _reorder_list(input_list, ordered_list):
 
 def _get_geospatial_bounds_wkt_str(ds, decimals=2):
     """
-    Get the geospatial_bounds_crs value on the required format:
+    Get the geospatial_bounds value as a WKT string following ACDD 1.3.
 
-    'POLYGON((x1 y1, x2 y2, x3 y3, …, x1 y1))'
+    ACDD uses geospatial_bounds_crs = EPSG:4326 by default, and EPSG:4326
+    gives the coordinates in the order latitude, longitude. So each point
+    is written "lat lon" (as in the ACDD example
+    'POLYGON ((40.26 -111.29, 41.26 -111.29, 41.26 -110.29, 40.26 -110.29,
+    40.26 -111.29))').
 
-    Rounds the lat/lon to the specified number of digits, rounding
-    the last digit in the direction such that all points are contained
-    within the polygon
+    - A single position (e.g. a mooring): 'POINT (lat lon)'.
+    - Only latitude or only longitude varies: 'LINESTRING (lat lon, lat lon)'.
+    - Otherwise: a closed POLYGON around the bounding box, in the same
+      corner order as the ACDD example.
+
+    Polygon and line corners are rounded to `decimals` decimals, outwards
+    (minimum values down, maximum values up), so that all points are
+    contained. A POINT is rounded to 5 decimals (about 1 m).
+
+    The bounding box is taken from the geospatial_lat/lon_min/max
+    attributes, so a track crossing the 180th meridian gets a box that goes
+    the long way round.
 
     NOTE: ds must already have geospatial_lat_max (etc) attributes.
-
     """
+    lat_min, lat_max = ds.geospatial_lat_min, ds.geospatial_lat_max
+    lon_min, lon_max = ds.geospatial_lon_min, ds.geospatial_lon_max
 
-    lat_max = number.custom_round_ud(ds.geospatial_lat_max, decimals, "up")
-    lat_min = number.custom_round_ud(ds.geospatial_lat_min, decimals, "dn")
-    lon_max = number.custom_round_ud(ds.geospatial_lon_max, decimals, "up")
-    lon_min = number.custom_round_ud(ds.geospatial_lon_min, decimals, "dn")
+    def fmt(value):
+        # Plain decimal, no trailing zeros, no '-0'
+        out = f"{float(value):.{max(decimals, 5)}f}".rstrip("0").rstrip(".")
+        return "0" if out == "-0" else out
 
-    corner_dict = (
-        lon_min,
-        lat_min,
-        lon_min,
-        lat_max,
-        lon_max,
-        lat_max,
-        lon_max,
-        lat_min,
-        lon_min,
-        lat_min,
-    )
-    wkt_str = "POLYGON ((%s %s, %s %s, %s %s, %s %s, %s %s))" % corner_dict
+    if lat_min == lat_max and lon_min == lon_max:
+        return f"POINT ({fmt(round(lat_min, 5))} {fmt(round(lon_min, 5))})"
 
-    return wkt_str
+    lat_max = number.custom_round_ud(lat_max, decimals, "up")
+    lat_min = number.custom_round_ud(lat_min, decimals, "dn")
+    lon_max = number.custom_round_ud(lon_max, decimals, "up")
+    lon_min = number.custom_round_ud(lon_min, decimals, "dn")
+
+    if lat_min == lat_max or lon_min == lon_max:
+        return (f"LINESTRING ({fmt(lat_min)} {fmt(lon_min)}, "
+                f"{fmt(lat_max)} {fmt(lon_max)})")
+
+    corners = [(lat_min, lon_min), (lat_max, lon_min), (lat_max, lon_max),
+               (lat_min, lon_max), (lat_min, lon_min)]
+    return "POLYGON ((%s))" % ", ".join(
+        f"{fmt(lat)} {fmt(lon)}" for lat, lon in corners)
+
+
+# Length of the CF/UDUNITS time units (as used in "<units> since ...") in days
+_DAYS_PER_TIME_UNIT = {
+    "days": 1.0, "day": 1.0, "d": 1.0,
+    "hours": 1 / 24, "hour": 1 / 24, "hr": 1 / 24, "h": 1 / 24,
+    "minutes": 1 / 1440, "minute": 1 / 1440, "min": 1 / 1440,
+    "seconds": 1 / 86400, "second": 1 / 86400, "sec": 1 / 86400,
+    "s": 1 / 86400,
+    "milliseconds": 1 / 86400e3, "millisecond": 1 / 86400e3,
+    "ms": 1 / 86400e3,
+}
+
+
+def _days_per_time_unit(units):
+    """'hours since 2000-01-01' -> 1/24 (the unit's length in days)."""
+    unit = units.strip().split()[0].lower()
+    if unit not in _DAYS_PER_TIME_UNIT:
+        raise ValueError(f"Unsupported time unit in TIME units: '{units}'")
+    return _DAYS_PER_TIME_UNIT[unit]
+
+
+def _time_coverage_start_end(ds, use_bounds=False):
+    """
+    Start and end of the time coverage (UTC), as pandas Timestamps (for
+    datetime64 TIME) or cftime datetimes (for numeric TIME).
+
+    The first and last time stamp, or, with use_bounds=True and if TIME
+    has CF bounds (TIME:bounds = "TIME_bnds"), the start of the first and
+    the end of the last interval. Bounds have no units of their own; they
+    use those of TIME (CF section 7.1).
+    """
+    tvar = ds.TIME
+    bounds_name = tvar.attrs.get("bounds")
+    if use_bounds and bounds_name is not None and bounds_name in ds.variables:
+        values = np.asarray(ds[bounds_name].values).ravel()
+    else:
+        values = np.asarray(tvar.values).ravel()
+
+    if np.issubdtype(values.dtype, np.datetime64):
+        values = values[~np.isnat(values)]
+        return pd.Timestamp(values.min()), pd.Timestamp(values.max())
+
+    start, end = cftime.num2date(
+        [np.nanmin(values), np.nanmax(values)], tvar.units,
+        calendar=tvar.attrs.get("calendar", "standard"))
+    return start, end
 
 
 def _get_time_coverage_duration_str(ds):
     """
-    Get the time duration based on first and last time stamp on
-    the required ISO8601format (P[YYYY]-[MM]-[DD]T[hh]:[mm]:[ss])
+    Get the time duration between the start and end of the time coverage
+    (see _time_coverage_start_end) as an ISO 8601 duration
+    (P[YYYY]-[MM]-[DD]T[hh]:[mm]:[ss]).
     """
-    start_dt, end_dt = cftime.num2date(
-        [ds.TIME[0], ds.TIME[-1]], ds.TIME.units)
+    start_dt, end_dt = _time_coverage_start_end(ds)
     duration_str = time.start_end_times_cftime_to_duration(start_dt, end_dt)
     return duration_str
 
@@ -637,51 +722,84 @@ def add_standard_glob_attrs_moor(ds, override=False, org=None):
 
     return ds
 
-def add_gmdc_keywords_ctd(ds, reset=True, moored=False):
+def _gmdc_keywords_for(ds, gmdc_dict):
+    """
+    GCMD keywords for the variables in ds, without duplicates, in the
+    order of gmdc_dict (so the result does not change from run to run).
+    """
+    keywords = []
+    for gmdc_kw, keyword in gmdc_dict.items():
+        if keyword in keywords:
+            continue
+        if any(gmdc_kw in varnm for varnm in ds.keys()):
+            keywords.append(keyword)
+    return keywords
+
+
+def _set_keywords(ds, keywords, override, reset, func_name):
+    """Write the comma-separated "keywords" attribute (see
+    add_gmdc_keywords_ctd for override/reset)."""
+    if reset is not None:
+        warnings.warn(
+            f"{func_name}: `reset` is deprecated; use `override` instead "
+            f"(reset={reset} is treated as override={reset}).",
+            DeprecationWarning, stacklevel=3)
+        override = bool(reset)
+
+    existing = ds.attrs.get("keywords")
+    if existing not in (None, "") and not override:
+        return ds
+
+    # ACDD: comma-separated; a keyword that contains a comma is quoted
+    ds.attrs["keywords"] = ",".join(
+        f'"{kw}"' if "," in kw else kw for kw in keywords)
+    return ds
+
+
+def add_gmdc_keywords_ctd(ds, reset=None, moored=False, override=False):
     """
     Adds standard GMDC variables a la
     "OCEANS>OCEAN TEMPERATURE>WATER TEMPERATURE"
     reflecting the variables in the dictionary
     _standard_attrs.gmdc_keyword_dict_ctd
-    """
+    (or _standard_attrs.gmdc_keyword_dict_moored if moored=True).
 
+    The keywords are written in the order of that dictionary, without
+    duplicates.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+    reset : bool or None, default None
+        Deprecated, use `override`. If given, it is used as `override`.
+    moored : bool, default False
+        Use the keywords for moored data.
+    override : bool, default False
+        If False, a dataset that already has a (non-empty) "keywords"
+        attribute is left as it is. If True, "keywords" is replaced.
+    """
     if moored:
         gmdc_dict = _standard_attrs.gmdc_keyword_dict_moored
     else:
         gmdc_dict = _standard_attrs.gmdc_keyword_dict_ctd
-    keywords = []
 
-    for varnm in ds.keys():
-        for gmdc_kw in gmdc_dict:
-            if gmdc_kw in varnm:
-                keywords += [gmdc_dict[gmdc_kw]]
+    return _set_keywords(ds, _gmdc_keywords_for(ds, gmdc_dict), override,
+                         reset, "add_gmdc_keywords_ctd")
 
-    unique_keywords = list(set(keywords))
 
-    ds.attrs["keywords"] = ",".join(unique_keywords)
-
-    return ds
-
-def add_gmdc_keywords_moor(ds, reset=True):
+def add_gmdc_keywords_moor(ds, reset=None, override=False):
     """
     Adds standard GMDC variables a la
     "OCEANS>OCEAN TEMPERATURE>WATER TEMPERATURE"
     reflecting the variables in the file
+    (from _standard_attrs.gmdc_keyword_dict_moored).
+
+    See add_gmdc_keywords_ctd for `reset` and `override`.
     """
-
     gmdc_dict = _standard_attrs.gmdc_keyword_dict_moored
-    keywords = []
+    return _set_keywords(ds, _gmdc_keywords_for(ds, gmdc_dict), override,
+                         reset, "add_gmdc_keywords_moor")
 
-    for varnm in ds.keys():
-        for gmdc_kw in gmdc_dict:
-            if gmdc_kw in varnm:
-                keywords += [gmdc_dict[gmdc_kw]]
-
-    unique_keywords = list(set(keywords))
-
-    ds.attrs["keywords"] = ",".join(unique_keywords)
-
-    return ds
 
 def set_var_attr(ds, variable, attr):
     """
