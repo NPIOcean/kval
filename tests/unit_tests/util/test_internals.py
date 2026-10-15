@@ -46,3 +46,33 @@ def test_plot_font_family_no_findfont_messages(caplog):
         fig.canvas.draw()
         plt.close(fig)
     assert not [r for r in caplog.records if 'findfont' in r.getMessage()]
+
+
+# is_notebook
+
+class _KernelShell:
+    kernel = object()
+
+
+class _TerminalShell:
+    pass
+
+
+def test_is_notebook_without_get_ipython_builtin(monkeypatch):
+    """In widget callbacks (button clicks etc.), get_ipython is not a
+    builtin; it used to be looked up as one, so is_notebook() returned False
+    in JupyterLab and interactive functions warned that they were not in a
+    notebook."""
+    import builtins
+    import IPython
+    monkeypatch.delattr(builtins, 'get_ipython', raising=False)
+    monkeypatch.setattr(IPython, 'get_ipython', lambda: _KernelShell())
+    assert internals.is_notebook()
+
+
+def test_is_notebook_false_for_terminal_or_no_shell(monkeypatch):
+    import IPython
+    monkeypatch.setattr(IPython, 'get_ipython', lambda: _TerminalShell())
+    assert not internals.is_notebook()
+    monkeypatch.setattr(IPython, 'get_ipython', lambda: None)
+    assert not internals.is_notebook()

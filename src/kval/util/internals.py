@@ -15,10 +15,14 @@ def is_notebook():
         bool: True if running in a kernel-backed IPython environment,
               False otherwise (e.g. plain terminal IPython or script).
     """
+    # Imported explicitly: the bare name get_ipython is only available as a
+    # builtin while a cell is executing, not in widget callbacks (e.g. a
+    # button click), where this used to wrongly return False.
     try:
-        shell = get_ipython()
-    except NameError:
-        return False  # Standard Python interpreter, no IPython at all
+        from IPython import get_ipython
+    except ImportError:
+        return False  # No IPython at all
+    shell = get_ipython()
 
     if shell is None:
         return False
