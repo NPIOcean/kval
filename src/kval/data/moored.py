@@ -135,7 +135,7 @@ def chop_deck(
     indices: tuple[int, int] | None = None,
     auto_accept: bool = False,
     verbose: bool = True,
-    min_samples: int = 3,
+    min_samples: int = 1,
 ) -> xr.Dataset:
     """
     Chop away start and end parts of a time series (xarray Dataset).
@@ -144,10 +144,10 @@ def chop_deck(
     `sd_thr` standard deviations away from the median, above or below (the
     user can also specify
     the indices to keep). The standard deviation is that of the whole record,
-    deck time included. An edge is only chopped if at least its first (or
-    last) `min_samples` samples are all that far from the median, so a
-    single noisy sample at the start or end of an in-water record is not
-    taken for deck time.
+    deck time included. With `min_samples` > 1, an edge is only chopped if
+    at least its first (or last) `min_samples` samples are all that far
+    from the median, so that a single noisy sample at the start or end of
+    an in-water record is not taken for deck time.
 
     Typical application: Remove data from a mooring record during which the
     instrument was on deck or being lowered/raised through the water column.
@@ -184,7 +184,9 @@ def chop_deck(
     min_samples : int, optional
         Minimum number of consecutive samples at the start (end) that must
         be off for the start (end) to be chopped automatically. Defaults
-        to 3.
+        to 1 (a single off sample is enough, e.g. for slowly sampling
+        instruments). For noisy, fast-sampled records, a higher value
+        (e.g. 3) avoids chopping an edge because of one noisy sample.
 
     Returns
     -------

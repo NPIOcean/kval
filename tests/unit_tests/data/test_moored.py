@@ -1030,12 +1030,15 @@ def test_chop_deck_detects_deck_time_with_a_single_nan_present():
 
 def test_chop_deck_no_deck_time_leaves_dataset_unchanged():
     """A record with no deck-time signature shouldn't have anything
-    chopped off."""
+    chopped off. (With deviations in both directions counted, about a third
+    of pure-noise samples are more than 1 sd from the median, so this needs
+    min_samples > 1.)"""
     np.random.seed(1)
     n = 500
     pres = 100 + 5 * np.random.randn(n)  # no ramp-down at start/end
     ds = xr.Dataset({'PRES': ('TIME', pres)}, coords={'TIME': np.arange(n)})
-    result = chop_deck(ds, variable='PRES', auto_accept=True, verbose=False)
+    result = chop_deck(ds, variable='PRES', auto_accept=True, verbose=False,
+                       min_samples=3)
     assert result.sizes['TIME'] == ds.sizes['TIME']
 
 
@@ -1069,18 +1072,18 @@ def test_chop_deck_pressure_unchanged_behaviour(make_ctd_ds):
     assert out.PRES.values.min() > 40
 
 
-def test_chop_deck_single_noisy_edge_sample_is_not_chopped():
-    """With deviations in both directions counted, one noisy sample at an
-    edge of an in-water record would otherwise be taken for deck time."""
+def test_chop_deck_min_samples():
+    """By default (min_samples=1) a single off sample at an edge is chopped;
+    with min_samples=3 a single noisy edge sample is not."""
     rng = np.random.default_rng(3)
     temp = 1.0 + 0.05 * rng.standard_normal(300)
     temp[0] = 1.2      # > 1 sd above the median, but a single sample
     temp[-2:] = 0.8    # two samples below
     ds = xr.Dataset({"TEMP": ("TIME", temp)}, coords={"TIME": np.arange(300)})
-    out = chop_deck(ds, variable="TEMP", auto_accept=True, verbose=False)
-    assert out.sizes["TIME"] == 300
     out = chop_deck(ds, variable="TEMP", auto_accept=True, verbose=False,
-                    min_samples=1)
+                    min_samples=3)
+    assert out.sizes["TIME"] == 300
+    out = chop_deck(ds, variable="TEMP", auto_accept=True, verbose=False)
     assert out.sizes["TIME"] < 300
 
 
