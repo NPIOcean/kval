@@ -1600,3 +1600,31 @@ def test_combine_datasets_merged_attr_lists_only_instruments_that_have_it(
     ds1.attrs['comment'] = 'only on A'
     out = combine_datasets(ds1, ds2, interval='1h', instr_names=['A', 'B'])
     assert out.attrs['comment'] == 'A: only on A'
+
+
+# moored.plot (inspect_time_series): no hourly-mean controls for daily data
+
+# (matplotlib 3.10 + numpy >= 2.5 warn about timedelta units when plotting
+# dates; not from kval)
+@pytest.mark.filterwarnings(
+    "ignore:The 'generic' unit for NumPy timedelta:DeprecationWarning")
+@pytest.mark.parametrize("freq, hourly_shown", [("1h", True), ("1D", False)])
+def test_plot_hourly_controls_only_for_sub_daily_data(freq, hourly_shown):
+    from unittest import mock
+    from kval.data.moored_tools import _moored_tools
+    shown = {}
+    t = pd.date_range("2024-01-01", periods=50, freq=freq)
+    ds = xr.Dataset({"TEMP": ("TIME", np.arange(50.0))}, coords={"TIME": t})
+    import ipywidgets as widgets
+
+    def fake_display(obj):
+        if isinstance(obj, widgets.Box):  # the container, not the canvas
+            shown["obj"] = obj
+
+    with mock.patch.object(_moored_tools, "display", fake_display):
+        _moored_tools.inspect_time_series(ds)
+    controls = shown["obj"].children[0]
+    labels = [box.children[0].description for box in controls.children
+              if hasattr(box, "children")]
+    assert ("Hourly mean" in labels) == hourly_shown
+    assert "Daily mean" in labels

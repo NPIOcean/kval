@@ -451,14 +451,23 @@ def inspect_time_series(ds: xr.Dataset) -> None:
 
     close_button.on_click(close_plot)
 
+    # Hourly means are pointless for data sampled once a day or less often
+    # (e.g. daily averages): leave out those controls then.
+    tvals = pd.DatetimeIndex(ds['TIME'].values)
+    median_step = (pd.Series(tvals).diff().median() if len(tvals) > 1
+                   else pd.NaT)
+    show_hourly = not (pd.notna(median_step)
+                       and median_step >= pd.Timedelta(hours=24))
+
     # Layout: Stack the controls horizontally
-    controls = widgets.HBox([
-        widgets.VBox([var_selector, grid_checkbox]),
-        widgets.VBox([hourly_mean_checkbox, hours_input],
-                     layout=widgets.Layout(width='200px')),
-        widgets.VBox([daily_mean_checkbox, days_input]),
-        close_button
-    ])  # Align items to the start)
+    control_boxes = [widgets.VBox([var_selector, grid_checkbox])]
+    if show_hourly:
+        control_boxes.append(
+            widgets.VBox([hourly_mean_checkbox, hours_input],
+                         layout=widgets.Layout(width='200px')))
+    control_boxes += [widgets.VBox([daily_mean_checkbox, days_input]),
+                      close_button]
+    controls = widgets.HBox(control_boxes)
 
 
     def plot_time_series(variable, hourly_apply, hours, daily_apply, days, grid_apply):
