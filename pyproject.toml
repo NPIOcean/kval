@@ -30,7 +30,6 @@ dependencies = [
   "cmocean>=3.0.3",
   "tqdm>=4.66.1",
   "ipympl>=0.9.3",
-  "xlrd>=2.0.1",
   "pyrsktools>=1.1.1",
   "netcdf4>=1.6.4",
   "pygeomag>=1.1.0",
