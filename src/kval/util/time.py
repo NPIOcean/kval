@@ -30,6 +30,12 @@ Time conversions. This module deals with several genuinely different
                        fraction-of-the-way-through-the-year
                        representation.
 
+Time zone: kval treats all times as UTC. Times are stored without a time
+zone (datetime64, or CF numeric time "<units> since <epoch>" with no
+offset, which CF reads as UTC), and ISO 8601 strings are written with a
+"Z". Instrument times are taken as they are in the files; kval cannot
+tell whether an instrument clock was set to UTC, so check that it was.
+
 For converting a whole xr.Dataset's TIME coordinate between CF numeric
 and datetime64, prefer kval.util.xr_funcs.time_as_datetime / time_as_float
 instead of anything in this module -- those handle a Dataset's TIME

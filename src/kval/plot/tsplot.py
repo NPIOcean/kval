@@ -158,6 +158,10 @@ def _draw_ts_background(ax, sa_range, ct_range, pres: float = 0,
         Whether to draw sigma0 (potential density) contours.
     freezing_line : bool, default=True
         Whether to draw the seawater freezing point line.
+        The freezing point is that of air-free seawater
+        (gsw.CT_freezing with saturation_fraction=0). Air-saturated
+        seawater freezes about 0.002 degC lower; this does not show on
+        a T-S plot.
     gade_line : bool, default=False
         Reserved for a future Gade-line implementation (meltwater mixing
         line). Not yet implemented -- raises NotImplementedError if True.
@@ -453,6 +457,10 @@ def tsplot(ds: xr.Dataset,
         Whether to draw sigma0 (potential density) contours.
     freezing_line : bool, default=False
         Whether to draw the seawater freezing point line.
+        The freezing point is that of air-free seawater
+        (gsw.CT_freezing with saturation_fraction=0). Air-saturated
+        seawater freezes about 0.002 degC lower; this does not show on
+        a T-S plot.
     freezing_line_pres : float, default=0
         Pressure [dbar] used for the freezing line calculation.
     marker : str, default='.'

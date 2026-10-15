@@ -91,9 +91,8 @@ def show_figure(fig):
     can be painted into it -- drawing first can paint into a canvas the
     front end hasn't connected to yet, which shows up as a blank or
     half-rendered plot that only fills in once the user interacts with
-    it. draw_idle() rather than draw() for the same reason: it schedules
-    the draw through ipympl's own event loop instead of forcing it
-    synchronously.
+    it. The figure is then drawn with fig.canvas.draw() (a synchronous
+    draw), if the canvas has a figure manager.
     """
     import matplotlib.pyplot as plt
     from IPython.display import display

@@ -64,6 +64,11 @@ def load_moored(
     Returns:
     - xr.Dataset:
         The loaded dataset.
+
+    Times: TIME is taken to be UTC (kval assumes UTC everywhere). The
+    times are those of the instrument clock (for SBE .cnv files,
+    computed from the start time in the header), so they are only UTC if
+    the instrument clock was set to UTC.
     """
     # Check file type and return an error if invalid
     if file.endswith(".nc"):

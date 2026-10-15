@@ -49,6 +49,9 @@ def ctds_from_cnv_dir(
     start_time_NMEA : bool, default=False
         If True, get the `start_time` attribute from the "NMEA UTC (Time)" 
         header line. Otherwise, use the "start_time" line (may occasionally cause issues).
+        Either way, the times are taken to be UTC (kval assumes UTC
+        everywhere): the "start_time" line is the CTD deck unit's clock, so
+        it is only UTC if that clock was set to UTC.
     profile : str, default='downcast'
         Specify the profile type (only relevant for unbinned input data). 
         Options: 'upcast', 'downcast', 'none'.
@@ -113,6 +116,9 @@ def ctds_from_cnv_list(
     start_time_NMEA : bool, default=False
         If True, get the `start_time` attribute from the "NMEA UTC (Time)" 
         header line. Otherwise, use the "start_time" line (may occasionally cause issues).
+        Either way, the times are taken to be UTC (kval assumes UTC
+        everywhere): the "start_time" line is the CTD deck unit's clock, so
+        it is only UTC if that clock was set to UTC.
     remove_duplicates : bool, default=True
         Remove duplicate columns (identical names). If not removed, duplicates 
         will be assigned suffixes: DUPLICATE, DUPLICATE2, etc.
