@@ -18,7 +18,6 @@ import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter, HourLocator
 import matplotlib as mpl
 
-from scipy import signal
 
 from kval.file import sbe, rbr, matfile
 from kval.data import dataset, edit
@@ -1306,6 +1305,27 @@ def plot(ds: xr.Dataset) -> None:
     _moored_tools.inspect_time_series(ds_cf)
 
 
+def _scale_and_detrend(values):
+    """
+    (x - mean) / std, then remove the least-squares linear trend over the
+    sample index (as scipy.signal.detrend does), using only the finite
+    values. NaNs are returned as NaN. All-NaN (or fewer than two finite
+    values) gives all NaN.
+    """
+    x = np.asarray(values, dtype=float)
+    out = np.full(x.shape, np.nan)
+    valid = np.isfinite(x)
+    if valid.sum() < 2:
+        return out
+    xv = x[valid]
+    sd = np.std(xv - xv.mean())
+    xv = (xv - xv.mean()) / sd if sd > 0 else xv - xv.mean()
+    idx = np.nonzero(valid)[0]
+    slope, intercept = np.polyfit(idx, xv, 1)
+    out[valid] = xv - (slope * idx + intercept)
+    return out
+
+
 # Standardize metadata
 def adjust_PSAL_from_CNDC_TEMP(
         ds: xr.Dataset,
@@ -1337,9 +1357,23 @@ def adjust_PSAL_from_CNDC_TEMP(
     Returns:
         xr.Dataset: A new dataset with updated PSAL values and a comment
         attribute.
+
+    Notes:
+        Works on the 1-D time series of a single instrument. Missing values
+        (NaN) in TEMP or CNDC are allowed: the scaling and detrending use the
+        remaining samples, and PSAL stays NaN where it cannot be computed.
+        The number of rejected samples is recorded in PSAL's
+        processing_history.
     '''
 
     ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
+
+    for varnm in ('TEMP', 'CNDC'):
+        if ds[varnm].ndim != 1:
+            raise ValueError(
+                f'adjust_PSAL_from_CNDC_TEMP works on the 1-D time series of '
+                f'a single instrument; {varnm} has dimensions '
+                f'{ds[varnm].dims}.')
 
     # Convert CNDC to mS/cm (raises on unrecognised units)
     CNDC_mS_cm = ds.CNDC.copy()
@@ -1370,23 +1404,18 @@ def adjust_PSAL_from_CNDC_TEMP(
     # Recalculate PSAL
     PSAL_ = gsw.SP_from_C(CNDC_, TEMP_, ds.PRES)
 
-    # Compute scaled TEMP and CNDC (for comparing the two quantitatively)
-    TEMP_scaled = (TEMP_ - TEMP_.mean()) / np.std(TEMP_ - TEMP_.mean())
-    CNDC_scaled = (CNDC_ - CNDC_.mean()) / np.std(CNDC_ - CNDC_.mean())
-
-    # Detrend
-    TEMP_scaled = xr.apply_ufunc(signal.detrend, TEMP_scaled)
-    CNDC_scaled = xr.apply_ufunc(signal.detrend, CNDC_scaled)
+    # Scaled (SD-normalized) and detrended TEMP and CNDC, for comparing the
+    # two quantitatively. NaN-tolerant: NaNs stay NaN and are never flagged.
+    TEMP_scaled = TEMP_.copy(data=_scale_and_detrend(TEMP_.values))
+    CNDC_scaled = CNDC_.copy(data=_scale_and_detrend(CNDC_.values))
 
     # Flag for PSAL samples to reject
     reject_sal = np.bool_(np.abs(CNDC_scaled - TEMP_scaled) > max_diff)
     n_samp = np.sum(reject_sal)
     comment += (
         'Samples where SD-normalized scaled temperature and conductivity '
-        f'anomalies diverge by >{max_diff} were rejected.')
-    post_proc_comment = (
-        'Rejected samples where normalized TEMP and CNDC '
-        f'anomalies diverged by >{max_diff} ({n_samp} samples).')
+        f'anomalies diverge by >{max_diff} were rejected '
+        f'({n_samp} samples).')
 
     # Apply flag
     PSAL_ = PSAL_.where(~reject_sal)

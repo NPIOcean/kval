@@ -1326,6 +1326,60 @@ def test_adjust_PSAL_from_CNDC_TEMP_same_result_for_S_m_and_mS_cm(make_ctd_ds):
     np.testing.assert_allclose(a.PSAL.values, b.PSAL.values, rtol=1e-9)
 
 
+def _psal_spike_ds(make_ctd_ds, spike_at=500, n=2000):
+    """make_ctd_ds with one conductivity spike (-> one PSAL spike)."""
+    ds = make_ctd_ds(n=n)
+    ds["CNDC"].values[spike_at] += 0.5
+    return calculate_PSAL(ds)
+
+
+def test_adjust_PSAL_from_CNDC_TEMP_same_result_as_before_without_nans(make_ctd_ds):
+    """With no NaNs, the NaN-tolerant scaling/detrending gives exactly the
+    rejections of the original scipy.signal.detrend implementation."""
+    from scipy import signal
+    ds = _psal_spike_ds(make_ctd_ds)
+    out = adjust_PSAL_from_CNDC_TEMP(ds, max_diff=1)
+
+    def old_scaled(x):
+        x = (x - x.mean()) / np.std(x - x.mean())
+        return signal.detrend(x)
+    reject = np.abs(old_scaled(ds.CNDC.values) - old_scaled(ds.TEMP.values)) > 1
+    np.testing.assert_array_equal(np.isnan(out.PSAL.values), reject)
+    assert reject[500]
+
+
+@pytest.mark.parametrize("var", ["TEMP", "CNDC"])
+def test_adjust_PSAL_from_CNDC_TEMP_tolerates_nans(make_ctd_ds, var):
+    """A single NaN used to crash scipy.signal.detrend."""
+    ds = _psal_spike_ds(make_ctd_ds)
+    ds[var].values[[100, 101, 1500]] = np.nan
+    out = adjust_PSAL_from_CNDC_TEMP(ds, max_diff=1)
+    assert np.isnan(out.PSAL.values[500])          # spike still rejected
+    assert np.isnan(out.PSAL.values[[100, 101, 1500]]).all()
+    assert np.isfinite(out.PSAL.values[[0, 99, 102, 1499, 1501]]).all()
+
+
+def test_adjust_PSAL_from_CNDC_TEMP_records_number_rejected(make_ctd_ds):
+    out = adjust_PSAL_from_CNDC_TEMP(_psal_spike_ds(make_ctd_ds), max_diff=1)
+    n = int(np.isnan(out.PSAL.values).sum())
+    assert f"({n} samples)" in out.PSAL.attrs["processing_history"]
+
+
+def test_adjust_PSAL_from_CNDC_TEMP_all_nan_temp_does_not_crash(make_ctd_ds):
+    ds = make_ctd_ds(n=200)
+    ds["TEMP"].values[:] = np.nan
+    out = adjust_PSAL_from_CNDC_TEMP(ds, max_diff=1)
+    assert np.isnan(out.PSAL.values).all()
+
+
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_adjust_PSAL_from_CNDC_TEMP_refuses_2d_input(make_ctd_ds):
+    c = combine_datasets(make_ctd_ds(seed=1), make_ctd_ds(seed=2),
+                         interval="1h", instr_names=["a", "b"])
+    with pytest.raises(ValueError, match="1-D time series"):
+        adjust_PSAL_from_CNDC_TEMP(c)
+
+
 @pytest.mark.parametrize("as_datetime", [False, True])
 def test_adjust_PSAL_from_CNDC_TEMP_plot_lines_share_the_data_time_axis(
         make_ctd_ds, as_datetime):
