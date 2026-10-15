@@ -566,8 +566,17 @@ def add_standard_var_attrs(
         # Remove suffix for core name (e.g. "CNDC" from "CNDC_CTD")
         core_name = core_name.split("_")[0]
 
+        # Bin statistics from time_average (e.g. TEMP_n_samples, TEMP_std)
+        # already have their attributes; the standard ones of the measured
+        # variable (units, valid range, ..) would be wrong for them.
+        is_bin_statistic = varnm.endswith("_n_samples") or (
+            varnm.endswith("_std")
+            and str(ds[varnm].attrs.get("cell_methods", "")).endswith(
+                "standard_deviation"))
+
         # Add standard variable attributes if found in _standard_attrs
-        if core_name in _standard_attrs.standard_var_attrs:
+        if (core_name in _standard_attrs.standard_var_attrs
+                and not is_bin_statistic):
             var_attrs_dict = _standard_attrs.standard_var_attrs[
                 core_name
             ].copy()

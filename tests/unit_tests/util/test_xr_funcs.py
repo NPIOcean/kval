@@ -805,3 +805,93 @@ def test_promote_cf_coordinates_promotes_bounds_and_global_coordinates():
     assert "TIME_bnds" in out.coords
     assert "coordinates" not in out.attrs
     assert out.attrs["title"] == "x"
+
+
+# ---------------------------------------------------------------------
+# time_average: optional bin statistics (stats=...)
+
+def _stats_ds():
+    t = pd.date_range("2024-01-01", periods=48, freq="1h")
+    ds = xr.Dataset({"TEMP": ("TIME", np.arange(48.0)),
+                     "PSAL": ("TIME", np.full(48, 35.0))},
+                    coords={"TIME": t})
+    ds.TEMP.attrs = {"units": "degree_Celsius",
+                     "standard_name": "sea_water_temperature",
+                     "long_name": "Sea water temperature",
+                     "units_metadata": "temperature: on_scale",
+                     "valid_min": -3.0, "valid_max": 40.0}
+    ds["TEMP"][5] = np.nan
+    return ds
+
+
+def test_time_average_default_is_mean_only():
+    out = time_average(_stats_ds(), "1D")
+    assert set(out.data_vars) == {"TEMP", "PSAL"}
+    assert "ancillary_variables" not in out.TEMP.attrs
+
+
+def test_time_average_n_samples():
+    out = time_average(_stats_ds(), "1D", stats=["n_samples"])
+    np.testing.assert_array_equal(out.TEMP_n_samples.values, [23, 24])
+    np.testing.assert_array_equal(out.PSAL_n_samples.values, [24, 24])
+    assert out.TEMP_n_samples.dtype == np.int32
+    assert out.TEMP_n_samples.attrs["standard_name"] == "number_of_observations"
+    assert out.TEMP_n_samples.attrs["units"] == "1"
+    assert out.TEMP.attrs["ancillary_variables"] == "TEMP_n_samples"
+
+
+def test_time_average_std_and_median():
+    ds = _stats_ds()
+    out = time_average(ds, "1D", stats=["std", "median"])
+    day1 = ds.TEMP.values[:24]
+    np.testing.assert_allclose(out.TEMP_std.values[0],
+                               np.nanstd(day1, ddof=1))
+    np.testing.assert_allclose(out.TEMP_median.values[0], np.nanmedian(day1))
+    std_attrs = out.TEMP_std.attrs
+    assert std_attrs["cell_methods"] == "TIME: standard_deviation"
+    assert std_attrs["units"] == "degree_Celsius"
+    assert std_attrs["units_metadata"] == "temperature: difference"
+    assert "valid_min" not in std_attrs
+    assert std_attrs["long_name"].startswith(
+        "Standard deviation of sea water temperature")
+    med_attrs = out.TEMP_median.attrs
+    assert med_attrs["cell_methods"] == "TIME: median"
+    assert med_attrs["valid_max"] == 40.0
+    # Std and median are not ancillary variables; only the counts are
+    assert "ancillary_variables" not in out.TEMP.attrs
+
+
+def test_time_average_stats_order_and_unknown_raises():
+    out = time_average(_stats_ds(), "1D", stats=["median", "n_samples"])
+    assert list(out.data_vars) == ["TEMP", "TEMP_n_samples", "TEMP_median",
+                                   "PSAL", "PSAL_n_samples", "PSAL_median"]
+    assert "TIME_bnds" in out.coords
+    with pytest.raises(ValueError, match="Unknown stats"):
+        time_average(_stats_ds(), "1D", stats=["mean"])
+
+
+def test_time_average_stats_of_averaged_data_are_replaced_not_nested():
+    once = time_average(_stats_ds(), "6h", stats=["n_samples"])
+    with pytest.warns(UserWarning, match="replacing"):
+        twice = time_average(once, "1D", stats=["n_samples"])
+    assert "TEMP_n_samples_n_samples" not in twice.data_vars
+    # Now the number of 6-hour means in each day
+    np.testing.assert_array_equal(twice.TEMP_n_samples.values, [4, 4])
+    assert twice.TEMP.attrs["ancillary_variables"] == "TEMP_n_samples"
+
+
+def test_time_average_stats_survive_min_fraction():
+    out = time_average(_stats_ds().isel(TIME=slice(0, 40)), "1D",
+                       min_fraction=0.9, stats=["n_samples"])
+    assert out.sizes["TIME"] == 1
+    assert out.TEMP_n_samples.sizes["TIME"] == 1
+
+
+def test_standard_var_attrs_leave_bin_statistics_alone():
+    from kval.metadata.conventionalize import add_standard_var_attrs
+    out = add_standard_var_attrs(
+        time_average(_stats_ds(), "1D", stats=["n_samples", "std"]))
+    assert out.TEMP_n_samples.attrs["units"] == "1"
+    assert "valid_min" not in out.TEMP_n_samples.attrs
+    assert "valid_min" not in out.TEMP_std.attrs
+    assert "reference_scale" in out.TEMP.attrs  # still added to TEMP itself

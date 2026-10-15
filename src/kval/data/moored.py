@@ -36,7 +36,7 @@ from kval.plot.tsplot import  tsplot, tsplot_pick
 
 from kval.data.edit import threshold, offset, linear_drift
 from kval.util.xr_funcs import time_average, append_processing_history, time_as_datetime, time_as_float, promote_cf_coordinates
-from kval.util.xr_funcs import (_add_cell_method, _describe_interval,
+from kval.util.xr_funcs import (_add_cell_method, _describe_interval, _bin_edges,
                                 _time_averaging_attr, _averaged_time_long_name)
 from kval.util.netcdf import bounds_map
 if internals.is_notebook():
@@ -1554,6 +1554,7 @@ def combine_datasets(
     instr_names: list = None,
     time_dim: str = 'TIME',
     min_fraction: float | None = None,
+    stats: list[str] | None = None,
 ) -> xr.Dataset:
     """
     Combine multiple xarray Datasets (e.g. different instruments on a
@@ -1573,7 +1574,7 @@ def combine_datasets(
 
     With method='time_average', the output records the averaging the same
     way as `time_average` does (CF bounds and cell_methods): a coordinate
-    `<time_dim>_bnds` holds the start and end of each bin, [t, t + interval),
+    `<time_dim>_bnds` holds the start and end of each bin, [start, end),
     the averaged variables get cell_methods='TIME: mean', and `time_dim`
     gets a 'time_averaging' attribute describing the timestamps (always the
     START of the bin here). With method='interpolate' the values are
@@ -1612,8 +1613,11 @@ def combine_datasets(
     interval : str
         Spacing of the common TIME grid, as a pandas frequency string
         (e.g. '1h', '30min', '1D'). No default -- must be chosen based on
-        the data being combined. Must be a fixed-duration interval (not
-        calendar-based like 'M'/'Y').
+        the data being combined. Calendar-based intervals are also
+        supported, as in `time_average` ('MS'/'ME' calendar months,
+        'YS'/'YE' calendar years, 'W' weeks): the grid points are then
+        the starts of the calendar periods (unevenly spaced), and with
+        method='interpolate' the values are interpolated to those times.
     method : {'time_average', 'interpolate'}, default='time_average'
         How to put each dataset onto the common grid; see above.
     instr_dim : str, default='INSTR'
@@ -1630,6 +1634,10 @@ def combine_datasets(
         less than this fraction of the expected samples (their values become
         NaN in the combined dataset). See `time_average`. Default None keeps
         all bins but warns about incomplete first/last bins.
+    stats : list of str, optional
+        Only for method='time_average': bin statistics to add besides the
+        mean ('n_samples', 'std', 'median'), e.g. TEMP_n_samples(INSTR,
+        TIME). See `time_average`. Default None: the mean only.
  
     Returns
     -------
@@ -1653,6 +1661,8 @@ def combine_datasets(
         raise ValueError("method must be 'time_average' or 'interpolate'")
     if min_fraction is not None and method != 'time_average':
         raise ValueError("min_fraction is only used with method='time_average'")
+    if stats and method != 'time_average':
+        raise ValueError("stats is only used with method='time_average'")
     
     n = len(datasets)
  
@@ -1712,9 +1722,7 @@ def combine_datasets(
     try:
         interval_td = pd.Timedelta(interval)
     except ValueError:
-        raise ValueError(
-            f"combine_datasets needs a fixed-duration interval; '{interval}' "
-            "is calendar-based.")
+        interval_td = None  # calendar-based, e.g. 'ME'
     global_min = min(ds[time_dim].values.min() for ds in decoded)
     global_max = max(ds[time_dim].values.max() for ds in decoded)
     origin = 'epoch'
@@ -1726,16 +1734,27 @@ def combine_datasets(
     # directly comparable for the same `interval`. Flooring the first
     # sample to the interval (Timestamp.floor is epoch-anchored) gives the
     # same left edge that resample(origin='epoch') produces.
-    common_time = pd.date_range(
-        start=pd.Timestamp(global_min).floor(interval_td),
-        end=pd.Timestamp(global_max), freq=interval_td)
+    if interval_td is not None:
+        common_time = pd.date_range(
+            start=pd.Timestamp(global_min).floor(interval_td),
+            end=pd.Timestamp(global_max), freq=interval_td)
+        common_end = common_time + interval_td
+    else:
+        # Calendar periods covering the combined range: the same bins
+        # time_average makes (see _bin_edges), keyed by their real starts
+        edges, _ = _bin_edges(
+            pd.DatetimeIndex([global_min, global_max]), interval,
+            {'label': 'left'})
+        common_time = pd.DatetimeIndex(edges['start'].values)
+        common_end = pd.DatetimeIndex(edges['end'].values)
  
     averaged = []
     if method == 'time_average':
         for ds in decoded:
             ds_avg = time_average(
-                ds, interval=interval, label='left', origin=origin,
-                    time_dim=time_dim, min_fraction=min_fraction)
+                ds, interval=interval, label='left',
+                origin=origin if interval_td is not None else None,
+                time_dim=time_dim, min_fraction=min_fraction, stats=stats)
             ds_avg = ds_avg.reindex({time_dim: common_time})
             averaged.append(ds_avg)
     else:  # method == 'interpolate'
@@ -1788,10 +1807,19 @@ def combine_datasets(
                 arr[i, :] = da.values
                 # attrs come from the *original* (pre-averaging) dataset,
                 # since resample/mean doesn't necessarily preserve them
-                orig_attrs = dict(decoded[i][var].attrs) if var in decoded[i] else {}
-                if method == 'time_average':
-                    orig_attrs['cell_methods'] = _add_cell_method(
-                        orig_attrs.get('cell_methods'), time_dim, 'mean')
+                if var in decoded[i]:
+                    orig_attrs = dict(decoded[i][var].attrs)
+                    if method == 'time_average':
+                        orig_attrs['cell_methods'] = _add_cell_method(
+                            orig_attrs.get('cell_methods'), time_dim, 'mean')
+                        if 'ancillary_variables' in da.attrs:
+                            # e.g. TEMP_n_samples (stats=['n_samples'])
+                            orig_attrs['ancillary_variables'] = (
+                                da.attrs['ancillary_variables'])
+                else:
+                    # Made by time_average (e.g. TEMP_n_samples), which
+                    # set its attributes
+                    orig_attrs = dict(da.attrs)
                 var_attr_sets.append((labels[i], orig_attrs))
  
         shared_attrs, per_instr_attrs = _split_attrs(var_attr_sets, labels)
@@ -1838,7 +1866,7 @@ def combine_datasets(
     if method == 'time_average':
         bounds_name = f"{time_dim}_bnds"
         starts = common_time.values
-        ends = (common_time + interval_td).values
+        ends = common_end.values
         ds_out = ds_out.assign_coords(
             {bounds_name: ((time_dim, 'bnds'), np.stack([starts, ends], axis=1))})
         ds_out[time_dim].attrs['long_name'] = _averaged_time_long_name('left')

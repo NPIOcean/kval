@@ -1133,10 +1133,66 @@ def test_combine_datasets_grid_does_not_depend_on_other_inputs(make_ctd_ds):
     np.testing.assert_array_equal(sub.values, c2.TEMP.sel(INSTR="a").values)
 
 
-def test_combine_datasets_calendar_interval_raises(make_ctd_ds):
+@pytest.mark.parametrize("interval", ["MS", "ME"])
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_combine_datasets_calendar_interval(make_ctd_ds, interval):
+    """Calendar intervals used to raise ValueError ('fixed-duration')."""
+    # 10-min sampling: a from 9 Nov 2021 (~21 days), b from 20 Nov (~35 days)
+    a = make_ctd_ds(seed=1, n=3000)
+    b = make_ctd_ds(seed=2, start="2021-11-20", n=5000)
+    c = xr_funcs.time_as_datetime(
+        combine_datasets(a, b, interval=interval, instr_names=["a", "b"]))
+    expected_starts = np.array(["2021-11-01", "2021-12-01"],
+                               dtype="datetime64[ns]")
+    np.testing.assert_array_equal(c.TIME.values.astype("datetime64[ns]"),
+                                  expected_starts)
+    np.testing.assert_array_equal(
+        c.TIME_bnds.values[:, 1].astype("datetime64[ns]"),
+        np.array(["2021-12-01", "2022-01-01"], dtype="datetime64[ns]"))
+    assert "calendar-month" in c.TIME.attrs["time_averaging"]
+    # The means are those of time_average on each dataset alone
+    for name, ds in (("a", a), ("b", b)):
+        avg = xr_funcs.time_as_datetime(
+            xr_funcs.time_average(ds, interval, label="left"))
+        sub = c.TEMP.sel(INSTR=name).sel(TIME=avg.TIME.values)
+        np.testing.assert_allclose(sub.values, avg.TEMP.values)
+    # a ends on 30 Nov: no December value
+    assert np.isnan(c.TEMP.sel(INSTR="a").values[1])
+
+
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_combine_datasets_calendar_interval_interpolate(make_ctd_ds):
+    a = make_ctd_ds(seed=1, n=3000)
+    b = make_ctd_ds(seed=2, start="2021-11-20", n=5000)
+    c = xr_funcs.time_as_datetime(combine_datasets(
+        a, b, interval="MS", method="interpolate", instr_names=["a", "b"]))
+    assert "TIME_bnds" not in c.variables
+    # 1 Dec is inside b's range only
+    dec = c.TEMP.sel(TIME=np.datetime64("2021-12-01"))
+    assert np.isnan(dec.sel(INSTR="a")) and np.isfinite(dec.sel(INSTR="b"))
+
+
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_combine_datasets_stats(make_ctd_ds):
+    a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2, start="2021-11-10")
+    c = combine_datasets(a, b, interval="1D", instr_names=["a", "b"],
+                         stats=["n_samples", "std"])
+    assert c.TEMP_n_samples.dims == ("INSTR", "TIME")
+    assert c.TEMP_n_samples.attrs["standard_name"] == "number_of_observations"
+    assert c.TEMP.attrs["ancillary_variables"] == "TEMP_n_samples"
+    assert c.TEMP.attrs["cell_methods"] == "TIME: mean"
+    assert c.TEMP_std.attrs["cell_methods"] == "TIME: standard_deviation"
+    # A full day of 10-min samples
+    assert np.nanmax(c.TEMP_n_samples.values) == 144
+    # b starts a day later: no samples for it on day 1
+    assert np.isnan(c.TEMP_n_samples.sel(INSTR="b").values[0])
+
+
+def test_combine_datasets_stats_requires_time_average(make_ctd_ds):
     a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2)
-    with pytest.raises(ValueError, match="fixed-duration"):
-        combine_datasets(a, b, interval="MS")
+    with pytest.raises(ValueError, match="stats"):
+        combine_datasets(a, b, interval="1h", method="interpolate",
+                         stats=["n_samples"])
 
 
 @pytest.mark.filterwarnings("ignore::UserWarning")  # partial-bin warnings

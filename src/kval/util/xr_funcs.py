@@ -625,6 +625,75 @@ def _add_cell_method(existing, dim: str, method: str = 'mean') -> str:
     return f"{existing} {entry}"
 
 
+# Bin statistics time_average can add besides the mean, and the suffix of
+# the variables they go in (e.g. TEMP_n_samples)
+_TIME_AVERAGE_STATS = ('n_samples', 'std', 'median')
+
+
+def _check_stats(stats):
+    """Validate the `stats` argument of time_average/combine_datasets."""
+    if stats is None:
+        return ()
+    if isinstance(stats, str):
+        stats = (stats,)
+    unknown = [st for st in stats if st not in _TIME_AVERAGE_STATS]
+    if unknown:
+        raise ValueError(f"Unknown stats {unknown}; choose from "
+                         f"{list(_TIME_AVERAGE_STATS)}")
+    return tuple(st for st in _TIME_AVERAGE_STATS if st in stats)
+
+
+def _is_stat_var(varnm):
+    """True for variables like TEMP_n_samples, TEMP_std, TEMP_median."""
+    return any(varnm.endswith(f"_{st}") for st in _TIME_AVERAGE_STATS)
+
+
+def _lower_first(text):
+    return text[:1].lower() + text[1:] if text else text
+
+
+def _stat_attrs(stat, var, var_attrs, time_dim, interval_desc):
+    """Attributes for the bin statistic `stat` of variable `var`."""
+    name = (_lower_first(var_attrs['long_name']) if 'long_name' in var_attrs
+            else var)
+    if stat == 'n_samples':
+        return {
+            'standard_name': 'number_of_observations',
+            'units': '1',
+            'long_name': (f"Number of samples in each {interval_desc} "
+                          f"averaging bin of {var}"),
+            'coverage_content_type': 'auxiliaryInformation',
+        }
+    if stat == 'std':
+        attrs = {k: var_attrs[k] for k in
+                 ('standard_name', 'units', 'units_metadata',
+                  'coverage_content_type') if k in var_attrs}
+        if attrs.get('units_metadata') == 'temperature: on_scale':
+            # A standard deviation is a temperature difference
+            attrs['units_metadata'] = 'temperature: difference'
+        attrs['long_name'] = (f"Standard deviation of {name} within each "
+                              f"{interval_desc} averaging bin")
+        attrs['cell_methods'] = _add_cell_method(
+            var_attrs.get('cell_methods'), time_dim, 'standard_deviation')
+        return attrs
+    # median
+    attrs = {k: v for k, v in var_attrs.items()
+             if k not in ('ancillary_variables', 'cell_methods', 'long_name')}
+    attrs['long_name'] = (f"Median of {name} within each {interval_desc} "
+                          "averaging bin")
+    attrs['cell_methods'] = _add_cell_method(
+        var_attrs.get('cell_methods'), time_dim, 'median')
+    return attrs
+
+
+def _add_ancillary(existing, name):
+    """Add `name` to a space-separated CF ancillary_variables string."""
+    names = (existing or "").split()
+    if name not in names:
+        names.append(name)
+    return " ".join(names)
+
+
 def time_average(
     ds: xr.Dataset,
     interval: str = '1D',
@@ -632,6 +701,7 @@ def time_average(
     origin: str | None = 'epoch',
     time_dim: str = 'TIME',
     min_fraction: float | None = None,     
+    stats: list[str] | None = None,
     **resample_kwargs,
 ) -> xr.Dataset:
     """
@@ -708,6 +778,23 @@ def time_average(
         because its mean is then not representative of the full interval
         (and with label='center' it is stamped at the bin centre, not at the
         mean time of its samples).
+    stats : list of str, optional
+        Bin statistics to add besides the mean, for each averaged variable
+        (here for TEMP). Default None: the mean only.
+        - 'n_samples': TEMP_n_samples, the number of non-NaN samples in
+          each bin (standard_name 'number_of_observations'). It is listed
+          in TEMP's ancillary_variables attribute (CF 3.4).
+        - 'std': TEMP_std, the sample standard deviation (ddof=1) within
+          each bin, with cell_methods 'TIME: standard_deviation'. NaN for
+          bins with fewer than 2 samples.
+        - 'median': TEMP_median, the median within each bin, with
+          cell_methods 'TIME: median'.
+        No statistics are made of variables that are themselves statistics
+        (names ending in _n_samples, _std or _median, e.g. from averaging
+        before). Such a variable is replaced (with a warning) if the same
+        statistic is asked for again; otherwise it is averaged like any
+        other variable, which for counts and standard deviations is not
+        meaningful.
     **resample_kwargs
         Additional keyword arguments passed through to xr.Dataset.resample
         (e.g. `closed`).
@@ -730,6 +817,7 @@ def time_average(
         raise ValueError(f"'{time_dim}' is not a dimension in the dataset")
     if label not in ('center', 'left', 'right'):
         raise ValueError("label must be one of 'center', 'left', or 'right'")
+    stats = _check_stats(stats)
 
     # If TIME is still CF-encoded (raw numeric, e.g. from load_moored, which
     # loads with decode_cf=False), decode it so resample() has a real
@@ -830,9 +918,50 @@ def time_average(
     ]
     ds_numeric = ds.drop_vars(dropped_vars + time_indep_vars)
 
-    ds_out = ds_numeric.resample(
-        {time_dim: resample_freq}, **resample_kwargs_full
-    ).mean()
+    # Statistics that are about to be made again (e.g. TEMP_n_samples from
+    # an earlier averaging) are replaced, not averaged
+    replaced = [f"{v}_{st}" for v in ds_numeric.data_vars
+                if not _is_stat_var(v) for st in stats
+                if f"{v}_{st}" in ds_numeric.data_vars]
+    if replaced:
+        warnings.warn(
+            f"time_average: replacing existing variable(s) {replaced} with "
+            "the statistics of the new averaging bins.", UserWarning,
+            stacklevel=2)
+        ds_numeric = ds_numeric.drop_vars(replaced)
+        for v in ds_numeric.data_vars:
+            if 'ancillary_variables' in ds_numeric[v].attrs:
+                kept = [a for a in ds_numeric[v].attrs['ancillary_variables'].split()
+                        if a not in replaced]
+                ds_numeric[v].attrs['ancillary_variables'] = " ".join(kept)
+                if not kept:
+                    del ds_numeric[v].attrs['ancillary_variables']
+
+    resampler = ds_numeric.resample(
+        {time_dim: resample_freq}, **resample_kwargs_full)
+    ds_out = resampler.mean()
+
+    # --- Optional bin statistics (TEMP_n_samples, TEMP_std, TEMP_median) ---
+    stat_names = {}  # (variable, stat) -> name of the statistic variable
+    if stats:
+        interval_desc = _describe_interval(interval, interval_td)
+        stat_vars = [v for v in ds_numeric.data_vars if not _is_stat_var(v)]
+        for stat in stats:
+            if stat == 'n_samples':
+                result = resampler.count()
+            elif stat == 'std':
+                result = resampler.std(ddof=1)
+            else:
+                result = resampler.median()
+            for var in stat_vars:
+                stat_name = f"{var}_{stat}"
+                da = result[var]
+                if stat == 'n_samples':
+                    da = da.astype('int32')
+                da.attrs = _stat_attrs(stat, var, ds_numeric[var].attrs,
+                                       time_dim, interval_desc)
+                ds_out[stat_name] = da
+                stat_names[(var, stat)] = stat_name
 
     # Drop incomplete bins if requested
     if min_fraction is not None and bin_fraction is not None:
@@ -872,6 +1001,21 @@ def time_average(
         if var in ds_out.data_vars:
             ds_out[var].attrs['cell_methods'] = _add_cell_method(
                 ds_out[var].attrs.get('cell_methods'), time_dim, 'mean')
+    for (var, stat), stat_name in stat_names.items():
+        if stat == 'n_samples':
+            ds_out[var].attrs['ancillary_variables'] = _add_ancillary(
+                ds_out[var].attrs.get('ancillary_variables'), stat_name)
+    if stat_names:
+        # Put each variable's statistics right after it
+        order = []
+        for var in ds_out.data_vars:
+            if var in order:
+                continue
+            order.append(var)
+            order += [stat_names[(var, st)] for st in stats
+                      if (var, st) in stat_names]
+        ds_out = xr.Dataset({var: ds_out[var] for var in order},
+                            coords=ds_out.coords, attrs=ds_out.attrs)
 
     # A time_coverage_resolution global attribute (ACDD) describes the
     # sampling of the input (e.g. 15 min from an instrument file), not of
