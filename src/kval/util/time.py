@@ -44,6 +44,7 @@ import xarray as xr
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import numpy as np
+from kval.util.netcdf import bounds_map
 
 
 #### CANONICAL CF NUMERIC TIME <-> DATETIME CONVERSION
@@ -401,22 +402,33 @@ _CF_UNIT_SECONDS = {
 }
 
 
-def is_time_like(name, var) -> bool:
+def is_time_like(name, var, ds=None) -> bool:
     """True if a variable is a time variable (by name or CF metadata).
 
     Time variables must never be down-cast: values are large offsets from an
     epoch (e.g. ~19 000 days since 1970), so float32 cannot resolve the
     sampling interval (see `numeric_time_resolution_seconds`).
+
+    If the dataset `ds` is given, the boundary variable of a time variable
+    (e.g. TIME_bnds, named by TIME's 'bounds' attribute) also counts as
+    time-like. CF boundary variables carry no units of their own (they
+    inherit TIME's), so they can't be recognised from their own attributes.
     """
     attrs = getattr(var, "attrs", {}) or {}
     units = str(attrs.get("units", "")).lower()
-    return (
+    if (
         str(name).upper() == "TIME"
         or " since " in units
         or attrs.get("standard_name") == "time"
         or attrs.get("axis") == "T"
         or getattr(var.dtype, "kind", "") in ("M", "m")
-    )
+    ):
+        return True
+    if ds is not None:
+        parent = bounds_map(ds).get(name)
+        if parent is not None and parent != name:
+            return is_time_like(parent, ds[parent])
+    return False
 
 
 def numeric_time_resolution_seconds(values, units: str, dtype=None) -> float:

@@ -406,3 +406,40 @@ def test_convert_64_to_32_step_guard_keeps_offset_dominated_variable():
     ds = xr.Dataset({"X": ("N", x)})
     with pytest.warns(UserWarning, match="lose resolution"):
         assert conventionalize.convert_64_to_32(ds).X.dtype == np.float64
+
+# ---------------------------------------------------------------------
+# CF boundary variables (e.g. TIME_bnds)
+# ---------------------------------------------------------------------
+
+def _daily_ds_with_bounds():
+    """Daily means with numeric TIME and TIME_bnds (no attributes of their
+    own, as CF recommends)."""
+    days = 18940.0 + np.arange(30)
+    return xr.Dataset(
+        {"TEMP": ("TIME", np.linspace(1, 2, 30))},
+        coords={"TIME": ("TIME", days + 0.5,
+                         {"units": "days since 1970-01-01", "bounds": "TIME_bnds"}),
+                "TIME_bnds": (("TIME", "bnds"), np.stack([days, days + 1], 1))})
+
+
+def test_convert_64_to_32_never_converts_time_bounds():
+    """TIME_bnds has no units of its own, and at a 1-day spacing float32
+    rounding (~170 s) passes the resolution check -- so without knowing it
+    belongs to TIME it would be silently converted."""
+    out = conventionalize.convert_64_to_32(_daily_ds_with_bounds())
+    assert out.TIME_bnds.dtype == np.float64
+    assert out.TEMP.dtype == np.float32
+
+
+def test_nans_to_fill_value_skips_bounds_data_variable():
+    ds = _daily_ds_with_bounds().reset_coords("TIME_bnds")  # as data variable
+    out = conventionalize.nans_to_fill_value(ds)
+    assert "_FillValue" not in out.TIME_bnds.attrs
+    assert "_FillValue" in out.TEMP.attrs
+
+
+def test_add_standard_var_attrs_leaves_bounds_alone():
+    """'TIME_bnds' must not pick up the standard attributes of 'TIME'."""
+    out = conventionalize.add_standard_var_attrs(_daily_ds_with_bounds())
+    assert out.TIME_bnds.attrs == {}
+    assert out.TIME.attrs["standard_name"] == "time"

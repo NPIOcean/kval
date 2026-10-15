@@ -263,6 +263,12 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
         9. Global ACDD metadata presence and Conventions.
        10. Variable dimension consistency — all dims must be coordinates.
        11. FLAG variable structure — must have flag_meanings / flag_values.
+
+    CF boundary variables (e.g. TIME_bnds, named by TIME's 'bounds'
+    attribute) are exempt from the attribute checks (3, 6, 8) and from the
+    dimension check (10): CF has them inherit units etc. from the variable
+    they belong to, and their extra dimension ('bnds') has no coordinate.
+    Time bounds are checked like time variables in 1 and 1b.
     """
     try:
         check, warn, cross, arrow = "✅", "⚠️", "❌", "⮕"
@@ -271,6 +277,8 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
 
     problems, passed, issues = [], [], 0
     skip_vars = {"STATION", "CRUISE", "DEPTH_INDEX", "NISKIN_NUMBER", "CAST"}
+    bounds_parent = netcdf.bounds_map(ds)
+    skip_vars = skip_vars | set(bounds_parent)
     vars_relevant = [v for v in ds.variables if v not in skip_vars]
     data_vars_relevant = [v for v in ds.data_vars if v not in skip_vars]
 
@@ -278,7 +286,7 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
     # Time variables are exempt: they must stay 64-bit (see convert_64_to_32).
     bad_types = [v for v in ds.variables
                  if ds[v].dtype in (np.int64, np.float64)
-                 and not _time.is_time_like(v, ds[v])]
+                 and not _time.is_time_like(v, ds[v], ds)]
     if bad_types:
         problems.append(
             f"{warn} 64-bit types (32-bit is recommended):\n{', '.join(bad_types)}\n   {arrow} "
@@ -292,9 +300,13 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
     # 1b. numeric time stored with too little resolution (e.g. float32)
     for v in ds.variables:
         var = ds[v]
-        if _time.is_time_like(v, var) and var.dtype.kind in "fi" and var.dtype.itemsize < 8:
+        if _time.is_time_like(v, var, ds) and var.dtype.kind in "fi" and var.dtype.itemsize < 8:
+            units = var.attrs.get("units", "")
+            if not units and v in bounds_parent:
+                # Bounds have no units of their own; they use their parent's
+                units = ds[bounds_parent[v]].attrs.get("units", "")
             res = _time.numeric_time_resolution_seconds(
-                var.values, var.attrs.get("units", ""), var.dtype)
+                var.values, units, var.dtype)
             if np.isnan(res) or res > 1.0:
                 res_txt = "unknown" if np.isnan(res) else f"~{res:.0f} s"
                 problems.append(
@@ -397,7 +409,7 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
         passed.append(f"{check} No 'SBE_FLAG' variable present")
 
     # 8. Coordinate checks
-    coord_vars = list(ds.coords)
+    coord_vars = [c for c in ds.coords if c not in bounds_parent]
     if not coord_vars:
         problems.append(f"{cross} No coordinate variables found")
         issues += 1

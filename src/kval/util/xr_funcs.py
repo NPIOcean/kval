@@ -9,6 +9,8 @@ import xarray as xr
 import numpy as np
 import pandas as pd
 from xarray.coding.times import encode_cf_datetime
+from pandas.tseries.frequencies import to_offset
+from kval.util.netcdf import bounds_map, bounds_vars
 
 
 def time_as_datetime(ds, time_dim='TIME'):
@@ -76,28 +78,59 @@ def time_as_float(ds, time_dim='TIME', units=None, calendar=None):
         calendar (str, optional): CF calendar. Defaults to 'standard' if
             not remembered or passed explicitly.
 
+    If time_dim has a CF boundary variable (named by its 'bounds' attribute,
+    e.g. TIME_bnds), that is encoded too, with the same units and calendar
+    (CF 7.1: boundary variables take their units from the parent variable).
+
     Returns:
         xr.Dataset: Dataset with time_dim as raw numeric CF time.
     """
     ds = ds.copy(deep=True)
+    bnds = ds[time_dim].attrs.get('bounds')
+    bnds_needs_encoding = (
+        isinstance(bnds, str) and bnds in ds.variables
+        and np.issubdtype(ds[bnds].dtype, np.datetime64))
+
     if np.issubdtype(ds[time_dim].dtype, np.number):
-        return ds
-    if units is None:
-        units = ds[time_dim].encoding.get('units')
-    if calendar is None:
-        calendar = ds[time_dim].encoding.get('calendar', 'standard')
-    if units is None:
-        units = 'days since 1970-01-01 00:00'
-        warnings.warn(
-            f"No known original units for '{time_dim}' -- defaulting to "
-            f"'{units}'. Pass units= explicitly to silence this."
+        if not bnds_needs_encoding:
+            return ds
+        # TIME is already numeric: encode the bounds in TIME's own units
+        units = ds[time_dim].attrs.get('units')
+        calendar = ds[time_dim].attrs.get('calendar', 'standard')
+        if units is None:
+            raise ValueError(
+                f"'{time_dim}' is numeric but has no 'units' attribute, so "
+                f"its bounds variable '{bnds}' cannot be encoded.")
+    else:
+        if units is None:
+            units = ds[time_dim].encoding.get('units')
+        if calendar is None:
+            calendar = ds[time_dim].encoding.get('calendar', 'standard')
+        if units is None:
+            units = 'days since 1970-01-01 00:00'
+            warnings.warn(
+                f"No known original units for '{time_dim}' -- defaulting to "
+                f"'{units}'. Pass units= explicitly to silence this."
+            )
+        num, units, calendar = encode_cf_datetime(
+            ds[time_dim].values, units=units, calendar=calendar,
+            dtype=np.float64
         )
-    num, units, calendar = encode_cf_datetime(
-        ds[time_dim].values, units=units, calendar=calendar, dtype=np.float64
-    )
-    ds = ds.assign_coords({time_dim: num})
-    ds[time_dim].attrs['units'] = units
-    ds[time_dim].attrs['calendar'] = calendar
+        # Keep TIME's other attributes (standard_name, axis, bounds, ...)
+        time_attrs = dict(ds[time_dim].attrs)
+        ds = ds.assign_coords({time_dim: num})
+        ds[time_dim].attrs.update(time_attrs)
+        ds[time_dim].attrs['units'] = units
+        ds[time_dim].attrs['calendar'] = calendar
+
+    if bnds_needs_encoding:
+        bnum, _, _ = encode_cf_datetime(
+            ds[bnds].values, units=units, calendar=calendar, dtype=np.float64)
+        bnds_var = xr.Variable(ds[bnds].dims, bnum, attrs=dict(ds[bnds].attrs))
+        if bnds in ds.coords:
+            ds = ds.assign_coords({bnds: bnds_var})
+        else:
+            ds[bnds] = bnds_var
     return ds
 
 
@@ -435,10 +468,13 @@ def reorder_coords_to_end(ds, coord_names):
 def promote_cf_coordinates(ds):
     """
     Promote all variables listed in any variable's 'coordinates' attribute
-    to auxiliary coordinates, if present in the dataset. Newly-promoted
-    coordinates are moved to the end (see reorder_coords_to_end) so they
-    consistently appear after dimension coordinates like TIME, rather
-    than wherever they happened to sit in the file's own variable order.
+    to auxiliary coordinates, if present in the dataset. CF boundary
+    variables (named by a 'bounds' attribute, e.g. TIME.bounds =
+    'TIME_bnds') are made coordinates too, so they stay attached to the
+    variable they describe. Newly-promoted coordinates are moved to the
+    end (see reorder_coords_to_end) so they consistently appear after
+    dimension coordinates like TIME, rather than wherever they happened to
+    sit in the file's own variable order.
     """
     # collect all coordinate names mentioned in 'coordinates' attributes,
     # preserving first-seen order (not a plain set, which would give
@@ -448,6 +484,18 @@ def promote_cf_coordinates(ds):
         coords_attr = ds[var].attrs.get("coordinates", "")
         for name in coords_attr.split():
             coord_names.setdefault(name, None)
+    for bnds in bounds_map(ds):
+        coord_names.setdefault(bnds, None)
+    # xarray writes coordinates that share no dimensions with any data
+    # variable (e.g. TIME_bnds, with its extra 'bnds' dimension) to a
+    # *global* 'coordinates' attribute. Decoding with xarray removes that
+    # attribute again; do the same here.
+    global_coords = ds.attrs.get("coordinates")
+    if isinstance(global_coords, str):
+        for name in global_coords.split():
+            coord_names.setdefault(name, None)
+        ds = ds.copy()
+        ds.attrs.pop("coordinates")
 
     # keep only existing variables that aren't already coords
     to_promote = [c for c in coord_names if c in ds and c not in ds.coords]
@@ -457,6 +505,115 @@ def promote_cf_coordinates(ds):
         ds = reorder_coords_to_end(ds, to_promote)
 
     return ds
+
+# --- Helpers for describing averaging bins (used by time_average and
+# kval.data.moored.combine_datasets) ---
+
+def _bin_edges(tidx: pd.DatetimeIndex, freq, resample_kwargs: dict):
+    """
+    Start and end time of every resample bin, and which edge is closed.
+
+    Returns (edges, closed): `edges` is a DataFrame with 'start' and 'end'
+    columns, indexed by the bin's pandas label with label='left'; `closed`
+    is 'left' if each bin is [start, end) and 'right' if (start, end].
+
+    The edges are the *real* bin edges, which are not always the labels
+    pandas gives the bins. For end-anchored calendar intervals (e.g. 'ME',
+    'YE', 'W'), pandas bins whole calendar periods, but labels them with
+    the day *before* the period starts (label='left') or the last day
+    of the period at 00:00 (label='right'). The result is checked against
+    where pandas actually put the samples, so a change in pandas' binning
+    raises an error rather than giving wrong bounds.
+    """
+    kw = {k: v for k, v in resample_kwargs.items() if k != 'label'}
+    positions = pd.Series(np.arange(len(tidx)), index=tidx)
+    resampled = positions.resample(freq, label='left', **kw)
+    left = resampled.count().index
+    right = positions.resample(freq, label='right', **kw).count().index
+    closed = kw.get('closed') or pd.Grouper(freq=freq).closed
+
+    starts, ends = left, right
+    name = to_offset(freq).name
+    end_anchored = (name in ("BME", "ME", "W")
+                    or name.split("-")[0] in ("BQE", "BYE", "QE", "YE", "W"))
+    if closed == 'right' and end_anchored:
+        # pandas moves these right-closed edges to the end of the day
+        # (00:00 the next day, minus 1 ns), so the bins are effectively
+        # [start, end) with both edges at midnight.
+        starts = left + pd.Timedelta(days=1)
+        ends = right + pd.Timedelta(days=1)
+        closed = 'left'
+
+    # Check against the samples pandas actually put in each bin
+    first, last = resampled.min(), resampled.max()
+    has_data = first.notna().values
+    t_first = tidx[first[has_data].astype(int).values]
+    t_last = tidx[last[has_data].astype(int).values]
+    s, e = starts[has_data], ends[has_data]
+    if closed == 'left':
+        consistent = (t_first >= s) & (t_last < e)
+    else:
+        consistent = (t_first > s) & (t_last <= e)
+    if not np.all(consistent):
+        raise RuntimeError(
+            f"Could not determine the averaging bin edges for interval "
+            f"'{freq}': the samples pandas put in each bin do not match the "
+            "expected edges. Please report this as a kval bug.")
+
+    return pd.DataFrame({'start': starts, 'end': ends}, index=left), closed
+
+
+def _describe_interval(interval, interval_td) -> str:
+    """Interval in words, e.g. '1-day', '6-hour', 'calendar-month'."""
+    if interval_td is not None:
+        secs = interval_td.total_seconds()
+        for unit, size in (("day", 86400), ("hour", 3600),
+                           ("minute", 60), ("second", 1)):
+            if secs >= size and secs % size == 0:
+                return f"{int(secs // size)}-{unit}"
+        return f"'{interval}'"
+    try:
+        off = to_offset(interval)
+    except ValueError:
+        return f"'{interval}'"
+    units = {"MS": "month", "ME": "month", "QS": "quarter", "QE": "quarter",
+             "YS": "year", "YE": "year", "W": "week"}
+    unit = units.get(off.name.split("-")[0])
+    if unit is None:
+        return f"'{interval}'"
+    return f"calendar-{unit}" if off.n == 1 else f"{off.n}-calendar-{unit}"
+
+
+def _time_averaging_attr(label: str, interval_desc: str, closed: str,
+                         bounds_name: str) -> str:
+    """Plain-language description of what the averaged timestamps mean."""
+    position = {'left': 'START', 'center': 'CENTRE', 'right': 'END'}[label]
+    if closed == 'left':
+        inclusion = ("Each bin includes samples from its start time up to, "
+                     "but not including, its end time")
+    else:
+        inclusion = ("Each bin includes samples after its start time, up to "
+                     "and including its end time")
+    return (f"Time stamp at the {position} of each {interval_desc} averaging "
+            f"bin. {inclusion}; bin start and end times are in "
+            f"{bounds_name}.")
+
+
+def _add_cell_method(existing, dim: str, method: str = 'mean') -> str:
+    """
+    Append e.g. 'TIME: mean' to a CF cell_methods string (CF 7.3: methods
+    are listed in the order they were applied). Not repeated if it is
+    already the last entry, e.g. when averaging data that were already
+    averaged.
+    """
+    entry = f"{dim}: {method}"
+    existing = (existing or "").strip()
+    if not existing:
+        return entry
+    if existing == entry or existing.endswith(" " + entry):
+        return existing
+    return f"{existing} {entry}"
+
 
 def time_average(
     ds: xr.Dataset,
@@ -476,19 +633,42 @@ def time_average(
     Variables without a `time_dim` dimension at all (e.g. ZONE(PRES)) are
     preserved unchanged and unbroadcast.
 
+    The output records what the averaging did, following the CF conventions:
+
+    - Bin edges: a coordinate `<time_dim>_bnds` (e.g. TIME_bnds) with
+      dimensions (`time_dim`, 'bnds') holds the start and end time of each
+      bin, and `time_dim` gets the attribute bounds='TIME_bnds' (CF 7.1).
+      Each bin includes samples from its start time up to, but not
+      including, its end time (unless `closed='right'` is passed on to
+      resample). The bounds are stored in the same way as `time_dim`
+      (datetime64, or numeric in the same units and calendar), and carry
+      no attributes of their own: CF has them inherit those of `time_dim`.
+    - Method: each averaged variable gets cell_methods='TIME: mean' (CF
+      7.3), appended to any existing cell_methods.
+    - In words: `time_dim` gets an attribute 'time_averaging', e.g. "Time
+      stamp at the CENTRE of each 1-day averaging bin. ...".
+    - Any existing bounds variable of `time_dim` (e.g. from averaging data
+      that were already averaged) is replaced.
+
     Parameters
     ----------
     ds : xr.Dataset
         Input dataset with a time dimension coordinate.
     interval : str, default='1D'
         Averaging interval, as a pandas offset alias (e.g. '1D', '6h', '30min').
+        Calendar-based intervals are also supported: 'MS' and 'ME' both give
+        calendar months, 'YS'/'YE' calendar years, 'W' weeks (Monday to
+        Sunday).
     label : {'center', 'left', 'right'}, default='center'
         Where to place the timestamp for each averaging bin:
-        - 'center': the midpoint of the bin (only valid for fixed-duration
-          intervals; raises an error for calendar-based intervals like 'ME'
-          or 'YE', since those don't have a fixed duration to center within).
-        - 'left': the start of the bin (xarray's default resample behavior).
+        - 'center': the midpoint of the bin. For calendar-based intervals
+          the midpoint of each bin is used, so e.g. monthly timestamps are
+          not evenly spaced.
+        - 'left': the start of the bin.
         - 'right': the end of the bin.
+        The timestamps always follow from the bin edges in TIME_bnds. (For
+        'ME', 'YE' and 'W', pandas itself labels a bin with the day before
+        it starts or with the last day at 00:00; those labels are not used.)
     origin : str or None, default='epoch'
         Where to anchor the bin edges. The default 'epoch' (1970-01-01
         00:00) puts daily bins on midnight, 6-hourly bins on 00/06/12/18,
@@ -523,13 +703,13 @@ def time_average(
         Dataset averaged over the specified interval along `time_dim`.
         Non-numeric variables with a `time_dim` dimension are dropped (see
         printed message); variables without `time_dim` are preserved as-is.
+        Includes the bin-edge coordinate `<time_dim>_bnds` (see above).
 
     Raises
     ------
     ValueError
-        If `time_dim` is not a dimension in the dataset, if `label` is not
-        one of 'center', 'left', 'right', or if label='center' is used with
-        a calendar-based (non-fixed-duration) interval.
+        If `time_dim` is not a dimension in the dataset, or if `label` is
+        not one of 'center', 'left', 'right'.
     """
     if time_dim not in ds.dims:
         raise ValueError(f"'{time_dim}' is not a dimension in the dataset")
@@ -553,9 +733,21 @@ def time_average(
     original_calendar = ds[time_dim].attrs.get('calendar', 'standard') if was_encoded else None
     ds = time_as_datetime(ds, time_dim)
 
-    # xarray's resample only natively supports 'left'/'right' labeling;
-    # for 'center' we resample as 'left' and shift the result afterward
-    resample_label = 'left' if label == 'center' else label
+    # TIME's own attributes are carried over to the output (minus the ones
+    # set below). Any existing bounds of TIME (e.g. when averaging data that
+    # were already averaged) would otherwise be averaged themselves, so they
+    # are dropped here and rebuilt for the new bins.
+    time_attrs = {k: v for k, v in ds[time_dim].attrs.items()
+                  if k not in ('units', 'calendar', 'bounds', 'time_averaging')}
+    old_bounds = [b for b, parent in bounds_map(ds).items() if parent == time_dim]
+    if old_bounds:
+        ds = ds.drop_vars(old_bounds)
+    ds[time_dim].attrs.pop('bounds', None)
+
+    # Resample with the bin start as label; the requested timestamps are
+    # set from the bin edges afterwards (see _bin_edges for why pandas'
+    # own labels are not used directly).
+    resample_label = 'left'
 
     # --- How full is each bin? (fixed-duration intervals only) ---
     try:
@@ -585,8 +777,10 @@ def time_average(
         resample_kwargs_full['origin'] = origin
     resample_kwargs_full.update(resample_kwargs)
 
-    bin_fraction = None
     tidx = pd.DatetimeIndex(ds[time_dim].values)
+    bin_edges, closed = _bin_edges(tidx, resample_freq, resample_kwargs_full)
+
+    bin_fraction = None
     if interval_td is not None and len(tidx) > 1:
         dt_med = pd.Series(tidx).diff().median()
         if pd.notna(dt_med) and dt_med > pd.Timedelta(0):
@@ -638,19 +832,30 @@ def time_average(
     # Re-merge the time-independent variables, preserved exactly as they were
     ds_out = ds_out.merge(ds_time_indep, compat="override")
 
-    if label == 'center':
-        try:
-            offset = pd.Timedelta(interval) / 2
-        except ValueError as e:
-            raise ValueError(
-                f"Could not center timestamps for interval '{interval}': "
-                f"{e}. Calendar-based intervals (e.g. months, years) don't "
-                "have a fixed duration, so centering is not well-defined -- "
-                "use label='left' or label='right' instead."
-            )
-        ds_out = ds_out.assign_coords(
-            {time_dim: ds_out[time_dim].values + offset}
-        )
+    # --- Timestamps and bin edges (CF bounds) ---
+    left_labels = pd.DatetimeIndex(ds_out[time_dim].values)
+    starts = bin_edges['start'].reindex(left_labels).values
+    ends = bin_edges['end'].reindex(left_labels).values
+    if label == 'left':
+        stamps = starts
+    elif label == 'right':
+        stamps = ends
+    else:
+        stamps = starts + (ends - starts) / 2
+
+    bounds_name = f"{time_dim}_bnds"
+    ds_out = ds_out.assign_coords({time_dim: stamps})
+    ds_out = ds_out.assign_coords(
+        {bounds_name: ((time_dim, 'bnds'), np.stack([starts, ends], axis=1))})
+    ds_out[time_dim].attrs.update(time_attrs)
+    ds_out[time_dim].attrs['bounds'] = bounds_name
+    ds_out[time_dim].attrs['time_averaging'] = _time_averaging_attr(
+        label, _describe_interval(interval, interval_td), closed, bounds_name)
+
+    for var in ds_numeric.data_vars:
+        if var in ds_out.data_vars:
+            ds_out[var].attrs['cell_methods'] = _add_cell_method(
+                ds_out[var].attrs.get('cell_methods'), time_dim, 'mean')
 
     if dropped_vars:
         print(f"time_average: dropped non-numeric {time_dim}-dependent "

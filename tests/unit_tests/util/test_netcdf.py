@@ -152,3 +152,65 @@ def test_dataset_to_netcdf_writes_clean_coordinates(tmp_path):
     path = os.path.join(tmp_path, "out.nc")
     assert "_FillValue" not in _file_attrs(path, "TIME")
     assert "_FillValue" not in _file_attrs(path, "LATITUDE")
+
+# ---------------------------------------------------------------------
+# CF boundary variables (e.g. TIME_bnds)
+# ---------------------------------------------------------------------
+
+def _ds_with_bounds(as_coord=True):
+    ds = xr.Dataset(
+        {"TEMP": ("TIME", np.array([1.0, 2.0]))},
+        coords={"TIME": ("TIME", np.array([0.5, 1.5]),
+                         {"units": "days since 1970-01-01", "bounds": "TIME_bnds"})})
+    bnds = (("TIME", "bnds"), np.array([[0.0, 1.0], [1.0, 2.0]]),
+            {"_FillValue": np.nan})
+    if as_coord:
+        ds = ds.assign_coords(TIME_bnds=bnds)
+    else:
+        ds["TIME_bnds"] = bnds
+    return ds
+
+
+def test_bounds_map_finds_bounds_from_the_bounds_attribute():
+    ds = _ds_with_bounds()
+    assert netcdf.bounds_map(ds) == {"TIME_bnds": "TIME"}
+    assert netcdf.bounds_vars(ds) == {"TIME_bnds"}
+    ds["TIME"].attrs["bounds"] = "NOT_THERE"
+    assert netcdf.bounds_map(ds) == {}
+
+
+@pytest.mark.parametrize("as_coord", [True, False])
+def test_prepare_for_export_removes_fill_value_from_bounds(as_coord, tmp_path):
+    ds, encoding = netcdf.prepare_for_export(_ds_with_bounds(as_coord))
+    assert "_FillValue" not in ds["TIME_bnds"].attrs
+    assert encoding["TIME_bnds"] == {"_FillValue": None}
+    path = tmp_path / "bnds.nc"
+    ds.to_netcdf(path, encoding=encoding)
+    with nc.Dataset(path) as f:
+        assert "_FillValue" not in f["TIME_bnds"].ncattrs()
+        assert "_FillValue" in f["TEMP"].ncattrs()  # data still get one
+
+
+def test_datetime_time_and_bounds_are_written_with_the_same_units(tmp_path):
+    """Left to itself xarray picks separate units for TIME and TIME_bnds
+    (e.g. 'days since <first value>'), giving the bounds a 'units' attribute
+    that differs from TIME's (not allowed by CF 7.1)."""
+    import pandas as pd
+    t0 = pd.date_range("2021-11-09", periods=3)
+    ds = xr.Dataset({"TEMP": ("TIME", np.array([1.0, 2.0, 3.0]))},
+                    coords={"TIME": t0 + pd.Timedelta("12h")})
+    ds = ds.assign_coords(TIME_bnds=(("TIME", "bnds"),
+                                     np.stack([t0, t0 + pd.Timedelta("1D")], 1)))
+    ds["TIME"].attrs["bounds"] = "TIME_bnds"
+
+    ds_out, encoding = netcdf.prepare_for_export(ds)
+    path = tmp_path / "dt_bnds.nc"
+    ds_out.to_netcdf(path, encoding=encoding)
+    with nc.Dataset(path) as f:
+        assert f["TIME"].units == "days since 1970-01-01"
+        assert f["TIME_bnds"].ncattrs() == []  # takes TIME's units
+        assert f["TIME"].dtype == np.float64
+        np.testing.assert_array_equal(f["TIME_bnds"][0], [18940.0, 18941.0])
+    re = xr.open_dataset(path)
+    np.testing.assert_array_equal(re.TIME_bnds.values, ds.TIME_bnds.values)
+    re.close()

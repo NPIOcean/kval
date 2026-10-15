@@ -437,14 +437,18 @@ def test_time_average_raises_for_invalid_label():
         time_average(ds, '1D', label='bogus')
  
  
-def test_time_average_center_raises_informatively_for_calendar_based_interval():
-    """label='center' isn't well-defined for calendar-based intervals
-    (e.g. month-end 'ME') since they don't have a fixed duration -- this
-    should raise a clear, actionable error rather than a cryptic one."""
+def test_time_average_center_for_calendar_based_interval_is_bin_midpoint():
+    """For calendar-based intervals (e.g. month-end 'ME') label='center'
+    stamps each bin at the midpoint of its own bin edges."""
     ds = xr.Dataset({'TEMP': ('TIME', np.arange(60.0))},
                      coords={'TIME': pd.date_range('2021-01-01', periods=60)})
-    with pytest.raises(ValueError, match="label='left'"):
-        time_average(ds, 'ME', label='center')
+    out = time_average(ds, 'ME', label='center')
+    # Data run 1 Jan - 1 Mar. January: 31 days -> 16 Jan 12:00;
+    # February 2021: 28 days -> 15 Feb 00:00; March: 31 days -> 16 Mar 12:00
+    np.testing.assert_array_equal(
+        out.TIME.values,
+        np.array(['2021-01-16T12:00', '2021-02-15T00:00', '2021-03-16T12:00'],
+                 dtype='datetime64[ns]'))
  
 @pytest.mark.filterwarnings("ignore:time_average:UserWarning")  # partial edge bins are expected here
 def test_time_average_origin_shifts_bin_edges():
@@ -605,3 +609,170 @@ def test_time_as_datetime_leaves_duration_variables_alone(make_ctd_ds):
     back = xr_funcs.time_as_float(decoded)
     np.testing.assert_array_equal(back.TIME.values, ds.TIME.values)
     assert back.DUR.attrs["units"] == "seconds"
+
+# ---------------------------------------------------------------------
+# CF time bounds (TIME_bnds), cell_methods and the time_averaging attribute
+# ---------------------------------------------------------------------
+
+def _hourly_ds(start="2021-01-01", periods=24 * 70):
+    t = pd.date_range(start, periods=periods, freq="1h")
+    return xr.Dataset({"TEMP": ("TIME", np.arange(float(len(t))))},
+                      coords={"TIME": t})
+
+
+@pytest.mark.filterwarnings("ignore:time_average:UserWarning")
+@pytest.mark.parametrize("label", ["left", "center", "right"])
+def test_time_average_bounds_are_bin_edges_whatever_the_label(make_ctd_ds, label):
+    ds = xr_funcs.time_as_datetime(make_ctd_ds())  # starts 2021-11-09 11:20
+    out = time_average(ds, "1D", label=label)
+    bnds = out.TIME_bnds.values
+    assert out.TIME_bnds.dims == ("TIME", "bnds")
+    assert "TIME_bnds" in out.coords and out.TIME.attrs["bounds"] == "TIME_bnds"
+    assert bnds[0, 0] == np.datetime64("2021-11-09T00:00")
+    np.testing.assert_array_equal(bnds[:, 1] - bnds[:, 0], np.timedelta64(1, "D"))
+    expected = {"left": bnds[:, 0], "right": bnds[:, 1],
+                "center": bnds[:, 0] + np.timedelta64(12, "h")}[label]
+    np.testing.assert_array_equal(out.TIME.values, expected)
+
+
+def test_time_average_bounds_rows_follow_min_fraction(make_ctd_ds):
+    ds = xr_funcs.time_as_datetime(make_ctd_ds())
+    out = time_average(ds, "1D", min_fraction=0.9)
+    # first (partial) bin dropped: bounds start the next midnight, and each
+    # remaining row still brackets its own timestamp
+    assert out.TIME_bnds.values[0, 0] == np.datetime64("2021-11-10T00:00")
+    assert out.sizes["TIME"] == out.TIME_bnds.shape[0]
+    assert (out.TIME_bnds.values[:, 0] < out.TIME.values).all()
+    assert (out.TIME.values < out.TIME_bnds.values[:, 1]).all()
+
+
+@pytest.mark.filterwarnings("ignore:time_average:UserWarning")
+def test_time_average_numeric_time_gives_numeric_bounds_in_same_units(make_ctd_ds):
+    ds = make_ctd_ds()  # numeric TIME, days since 1970-01-01
+    out = time_average(ds, "1D")
+    assert out.TIME_bnds.dtype == np.float64
+    assert out.TIME_bnds.attrs == {}  # CF: inherited from TIME, not repeated
+    # days since 1970 at midnight are whole numbers; centre is +0.5
+    np.testing.assert_array_equal(out.TIME_bnds.values % 1, 0)
+    np.testing.assert_allclose(out.TIME.values, out.TIME_bnds.values[:, 0] + 0.5)
+    decoded = xr.coding.times.decode_cf_datetime(
+        out.TIME_bnds.values, out.TIME.attrs["units"])
+    assert decoded[0, 0] == np.datetime64("2021-11-09T00:00")
+
+
+@pytest.mark.filterwarnings("ignore:time_average:UserWarning")
+def test_time_average_keeps_time_attributes(make_ctd_ds):
+    ds = make_ctd_ds()
+    ds["TIME"].attrs.update({"standard_name": "time", "axis": "T"})
+    out = time_average(ds, "1D")
+    assert out.TIME.attrs["standard_name"] == "time"
+    assert out.TIME.attrs["axis"] == "T"
+    assert out.TIME.attrs["units"] == "days since 1970-01-01"
+
+
+@pytest.mark.parametrize("interval", ["MS", "ME"])
+def test_time_average_calendar_month_bounds_are_whole_months(interval):
+    out = time_average(_hourly_ds(), interval, label="left")
+    np.testing.assert_array_equal(
+        out.TIME_bnds.values,
+        np.array([["2021-01-01", "2021-02-01"], ["2021-02-01", "2021-03-01"],
+                  ["2021-03-01", "2021-04-01"]], dtype="datetime64[ns]"))
+    np.testing.assert_array_equal(out.TIME.values, out.TIME_bnds.values[:, 0])
+    # hourly values 0, 1, 2, ...: January holds hours 0..743
+    assert out.TEMP.values[0] == np.mean(np.arange(744.0))
+
+
+def test_time_average_sample_on_bin_edge_goes_to_later_bin():
+    """[start, end): a sample exactly at 1 Feb 00:00 belongs to February."""
+    t = pd.DatetimeIndex(["2021-01-15", "2021-01-31 23:00", "2021-02-01",
+                          "2021-02-10"])
+    ds = xr.Dataset({"TEMP": ("TIME", [1.0, 1.0, 5.0, 5.0])},
+                    coords={"TIME": t})
+    for interval in ["MS", "ME"]:
+        out = time_average(ds, interval, label="left")
+        np.testing.assert_array_equal(out.TEMP.values, [1.0, 5.0])
+
+
+def test_time_average_weekly_bounds_run_monday_to_monday():
+    out = time_average(_hourly_ds("2021-11-03", 24 * 21), "W", label="right")
+    starts = pd.DatetimeIndex(out.TIME_bnds.values[:, 0])
+    assert (starts.dayofweek == 0).all()  # Monday
+    np.testing.assert_array_equal(out.TIME_bnds.values[:, 1] - out.TIME_bnds.values[:, 0],
+                                  np.timedelta64(7, "D"))
+    np.testing.assert_array_equal(out.TIME.values, out.TIME_bnds.values[:, 1])
+
+
+@pytest.mark.filterwarnings("ignore:time_average:UserWarning")
+def test_time_average_sets_cell_methods_and_time_averaging(make_ctd_ds):
+    ds = make_ctd_ds()
+    ds["ZONE"] = ("ZONE_DIM", np.array([1.0, 2.0]))  # no TIME dimension
+    out = time_average(ds, "1D")
+    for var in ["TEMP", "PSAL", "PRES", "CNDC"]:
+        assert out[var].attrs["cell_methods"] == "TIME: mean"
+    assert "cell_methods" not in out["ZONE"].attrs
+    assert out.TIME.attrs["time_averaging"] == (
+        "Time stamp at the CENTRE of each 1-day averaging bin. Each bin "
+        "includes samples from its start time up to, but not including, its "
+        "end time; bin start and end times are in TIME_bnds.")
+
+
+@pytest.mark.filterwarnings("ignore:time_average:UserWarning")  # partial edge bins
+@pytest.mark.parametrize("interval, label, words", [
+    ("6h", "left", "START of each 6-hour"),
+    ("90min", "right", "END of each 90-minute"),
+    ("MS", "center", "CENTRE of each calendar-month"),
+    ("YE", "left", "START of each calendar-year"),
+])
+def test_time_average_time_averaging_text(interval, label, words):
+    out = time_average(_hourly_ds(periods=24 * 400), interval, label=label)
+    assert out.TIME.attrs["time_averaging"].startswith(f"Time stamp at the {words} ")
+
+
+@pytest.mark.filterwarnings("ignore:time_average:UserWarning")  # partial edge bins
+def test_time_average_closed_right_is_described():
+    out = time_average(_hourly_ds(periods=48), "1D", label="left", closed="right")
+    assert "after its start time, up to and including its end time" in \
+        out.TIME.attrs["time_averaging"]
+
+
+@pytest.mark.filterwarnings("ignore:time_average:UserWarning")
+def test_time_average_cell_methods_appended_and_bounds_replaced(make_ctd_ds):
+    ds = make_ctd_ds()
+    ds["TEMP"].attrs["cell_methods"] = "DEPTH: mean"
+    daily = time_average(ds, "1D")
+    assert daily.TEMP.attrs["cell_methods"] == "DEPTH: mean TIME: mean"
+
+    weekly = time_average(daily, "7D", label="left")
+    # averaging again does not repeat the entry, and the bounds describe
+    # the new (7-day) bins rather than being averaged themselves
+    assert weekly.TEMP.attrs["cell_methods"] == "DEPTH: mean TIME: mean"
+    np.testing.assert_allclose(
+        weekly.TIME_bnds.values[:, 1] - weekly.TIME_bnds.values[:, 0], 7.0)
+    assert weekly.TIME.attrs["time_averaging"].startswith(
+        "Time stamp at the START of each 7-day")
+
+
+def test_time_as_float_encodes_bounds_with_time_units():
+    t = pd.date_range("2021-01-01", periods=3)
+    ds = xr.Dataset(coords={"TIME": t})
+    ds = ds.assign_coords(TIME_bnds=(("TIME", "bnds"),
+                                     np.stack([t, t + pd.Timedelta("1D")], 1)))
+    ds["TIME"].attrs.update({"bounds": "TIME_bnds", "standard_name": "time"})
+    out = xr_funcs.time_as_float(ds, units="days since 2021-01-01")
+    np.testing.assert_array_equal(out.TIME.values, [0.0, 1.0, 2.0])
+    np.testing.assert_array_equal(out.TIME_bnds.values,
+                                  [[0.0, 1.0], [1.0, 2.0], [2.0, 3.0]])
+    assert "TIME_bnds" in out.coords
+    assert out.TIME.attrs["standard_name"] == "time"
+    assert out.TIME.attrs["bounds"] == "TIME_bnds"
+
+
+def test_promote_cf_coordinates_promotes_bounds_and_global_coordinates():
+    ds = xr.Dataset({"TEMP": ("TIME", [1.0, 2.0]),
+                     "TIME_bnds": (("TIME", "bnds"), [[0.0, 1.0], [1.0, 2.0]])},
+                    coords={"TIME": ("TIME", [0.5, 1.5], {"bounds": "TIME_bnds"})},
+                    attrs={"coordinates": "TIME_bnds", "title": "x"})
+    out = xr_funcs.promote_cf_coordinates(ds)
+    assert "TIME_bnds" in out.coords
+    assert "coordinates" not in out.attrs
+    assert out.attrs["title"] == "x"

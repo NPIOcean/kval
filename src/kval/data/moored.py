@@ -37,6 +37,8 @@ from kval.plot.tsplot import  tsplot, tsplot_pick
 
 from kval.data.edit import threshold, offset, linear_drift
 from kval.util.xr_funcs import time_average, append_processing_history, time_as_datetime, time_as_float, promote_cf_coordinates
+from kval.util.xr_funcs import _add_cell_method, _describe_interval, _time_averaging_attr
+from kval.util.netcdf import bounds_map
 if internals.is_notebook():
     from IPython.display import display
 
@@ -543,6 +545,15 @@ def adjust_time_for_drift(
         warnings.warn('To adjust for clock drift, a non-zero clock drift has'
                       ' to be specified -> Doing nothing', UserWarning)
         return ds
+
+    # Clock drift is a property of the raw samples. On averaged data, the
+    # bin edges in TIME's bounds (e.g. TIME_bnds) would no longer match the
+    # corrected TIME, so require the correction to be done first.
+    if 'bounds' in ds.TIME.attrs:
+        raise ValueError(
+            'Could not add drift because TIME has bounds '
+            f'("{ds.TIME.attrs["bounds"]}"), i.e. the data have already been '
+            'averaged. Correct for clock drift before averaging.')
 
     # Check TIME units before touching values
     if 'units' not in ds.TIME.attrs:
@@ -1525,6 +1536,15 @@ def combine_datasets(
     - 'interpolate': each grid point is linearly interpolated from the
       dataset's own samples. Outside a dataset's own time range, values
       are NaN (no extrapolation).
+
+    With method='time_average', the output records the averaging the same
+    way as `time_average` does (CF bounds and cell_methods): a coordinate
+    `<time_dim>_bnds` holds the start and end of each bin, [t, t + interval),
+    the averaged variables get cell_methods='TIME: mean', and `time_dim`
+    gets a 'time_averaging' attribute describing the timestamps (always the
+    START of the bin here). With method='interpolate' the values are
+    instantaneous, so none of these are added. Any bounds variable the
+    input datasets have for `time_dim` is dropped.
  
     Either way, a variable missing from some datasets, or a dataset not
     covering part of the combined time range, results in NaN entries for
@@ -1630,6 +1650,14 @@ def combine_datasets(
                     f"Dataset {time_dim} is numeric but has no 'units' "
                     "attribute needed to decode to datetime")
             decoded.append(xr.decode_cf(ds, decode_timedelta=True))
+
+    # Bounds of the inputs' own TIME (e.g. from earlier averaging) don't
+    # describe the common grid; they would also be interpolated or stacked
+    # like data. Drop them (new ones are made for method='time_average').
+    decoded = [
+        ds.drop_vars([b for b, parent in bounds_map(ds).items()
+                      if parent == time_dim])
+        for ds in decoded]
  
     # --- Common grid, anchored to the Unix epoch ---
     # Anchoring to the epoch (rather than to the earliest sample) puts the
@@ -1715,6 +1743,9 @@ def combine_datasets(
                 # attrs come from the *original* (pre-averaging) dataset,
                 # since resample/mean doesn't necessarily preserve them
                 orig_attrs = dict(decoded[i][var].attrs) if var in decoded[i] else {}
+                if method == 'time_average':
+                    orig_attrs['cell_methods'] = _add_cell_method(
+                        orig_attrs.get('cell_methods'), time_dim, 'mean')
                 var_attr_sets.append((labels[i], orig_attrs))
  
         shared_attrs, per_instr_attrs = _split_attrs(var_attr_sets, labels)
@@ -1747,5 +1778,17 @@ def combine_datasets(
         coords_out[attr_key] = (instr_dim, per_instr_vals)
  
     ds_out = xr.Dataset(data_vars_out, coords=coords_out, attrs=combined_global_attrs)
- 
+
+    # --- Bin edges (CF bounds) for averaged data ---
+    if method == 'time_average':
+        bounds_name = f"{time_dim}_bnds"
+        starts = common_time.values
+        ends = (common_time + interval_td).values
+        ds_out = ds_out.assign_coords(
+            {bounds_name: ((time_dim, 'bnds'), np.stack([starts, ends], axis=1))})
+        ds_out[time_dim].attrs['bounds'] = bounds_name
+        ds_out[time_dim].attrs['time_averaging'] = _time_averaging_attr(
+            'left', _describe_interval(interval, interval_td), 'left',
+            bounds_name)
+
     return ds_out

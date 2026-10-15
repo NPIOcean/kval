@@ -8,7 +8,7 @@ Functions for making netcdfs cf-compliant.
 import cftime
 from kval.metadata import _standard_attrs, _standard_attrs_org
 from kval.calc import number
-from kval.util import time, user_input
+from kval.util import time, user_input, netcdf
 import numpy as np
 import re
 from collections import Counter
@@ -26,8 +26,14 @@ def nans_to_fill_value(ds: xr.Dataset, fill_value: float = -9999.0) -> xr.Datase
 
     Returns:
         xarray.Dataset with NaNs replaced and '_FillValue' attributes updated.
+
+    CF boundary variables (e.g. TIME_bnds) are left alone: they must not
+    have a _FillValue.
     """
+    bounds = netcdf.bounds_vars(ds)
     for var_name in ds.data_vars:
+        if var_name in bounds:
+            continue
         var = ds[var_name]
         if np.issubdtype(var.dtype, np.floating):
             ds[var_name] = var.fillna(fill_value)
@@ -45,7 +51,8 @@ def convert_64_to_32(ds: xr.Dataset, force: bool = False, relative_tol: float = 
     Safeguards (a variable that fails either is kept at 64 bit, with a warning):
 
     - Time variables (name TIME, a "... since ..." units attribute, standard_name
-      "time" or axis "T") are NEVER converted, not even with ``force=True``.
+      "time" or axis "T", or the CF bounds of such a variable, e.g. TIME_bnds)
+      are NEVER converted, not even with ``force=True``.
       Numeric time is a large offset from an epoch, so float32 cannot resolve the
       sampling interval (about 170 s at ~19 000 days since 1970), and int32
       seconds overflow in 2038.
@@ -88,7 +95,7 @@ def convert_64_to_32(ds: xr.Dataset, force: bool = False, relative_tol: float = 
         dtype = arr.dtype
 
         # Never down-cast time (see docstring)
-        if time.is_time_like(varnm, arr):
+        if time.is_time_like(varnm, arr, ds):
            # Desired, shoudl not be a warning..
            # if dtype in (np.float64, np.int64):
            #     warnings.warn(
@@ -428,7 +435,15 @@ def add_standard_var_attrs(
         The modified xarray Dataset with updated variable attributes.
     """
 
+    # CF boundary variables (e.g. TIME_bnds) inherit their attributes from
+    # the variable they belong to and should not have their own (CF 7.1).
+    # They must be skipped explicitly here: "TIME_bnds" would otherwise be
+    # matched to the standard attributes of "TIME" below.
+    bounds = netcdf.bounds_vars(ds)
+
     for varnm in list(ds.data_vars) + list(ds.coords):
+        if varnm in bounds:
+            continue
 
         # Handling number suffix (e.g. TEMP1, PSAL2)
         try:

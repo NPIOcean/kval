@@ -1137,6 +1137,85 @@ def test_combine_datasets_calendar_interval_raises(make_ctd_ds):
         combine_datasets(a, b, interval="MS")
 
 
+@pytest.mark.filterwarnings("ignore::UserWarning")  # partial-bin warnings
+def test_combine_datasets_time_average_has_one_set_of_bounds(make_ctd_ds):
+    a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2)
+    c = combine_datasets(a, b, interval="1D", instr_names=["a", "b"])
+    assert c.TIME_bnds.dims == ("TIME", "bnds")  # no INSTR dimension
+    assert "TIME_bnds" in c.coords and c.TIME.attrs["bounds"] == "TIME_bnds"
+    np.testing.assert_array_equal(c.TIME_bnds.values[:, 0], c.TIME.values)
+    np.testing.assert_array_equal(c.TIME_bnds.values[:, 1] - c.TIME_bnds.values[:, 0],
+                                  np.timedelta64(1, "D"))
+    assert c.TEMP.attrs["cell_methods"] == "TIME: mean"
+    assert c.TIME.attrs["time_averaging"].startswith(
+        "Time stamp at the START of each 1-day averaging bin.")
+
+
+def test_combine_datasets_interpolate_has_no_bounds(make_ctd_ds):
+    a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2)
+    c = combine_datasets(a, b, interval="1h", method="interpolate",
+                         instr_names=["a", "b"])
+    assert "TIME_bnds" not in c.variables
+    assert "bounds" not in c.TIME.attrs
+    assert "cell_methods" not in c.TEMP.attrs
+
+
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_combine_datasets_inputs_with_bounds(make_ctd_ds):
+    """Inputs that were already averaged (and so have TIME_bnds) combine
+    like any other input; their own bounds are replaced."""
+    a = xr_funcs.time_average(make_ctd_ds(seed=1, n=6000), "6h", label="left")
+    b = xr_funcs.time_average(make_ctd_ds(seed=2, n=6000), "6h", label="left")
+    for method in ["time_average", "interpolate"]:
+        c = combine_datasets(a, b, interval="1D", method=method,
+                             instr_names=["a", "b"])
+        assert set(c.TEMP.dims) == {"INSTR", "TIME"}
+        if method == "time_average":
+            assert c.TIME_bnds.dims == ("TIME", "bnds")
+            assert c.TEMP.attrs["cell_methods"] == "TIME: mean"
+        else:
+            assert "TIME_bnds" not in c.variables
+
+
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_adjust_time_for_drift_refuses_averaged_data(make_ctd_ds):
+    avg = xr_funcs.time_average(make_ctd_ds(), "1D")
+    with pytest.raises(ValueError, match="before averaging"):
+        adjust_time_for_drift(avg, seconds=30)
+
+
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_time_bounds_survive_export_and_reload(make_ctd_ds, tmp_path):
+    """Average -> float32 conversion -> fill values -> export -> reload:
+    TIME_bnds stays a float64 coordinate with the same values, without a
+    _FillValue or attributes of its own, and still matches TIME."""
+    import netCDF4
+    from kval.data.moored import load_nc
+    from kval.data.dataset import to_netcdf
+    from kval.metadata.conventionalize import (
+        convert_64_to_32, nans_to_fill_value, add_standard_var_attrs)
+
+    avg = xr_funcs.time_average(make_ctd_ds(), "1D", min_fraction=0.9)
+    reference = avg.TIME_bnds.values.copy()
+    ds = convert_64_to_32(nans_to_fill_value(add_standard_var_attrs(avg)))
+    assert ds.TIME_bnds.dtype == np.float64
+    assert ds.TIME_bnds.attrs == {}
+    to_netcdf(ds, tmp_path, "avg.nc", verbose=False)
+
+    with netCDF4.Dataset(tmp_path / "avg.nc") as f:
+        assert f["TIME_bnds"].dtype == np.float64
+        assert f["TIME_bnds"].ncattrs() == []
+        assert "_FillValue" not in f["TIME"].ncattrs()
+        assert f["TIME"].bounds == "TIME_bnds"
+
+    re = load_nc(str(tmp_path / "avg.nc"))
+    assert "TIME_bnds" in re.coords
+    assert "coordinates" not in re.attrs
+    np.testing.assert_array_equal(re.TIME_bnds.values, reference)
+    assert (re.TIME_bnds.values[:, 0] < re.TIME.values).all()
+    re.close()
+
+
 def test_combine_datasets_min_fraction_requires_time_average(make_ctd_ds):
     a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2)
     with pytest.raises(ValueError):

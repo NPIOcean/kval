@@ -502,3 +502,54 @@ def test_custom_checks_accept_float64_time():
     text = _custom_report(_ds_numeric_time(np.float64))
     assert "is stored as float32" not in text
     assert "64-bit" not in text or "TIME" not in text.split("64-bit")[1][:200]
+
+def test_time_bounds_do_not_raise_issues(capsys):
+    """A CF-correct TIME_bnds (float64, no attributes of its own, extra
+    'bnds' dimension without a coordinate) passes the custom checks."""
+    ds = _make_compliant_ds()
+    t = ds.TIME.values.astype("float64")
+    ds = ds.assign_coords(TIME_bnds=(("TIME", "bnds"), np.stack([t - 0.5, t + 0.5], 1)))
+    ds["TIME"].attrs["bounds"] = "TIME_bnds"
+    compliance_checks_custom(ds)
+    out = capsys.readouterr().out
+    assert "All checks passed (0 issues)" in out
+
+
+def test_time_bounds_stored_as_float32_are_flagged(capsys):
+    ds = _make_compliant_ds()
+    t = 18940.0 + np.arange(ds.sizes["TIME"])
+    ds = ds.assign_coords(
+        TIME_bnds=(("TIME", "bnds"), np.stack([t, t + 1], 1).astype("float32")))
+    ds["TIME"].attrs["bounds"] = "TIME_bnds"
+    compliance_checks_custom(ds)
+    out = capsys.readouterr().out
+    assert "Time variable 'TIME_bnds' is stored as float32" in out
+
+
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_ioos_cf_checker_accepts_time_bounds(make_ctd_ds, tmp_path):
+    """Run the actual CF checker on an averaged, exported file: nothing it
+    reports concerns TIME_bnds, the bounds attribute or cell_methods."""
+    from compliance_checker.runner import CheckSuite
+    from kval.util.xr_funcs import time_average
+    from kval.util import netcdf
+
+    ds = time_average(make_ctd_ds(), "1D")
+    ds.attrs["Conventions"] = "CF-1.8"
+    path = str(tmp_path / "avg.nc")
+    to_write, encoding = netcdf.prepare_for_export(ds)
+    to_write.to_netcdf(path, encoding=encoding)
+
+    suite = CheckSuite()
+    suite.load_all_available_checkers()
+    results = suite.run_all(suite.load_dataset(path), ["cf"],
+                            skip_checks=["cf:check_domain_variables"])
+    messages = []
+    for check_results, errors in results.values():
+        for r in check_results:
+            if isinstance(r.value, tuple) and r.value[0] != r.value[1]:
+                messages += r.msgs
+        messages += [str(e) for e in errors]
+    related = [m for m in messages
+               if any(k in m.lower() for k in ("bnds", "bound", "cell_method"))]
+    assert related == []

@@ -227,3 +227,15 @@ def test_numeric_time_resolution_seconds_float64_is_sub_microsecond():
     res = time.numeric_time_resolution_seconds(
         np.array([19300.0]), "days since 1970-01-01", np.float64)
     assert res < 1e-5
+
+def test_is_time_like_recognises_time_bounds_given_the_dataset():
+    import xarray as xr
+    ds = xr.Dataset(coords={
+        "TIME": ("TIME", [0.5, 1.5], {"units": "days since 1970-01-01",
+                                      "bounds": "TIME_bnds"}),
+        "TIME_bnds": (("TIME", "bnds"), [[0.0, 1.0], [1.0, 2.0]]),
+        "DEPTH": ("DEPTH", [10.0], {"bounds": "DEPTH_bnds"}),
+        "DEPTH_bnds": (("DEPTH", "bnds"), [[5.0, 15.0]])})
+    assert not time.is_time_like("TIME_bnds", ds["TIME_bnds"])
+    assert time.is_time_like("TIME_bnds", ds["TIME_bnds"], ds)
+    assert not time.is_time_like("DEPTH_bnds", ds["DEPTH_bnds"], ds)
