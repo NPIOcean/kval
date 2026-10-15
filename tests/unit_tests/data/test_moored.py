@@ -1,7 +1,6 @@
 import pytest
 from unittest import mock
 import xarray as xr
-import requests
 from pathlib import Path
 import gsw
 from kval.data.moored import (
@@ -25,68 +24,12 @@ from kval.data.moored import (
 import re
 import pandas as pd
 import numpy as np
-import time
 from unittest import mock
 
 
-# Define the URLs for the files you want to test
-RBR_FILE_URLS = {
-    "conc_chl_par_example.rsk": "https://zenodo.org/records/13321317/files/conc_chl_par_example.rsk?download=1",
-    "conc_example.rsk": "https://zenodo.org/records/13321317/files/conc_example.rsk?download=1",
-    "solo_example.rsk": "https://zenodo.org/records/13321317/files/solo_example.rsk?download=1",
-}
-
-# Define the directory where files should be stored
-RBR_FILE_DIR = Path("tests/test_data/rbr_files")
+# The RBR test files are downloaded from Zenodo by the `rbr_file` fixture
+# (tests/unit_tests/conftest.py).
 SBE37_FILE_PATH = Path("tests/test_data/sbe_files/sbe37/cnv/test_sbe37.cnv")
-def _download_with_retry(url: str, retries: int = 3, backoff: float = 2.0) -> bytes:
-    """
-    GET a URL, retrying on transient server errors (e.g. Zenodo occasionally
-    returning a 504 under load). Raises the last error if all attempts fail.
-    """
-    last_exc = None
-    for attempt in range(retries):
-        try:
-            response = requests.get(url, timeout=60)
-            response.raise_for_status()
-            return response.content
-        except requests.exceptions.HTTPError as e:
-            last_exc = e
-            if attempt < retries - 1:
-                time.sleep(backoff * (attempt + 1))
-    raise last_exc
-
-
-@pytest.fixture
-def rbr_file(request):
-    """
-    Ensure a single named RBR test file is downloaded and available locally.
-    Only downloads the specific file the requesting test needs, so a
-    transient failure fetching one file doesn't fail tests that don't
-    need it. Local files are reused without re-downloading; only files
-    this fixture itself downloaded are cleaned up afterward.
-    """
-    file_name = request.param
-    RBR_FILE_DIR.mkdir(parents=True, exist_ok=True)
-    file_path = RBR_FILE_DIR / file_name
-    was_downloaded = False
-
-    if not file_path.exists():
-        try:
-            content = _download_with_retry(RBR_FILE_URLS[file_name])
-        except requests.exceptions.HTTPError as e:
-            pytest.skip(f"Could not download {file_name} from Zenodo: {e}")
-        with open(file_path, "wb") as file:
-            file.write(content)
-        was_downloaded = True
-
-    yield file_path
-
-    if was_downloaded and file_path.exists():
-        try:
-            file_path.unlink()
-        except PermissionError:
-            print(f"Failed to delete {file_name}. File might be in use.")
 
 
 @pytest.mark.parametrize("rbr_file", [

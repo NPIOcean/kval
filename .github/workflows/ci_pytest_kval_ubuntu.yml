@@ -20,6 +20,13 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
+    - name: Restore RBR test files (downloaded from Zenodo, cached between runs)
+      id: rbr-cache
+      uses: actions/cache/restore@v4
+      with:
+        path: tests/test_data/rbr_files
+        key: rbr-test-files-v1
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
@@ -31,3 +38,14 @@ jobs:
         pytest
       env:
         CI: true
+
+    - name: Save RBR test files to the cache (only when all three were downloaded)
+      if: >-
+        always() && steps.rbr-cache.outputs.cache-hit != 'true' &&
+        hashFiles('tests/test_data/rbr_files/conc_chl_par_example.rsk') != '' &&
+        hashFiles('tests/test_data/rbr_files/conc_example.rsk') != '' &&
+        hashFiles('tests/test_data/rbr_files/solo_example.rsk') != ''
+      uses: actions/cache/save@v4
+      with:
+        path: tests/test_data/rbr_files
+        key: rbr-test-files-v1
