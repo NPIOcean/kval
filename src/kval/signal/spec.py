@@ -7,6 +7,7 @@ VERY preliminary - hastily copied from the old oyv.num.spec module
 and not really reqritten for xarray
 '''
 
+import warnings
 import numpy as np
 import xarray as xr
 import scipy.signal as ss
@@ -32,11 +33,11 @@ def apply_window(y, window='none', axis = 0):
     else:
         w = np.ones(L)
 
-   # dxobj = [None for i in range(y.ndim)]
-   # dxobj[axis] = slice(None)
-
-  #  print(dxobj)
-    Y = y * w[:, np.newaxis]#[dxobj]
+    # Shape the window to broadcast along `axis` only (e.g. (L,) for 1-D
+    # data, (L, 1) for 2-D data with axis=0, (1, L) with axis=1).
+    w_shape = [1] * np.ndim(y)
+    w_shape[axis] = L
+    Y = y * w.reshape(w_shape)
 
     return Y
     #Check: OK
@@ -59,7 +60,7 @@ def detrend_series(y, axis = 0):
 
     if np.iscomplex(y).any():
         y_imag_detr = ss.detrend(y.imag, axis = axis)
-        y_detr += 1j*y_imag_detr
+        y_detr = y_detr + 1j*y_imag_detr
 
     return y_detr
     # Checked for 1d arrays..
@@ -121,8 +122,9 @@ def wfft(y, t,  n , ov = 0.66, axis = 0, window = 'bman',
 
     dt = np.ma.mean(np.diff(t))
 
-    if (np.diff(t) == dt).all() == False: #
-        print('NB: t grid is uneven. Might want to interpolate.')
+    if not np.allclose(np.diff(t), dt, rtol=1e-6, atol=0):
+        warnings.warn('t grid is uneven. Might want to interpolate.',
+                      UserWarning, stacklevel=2)
     wl_b = L/(n-ov*(n-1)) # Window length before adjusting
     wl = int(round(wl_b/2)*2) # Window length after adjusting
 
@@ -146,7 +148,7 @@ def wfft(y, t,  n , ov = 0.66, axis = 0, window = 'bman',
         tint = tint + [[t[t_sl.start], t[t_sl.stop-1]]]
         sl[axis] = t_sl
 
-        y_in = y[sl[0]] ### !!!
+        y_in = y[tuple(sl)]
         if detrend:
             y_in = detrend_series(y_in, axis = axis)
 
@@ -184,22 +186,21 @@ def psd(y, t, n, ov = 0.66, axis = 0, window = 'bman', detrend = True):
     returned.
     '''
 
-    L = len(t)
-    dt = t[1]-t[0]
+    dt = np.mean(np.diff(t))  # same time step as wfft uses
     FFT, ft, T, ndt = wfft(y, t, n, axis = axis, ndt_ret = True,
                            ov = ov, window = window, detrend = detrend)
     FFT = FFT * dt
-    sl_list = [slice(None)] * y.ndim
-
+    # Average the segments (FFT has the segments along its first axis, so
+    # the frequency axis of the average is `axis` of y)
     if np.iscomplex(y).any():
-        s_ = (FFT*np.conj(FFT))/ndt
+        # Two-sided spectrum
+        s = np.ma.mean((FFT*np.conj(FFT)).real / ndt, axis=0)
     else:
-
-
+        # One-sided spectrum: positive frequencies only, times 2
         rhslice = slice(int(len(ft)//2+1), None)
+        sl_list = [slice(None)] * np.ndim(y)
         sl_list[axis] = rhslice
-        s_ = (2*(FFT*np.conj(FFT))/ndt)
+        s = np.ma.mean(2*(FFT*np.conj(FFT)).real / ndt, axis=0)
+        s = s[tuple(sl_list)]
         ft = ft[rhslice]
-
-    s = np.ma.mean(s_.real, axis = 0)[rhslice]
     return s, ft
