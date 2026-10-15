@@ -239,3 +239,49 @@ def test_is_time_like_recognises_time_bounds_given_the_dataset():
     assert not time.is_time_like("TIME_bnds", ds["TIME_bnds"])
     assert time.is_time_like("TIME_bnds", ds["TIME_bnds"], ds)
     assert not time.is_time_like("DEPTH_bnds", ds["DEPTH_bnds"], ds)
+
+
+# ISO 8601 durations: the P[YYYY]-[MM]-[DD]T[hh]:[mm]:[ss] format recommended
+# by ACDD 1.3, and the designator format where that format can not be used
+
+@pytest.mark.parametrize("seconds, expected", [
+    (0, "P0000-00-00T00:00:00"),
+    (0.5, "P0000-00-00T00:00:00.5"),
+    (0.125, "P0000-00-00T00:00:00.125"),
+    (59, "P0000-00-00T00:00:59"),
+    (900, "P0000-00-00T00:15:00"),
+    (86400, "P0000-00-01T00:00:00"),
+    (30 * 86400, "P0000-00-30T00:00:00"),
+    # More than 30 days does not fit the format. Used to give e.g.
+    # 'P0000-00-150T00:00:00', which is not valid ISO 8601.
+    (31 * 86400, "P31D"),
+    (150 * 86400, "P150D"),
+    (400 * 86400 + 61, "P400DT1M1S"),
+    (40 * 86400 + 0.5, "P40DT0.5S"),
+])
+def test_seconds_to_ISO8601(seconds, expected):
+    assert time.seconds_to_ISO8601(seconds) == expected
+
+
+def test_seconds_to_ISO8601_negative_raises():
+    with pytest.raises(ValueError):
+        time.seconds_to_ISO8601(-1)
+
+
+def test_days_to_ISO8601_keeps_sub_second_resolution():
+    """Used to round to whole seconds: 0.5 s sampling gave a zero duration."""
+    assert time.days_to_ISO8601(0.5 / 86400) == "P0000-00-00T00:00:00.5"
+
+
+def test_start_end_duration_with_years_and_months():
+    start = datetime(2022, 8, 3, 22, 5, 0)
+    end = datetime(2024, 7, 31, 19, 24, 59)
+    assert (time.start_end_times_cftime_to_duration(start, end)
+            == "P0001-11-27T21:19:59")
+
+
+def test_matlab_datenum_to_datetime_accepts_numpy_scalars():
+    """A numpy integer (e.g. one element of an array) used to be rejected."""
+    expected = datetime(2021, 1, 1)
+    assert time.matlab_datenum_to_datetime(np.int64(738157)) == expected
+    assert time.matlab_datenum_to_datetime(np.float64(738157.0)) == expected

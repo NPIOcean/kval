@@ -230,7 +230,9 @@ def add_range_attrs(ds, vertical_var=None):
         ds.attrs["time_coverage_end"] = time.datetime_to_ISO8601(end_time)
 
         if "time_coverage_resolution" not in ds.attrs:
-            tdiff = np.diff(ds.TIME)
+            tdiff = np.diff(ds.TIME.values)
+            if np.issubdtype(tdiff.dtype, np.timedelta64):
+                tdiff = tdiff / np.timedelta64(1, "D")  # -> days
             tdiff_std = np.std(tdiff)
             tdiff_median = np.median(tdiff)
             if tdiff_std / tdiff_median < 1e-5:

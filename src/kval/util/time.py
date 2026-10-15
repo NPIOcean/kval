@@ -177,6 +177,51 @@ def ISO8601_to_datenum(time_str: str, epoch: str = "1970-01-01") -> float:
 
 #### DURATIONS (distinct from a point in time)
 
+def _seconds_str(seconds: float, width: int = 0) -> str:
+    """Seconds rounded to the microsecond, without trailing zeros:
+    5 -> '5' (or '05' with width=2), 0.5 -> '0.5' (or '00.5')."""
+    seconds = round(float(seconds), 6)
+    if seconds.is_integer():
+        return f"{int(seconds):0{width}d}"
+    whole, frac = f"{seconds:.6f}".rstrip("0").split(".")
+    return f"{int(whole):0{width}d}.{frac}"
+
+
+def _iso8601_duration(years=0, months=0, days=0, hours=0, minutes=0,
+                      seconds=0.0) -> str:
+    """
+    ISO 8601 duration.
+
+    Uses the extended alternative format P[YYYY]-[MM]-[DD]T[hh]:[mm]:[ss],
+    which ACDD 1.3 recommends for time_coverage_duration and
+    time_coverage_resolution, e.g. 'P0000-00-00T00:15:00'. Sub-second
+    durations get a decimal fraction on the seconds, e.g.
+    'P0000-00-00T00:00:00.5'.
+
+    The alternative format can not hold values above the carry-over points
+    (12 months, 30 days, 24 hours, 60 minutes, 60 seconds). Durations that
+    do (e.g. 150 days, which can not be written in months without a
+    calendar) are written in the designator format instead, e.g. 'P150D'
+    or 'P400DT1M1S'. ACDD accepts this format too.
+    """
+    years, months, days = int(years), int(months), int(days)
+    hours, minutes = int(hours), int(minutes)
+    seconds = round(float(seconds), 6)
+
+    if (years <= 9999 and months <= 12 and days <= 30 and hours <= 24
+            and minutes <= 60 and seconds <= 60):
+        return (f"P{years:04d}-{months:02d}-{days:02d}T"
+                f"{hours:02d}:{minutes:02d}:{_seconds_str(seconds, 2)}")
+
+    # Designator format; zero components are left out.
+    date_part = "".join(f"{value}{unit}" for value, unit in
+                        ((years, "Y"), (months, "M"), (days, "D")) if value)
+    time_part = "".join(f"{value}{unit}" for value, unit in
+                        ((hours, "H"), (minutes, "M"),
+                         (_seconds_str(seconds), "S")) if float(value) != 0)
+    return "P" + date_part + ("T" + time_part if time_part else "")
+
+
 def start_end_times_cftime_to_duration(
     start_cftime: datetime, end_cftime: datetime
 ) -> str:
@@ -201,58 +246,37 @@ def start_end_times_cftime_to_duration(
         end_cftime.second,
     )
     delta = relativedelta(end_dt, start_dt)
-    formatted_difference = (
-        f"P{delta.years:04}-{delta.months:02}-{delta.days:02}T"
-        f"{delta.hours:02}:{delta.minutes:02}:{delta.seconds:02}"
-    )
-    return formatted_difference
+    return _iso8601_duration(delta.years, delta.months, delta.days,
+                             delta.hours, delta.minutes, delta.seconds)
 
 
 def seconds_to_ISO8601(seconds: float) -> str:
     """
-    Takes a number of seconds (e.g. a sampling rate) and
-    returns a ISO8601 string (P[YYYY]-[MM]-[DD]T[hh]:[mm]:[ss]).
+    Takes a number of seconds (e.g. a sampling interval) and returns an
+    ISO 8601 duration, in days, hours, minutes and seconds.
+
+    Uses the format P[YYYY]-[MM]-[DD]T[hh]:[mm]:[ss] (e.g. 900 ->
+    'P0000-00-00T00:15:00', 0.5 -> 'P0000-00-00T00:00:00.5'). Durations
+    of more than 30 days do not fit that format and are written in the
+    designator format (e.g. 150 days -> 'P150D').
     """
-    if seconds >= 86400:
-        days = int(seconds // 86400)
-        seconds_residual = seconds - days * 86400
-    else:
-        days = 0
-        seconds_residual = seconds
-
-    if seconds_residual >= 3600:
-        hours = int(seconds_residual // 3600)
-        seconds_residual = seconds_residual - hours * 3600
-    else:
-        hours = 0
-
-    if seconds_residual >= 60:
-        minutes = int(seconds_residual // 60)
-        seconds_residual = seconds_residual - minutes * 60
-    else:
-        minutes = 0
-
-    # Only show fractional seconds if the residual actually has a
-    # fractional part; otherwise format as a plain integer.
-    if seconds_residual == int(seconds_residual):
-        seconds_str = f"{int(seconds_residual):02}"
-    else:
-        seconds_str = f"{seconds_residual:05.2f}"
-
-    iso_str = (
-        f"P0000-00-{days:02}T{hours:02}:{minutes:02}:{seconds_str}"
-    )
-    return iso_str
+    if seconds < 0:
+        raise ValueError("seconds_to_ISO8601: duration must not be negative.")
+    seconds = round(float(seconds), 6)
+    days, rest = divmod(seconds, 86400)
+    hours, rest = divmod(rest, 3600)
+    minutes, rest = divmod(rest, 60)
+    return _iso8601_duration(days=int(days), hours=int(hours),
+                             minutes=int(minutes), seconds=rest)
 
 
 def days_to_ISO8601(days: float) -> str:
     """
-    Takes an number of days (e.g. a sampling rate) and
-    returns a ISO8601 string (P[YYYY]-[MM]-[DD]T[hh]:[mm]:[ss]).
+    Takes a number of days (e.g. a sampling interval) and returns an
+    ISO 8601 duration (see seconds_to_ISO8601). Rounded to the millisecond.
     """
-    seconds = int(np.round(days*86400))
-    iso_str = seconds_to_ISO8601(seconds=seconds)
-    return iso_str
+    seconds = round(float(days) * 86400, 3)
+    return seconds_to_ISO8601(seconds=seconds)
 
 
 #### MATLAB DATENUM (MATLAB's own epoch: days since 0000-01-00 -- a
@@ -265,7 +289,7 @@ def matlab_datenum_to_datetime(
     """
     Convert a MATLAB datenum into Python datetime.
     """
-    if isinstance(matlab_datenum, (int, float)):
+    if isinstance(matlab_datenum, (int, float, np.integer, np.floating)):
         days = np.float64(matlab_datenum % 1)
         return (
             datetime.fromordinal(int(matlab_datenum))
