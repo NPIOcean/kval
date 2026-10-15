@@ -332,6 +332,48 @@ def add_attrs_from_dict(ds, attr_dict, override=True):
             ds.attrs[key] = value  # Assign attribute to the dataset
 
 
+_SIZE_UNITS = {"B": 1, "kB": 1e3, "MB": 1e6, "GB": 1e9,
+               "KiB": 2**10, "MiB": 2**20, "GiB": 2**30}
+
+
+def dataset_size(ds, unit="MB", by_variable=False):
+    """
+    Size of the data in a Dataset (all variables, coordinates included).
+
+    This is the size of the values held in memory (xarray's nbytes), which
+    is close to the size of the netCDF file kval's to_netcdf writes (no
+    compression), plus a little for attributes. Exceptions: string
+    variables count 8 bytes per value in memory, whatever their length;
+    and to_netcdf writes int64 as int32 (half the size).
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+    unit : str, default "MB"
+        "B", "kB", "MB", "GB" (powers of 1000, as most file managers show
+        sizes) or "KiB", "MiB", "GiB" (powers of 1024).
+    by_variable : bool, default False
+        If True, return the size of each variable, largest first.
+
+    Returns
+    -------
+    float, or pandas.Series (by_variable=True)
+
+    Examples
+    --------
+    >>> dataset_size(ds)                       # e.g. 12.4 (MB)
+    >>> dataset_size(ds, by_variable=True).head()
+    """
+    if unit not in _SIZE_UNITS:
+        raise ValueError(f"unit must be one of {list(_SIZE_UNITS)}")
+    factor = _SIZE_UNITS[unit]
+    if by_variable:
+        sizes = pd.Series({name: ds[name].nbytes / factor
+                           for name in ds.variables}, name=f"size [{unit}]")
+        return sizes.sort_values(ascending=False)
+    return ds.nbytes / factor
+
+
 def append_processing_history(ds, variable, note, key="processing_history", deep_copy=True):
     """
     Append a note to a variable's processing-history attribute, creating it

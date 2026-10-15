@@ -11,7 +11,7 @@ from kval.data.ctdprof_tools import _ctdprof_edit as ctd_edit
 from kval.file import matfile
 from kval.data import dataset, edit
 from kval.util import time, xr_funcs
-from kval.util.xr_funcs import time_as_datetime, time_as_float
+from kval.util.xr_funcs import time_as_datetime, time_as_float, dataset_size
 from kval.metadata import conventionalize, _standard_attrs
 from kval.metadata.compliance import compliance_checks_ioos, compliance_checks_custom
 from kval.metadata.conventionalize import convert_64_to_32, add_now_as_date_created, nans_to_fill_value

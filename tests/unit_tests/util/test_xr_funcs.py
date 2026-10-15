@@ -895,3 +895,31 @@ def test_standard_var_attrs_leave_bin_statistics_alone():
     assert "valid_min" not in out.TEMP_n_samples.attrs
     assert "valid_min" not in out.TEMP_std.attrs
     assert "reference_scale" in out.TEMP.attrs  # still added to TEMP itself
+
+
+# dataset_size
+
+def test_dataset_size_total_and_by_variable():
+    ds = xr.Dataset({"TEMP": ("TIME", np.zeros(1000)),            # 8000 B
+                     "N": ("TIME", np.zeros(1000, dtype="int32"))},  # 4000 B
+                    coords={"TIME": np.arange(1000.0)})           # 8000 B
+    assert xr_funcs.dataset_size(ds, unit="B") == 20000
+    assert xr_funcs.dataset_size(ds) == pytest.approx(0.02)       # MB
+    assert xr_funcs.dataset_size(ds, unit="KiB") == pytest.approx(20000 / 1024)
+    by_var = xr_funcs.dataset_size(ds, unit="B", by_variable=True)
+    assert by_var["N"] == 4000
+    assert list(by_var.index)[-1] == "N"  # largest first
+    with pytest.raises(ValueError, match="unit"):
+        xr_funcs.dataset_size(ds, unit="mb")
+
+
+def test_dataset_size_close_to_exported_file_size(tmp_path):
+    import os
+    from kval.data.dataset import to_netcdf
+    ds = xr.Dataset({"TEMP": ("TIME", np.random.rand(100_000))},
+                    coords={"TIME": ("TIME", np.arange(100_000.0),
+                                     {"units": "days since 2000-01-01"})})
+    to_netcdf(ds, tmp_path, "s.nc", verbose=False)
+    file_size = os.path.getsize(tmp_path / "s.nc")
+    assert xr_funcs.dataset_size(ds, unit="B") == pytest.approx(file_size,
+                                                                rel=0.05)

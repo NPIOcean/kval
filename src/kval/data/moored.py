@@ -36,6 +36,7 @@ from kval.plot.tsplot import  tsplot, tsplot_pick
 
 from kval.data.edit import threshold, offset, linear_drift
 from kval.util.xr_funcs import time_average, append_processing_history, time_as_datetime, time_as_float, promote_cf_coordinates
+from kval.util.xr_funcs import dataset_size
 from kval.util.xr_funcs import (_add_cell_method, _describe_interval, _bin_edges,
                                 _time_averaging_attr, _averaged_time_long_name)
 from kval.util.netcdf import bounds_map
