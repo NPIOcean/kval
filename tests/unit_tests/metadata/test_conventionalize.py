@@ -443,3 +443,50 @@ def test_add_standard_var_attrs_leaves_bounds_alone():
     out = conventionalize.add_standard_var_attrs(_daily_ds_with_bounds())
     assert out.TIME_bnds.attrs == {}
     assert out.TIME.attrs["standard_name"] == "time"
+
+
+# ---------------------------------------------------------------------
+# remove_numbers_in_var_names: only sensor numbers are removed
+# ---------------------------------------------------------------------
+
+def _ds_with_vars(*names):
+    return xr.Dataset({n: ("TIME", np.ones(3)) for n in names},
+                      coords={"TIME": [0.0, 1.0, 2.0]})
+
+
+def test_remove_numbers_strips_single_sensor_numbers():
+    ds = _ds_with_vars("TEMP1", "CNDC1", "PSAL1", "CHLA1_fluorescence",
+                       "DOXY1_instr")
+    out = conventionalize.remove_numbers_in_var_names(ds)
+    assert set(out.data_vars) == {"TEMP", "CNDC", "PSAL", "CHLA_fluorescence",
+                                  "DOXY_instr"}
+
+
+def test_remove_numbers_keeps_digits_that_are_part_of_the_name():
+    """Used to strip every digit: SIG0 -> SIG, DO18 -> DO, T090C -> TC."""
+    names = ("SIG0", "DO18", "TEMP_SBE37", "T090C", "POTEMP090C", "SAL00")
+    out = conventionalize.remove_numbers_in_var_names(_ds_with_vars(*names))
+    assert set(out.data_vars) == set(names)
+
+
+def test_remove_numbers_leaves_dual_sensors_alone():
+    out = conventionalize.remove_numbers_in_var_names(
+        _ds_with_vars("TEMP1", "TEMP2", "PSAL1"))
+    assert set(out.data_vars) == {"TEMP1", "TEMP2", "PSAL"}
+
+
+def test_remove_numbers_does_not_clash_with_existing_name():
+    out = conventionalize.remove_numbers_in_var_names(
+        _ds_with_vars("TEMP", "TEMP1"))
+    assert set(out.data_vars) == {"TEMP", "TEMP1"}
+
+
+def test_metadata_auto_keeps_sig0():
+    import warnings
+    from kval.data import moored
+    ds = _ds_with_vars("SIG0", "PSAL1")
+    ds.TIME.attrs["units"] = "days since 1970-01-01"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        out = moored.metadata_auto(ds)
+    assert set(out.data_vars) == {"SIG0", "PSAL"}

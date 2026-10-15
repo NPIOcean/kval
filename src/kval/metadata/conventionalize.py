@@ -308,28 +308,41 @@ def reorder_attrs(ds):
     return ds
 
 
+# A sensor number as kval writes it: letters, one digit 1-9, and an optional
+# suffix, e.g. TEMP1, CNDC2, CHLA1_fluorescence, DOXY2_instr.
+_SENSOR_NUMBER = re.compile(r"^([A-Za-z]+)([1-9])(_[A-Za-z]+)?$")
+
+
+def _strip_sensor_number(varnm):
+    """'TEMP1' -> 'TEMP', 'CHLA1_fluorescence' -> 'CHLA_fluorescence';
+    names without a sensor number are returned unchanged."""
+    match = _SENSOR_NUMBER.match(varnm)
+    if match is None:
+        return varnm
+    return match.group(1) + (match.group(3) or "")
+
+
 def remove_numbers_in_var_names(ds):
     """
-    Remove numbers from variable names like "TEMP1", "PSAL2".
+    Remove sensor numbers from variable names like "TEMP1", "PSAL2" or
+    "CHLA1_fluorescence" (-> "TEMP", "PSAL", "CHLA_fluorescence").
 
-    If more than one exists (e.g. "TEMP1", "TEMP2") -> don't change anything.
+    A sensor number is a single digit 1-9 directly after the letters of the
+    name, at the end or before a suffix such as "_instr". Other digits are
+    part of the name and are kept: e.g. "SIG0", "DO18", "TEMP_SBE37" and
+    raw SBE names like "T090C" are not changed.
+
+    A name is only changed if nothing else would end up with the same name:
+    with both "TEMP1" and "TEMP2" (or "TEMP" and "TEMP1"), neither is
+    renamed.
     """
-    # Get variable names
-    all_varnms = [varnm for varnm in ds.data_vars]
-
-    # Get number-stripped names
-    varnms_stripped = [re.sub(r"\d", "", varnm) for varnm in all_varnms]
-
-    # Identify duplicates
-    counter = Counter(varnms_stripped)
-    duplicates = [item for item, count in counter.items() if count > 1]
-
-    # Strip names
-    for varnm in all_varnms:
-        if re.sub(r"\d", "", varnm) not in duplicates:
-            varnm_stripped = re.sub(r"\d", "", varnm)
-            ds = ds.rename_vars({varnm: varnm_stripped})
-
+    all_varnms = list(ds.data_vars)
+    stripped = {varnm: _strip_sensor_number(varnm) for varnm in all_varnms}
+    counts = Counter(stripped.values())
+    rename = {varnm: new for varnm, new in stripped.items()
+              if new != varnm and counts[new] == 1}
+    if rename:
+        ds = ds.rename_vars(rename)
     return ds
 
 
