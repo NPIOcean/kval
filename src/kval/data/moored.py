@@ -134,14 +134,19 @@ def chop_deck(
     indices: tuple[int, int] | None = None,
     auto_accept: bool = False,
     verbose: bool = True,
+    min_samples: int = 3,
 ) -> xr.Dataset:
     """
     Chop away start and end parts of a time series (xarray Dataset).
     Default behaviour is to look for the indices to remove. Looks for
     the indices where `variable` (e.g. temperature or pressure) is more than
-    `sd_thr` standard deviations below the median (the user can also specify
+    `sd_thr` standard deviations away from the median, above or below (the
+    user can also specify
     the indices to keep). The standard deviation is that of the whole record,
-    deck time included.
+    deck time included. An edge is only chopped if at least its first (or
+    last) `min_samples` samples are all that far from the median, so a
+    single noisy sample at the start or end of an in-water record is not
+    taken for deck time.
 
     Typical application: Remove data from a mooring record during which the
     instrument was on deck or being lowered/raised through the water column.
@@ -173,6 +178,12 @@ def chop_deck(
     auto_accept : bool, optional
         If `True`, automatically accepts the suggested chop based on the
         pressure record without prompting the user. Defaults to False.
+    verbose : bool, optional
+        Print what was chopped. Defaults to True.
+    min_samples : int, optional
+        Minimum number of consecutive samples at the start (end) that must
+        be off for the start (end) to be chopped automatically. Defaults
+        to 3.
 
     Returns
     -------
@@ -197,28 +208,31 @@ def chop_deck(
         )
 
     if indices is None:
-        # Calculate the mean and standard deviation
+        # Median and standard deviation of the whole record
         chop_var = ds[variable].data
-        chop_var_mean = np.nanmedian(chop_var)
+        chop_var_median = np.nanmedian(chop_var)
         chop_var_sd = np.nanstd(chop_var)
+
+        # "Deck" samples: further than sd_thr standard deviations from the
+        # median, in either direction (e.g. low pressure, or warm or cold
+        # air temperature)
+        off = np.abs(chop_var - chop_var_median) > sd_thr * chop_var_sd
+        if (off[0] or off[-1]) and not np.diff(off).any():
+            raise ValueError(
+                f"chop_deck: every sample of {variable} is more than {sd_thr} "
+                "standard deviations from the median, so no in-water part "
+                "can be found. Use indices=(first, last) instead.")
 
         indices = [None, None]
 
         # If we detect deck time at start of time series:
         # find a start idx
-        if chop_var[0] < chop_var_mean - sd_thr * chop_var_sd:
-            indices[0] = (
-                np.where(
-                    np.diff(chop_var < chop_var_mean - sd_thr * chop_var_sd)
-                )[0][0]
-                + 1
-            )
+        if off[:min_samples].all():
+            indices[0] = np.where(np.diff(off))[0][0] + 1
         # If we detect deck time at end of time series:
         # find an end idx
-        if chop_var[-1] < chop_var_mean - sd_thr * chop_var_sd:
-            indices[1] = np.where(
-                np.diff(chop_var < chop_var_mean - sd_thr * chop_var_sd)
-            )[0][-1]
+        if off[-min_samples:].all():
+            indices[1] = np.where(np.diff(off))[0][-1]
 
         # A slice defining the suggested "good" range. `indices` holds
         # (first kept, last kept), both inclusive -- the same convention as

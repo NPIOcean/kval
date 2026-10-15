@@ -1039,6 +1039,58 @@ def test_chop_deck_no_deck_time_leaves_dataset_unchanged():
     assert result.sizes['TIME'] == ds.sizes['TIME']
 
 
+# ---------------------------------------------------------------------
+# chop_deck: deviation from the median in either direction
+# ---------------------------------------------------------------------
+
+def _deck_temperature_ds(start_air=8.0, end_air=-15.0, n=500):
+    """Water ~1 C with small noise; warm deck air at the start and cold
+    deck air at the end."""
+    rng = np.random.default_rng(0)
+    temp = 1.0 + 0.05 * rng.standard_normal(n)
+    temp[:10] = start_air
+    temp[-15:] = end_air
+    return xr.Dataset({"TEMP": ("TIME", temp)}, coords={"TIME": np.arange(n)})
+
+
+def test_chop_deck_detects_deck_time_above_and_below():
+    """Used to find only values BELOW the median (warm deck air missed)."""
+    ds = _deck_temperature_ds()
+    out = chop_deck(ds, variable="TEMP", auto_accept=True, verbose=False)
+    np.testing.assert_array_equal(out.TIME.values, np.arange(10, 485))
+
+
+def test_chop_deck_pressure_unchanged_behaviour(make_ctd_ds):
+    ds = make_ctd_ds(n=400)
+    ds["PRES"].values[:12] = 0.5          # on deck at the start
+    ds["PRES"].values[-7:] = 0.3          # and at the end
+    out = chop_deck(ds, variable="PRES", auto_accept=True, verbose=False)
+    assert out.sizes["TIME"] == 400 - 12 - 7
+    assert out.PRES.values.min() > 40
+
+
+def test_chop_deck_single_noisy_edge_sample_is_not_chopped():
+    """With deviations in both directions counted, one noisy sample at an
+    edge of an in-water record would otherwise be taken for deck time."""
+    rng = np.random.default_rng(3)
+    temp = 1.0 + 0.05 * rng.standard_normal(300)
+    temp[0] = 1.2      # > 1 sd above the median, but a single sample
+    temp[-2:] = 0.8    # two samples below
+    ds = xr.Dataset({"TEMP": ("TIME", temp)}, coords={"TIME": np.arange(300)})
+    out = chop_deck(ds, variable="TEMP", auto_accept=True, verbose=False)
+    assert out.sizes["TIME"] == 300
+    out = chop_deck(ds, variable="TEMP", auto_accept=True, verbose=False,
+                    min_samples=1)
+    assert out.sizes["TIME"] < 300
+
+
+def test_chop_deck_all_samples_off_raises():
+    ds = xr.Dataset({"TEMP": ("TIME", np.array([0.0, 10.0] * 50))},
+                    coords={"TIME": np.arange(100)})
+    with pytest.raises(ValueError, match="no in-water part"):
+        chop_deck(ds, variable="TEMP", sd_thr=0.5, auto_accept=True)
+
+
 def test_chop_deck_raises_for_missing_variable():
     ds = xr.Dataset({'TEMP': ('TIME', np.arange(10.0))}, coords={'TIME': np.arange(10)})
     with pytest.raises(ValueError, match="not a variable"):
