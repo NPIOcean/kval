@@ -191,3 +191,45 @@ def test_xr_to_mat_appends_mat_extension_if_missing(tmp_path):
     path_no_ext = str(tmp_path / "no_extension")
     matfile.xr_to_mat(ds, path_no_ext, simplify=True)
     assert os.path.exists(path_no_ext + ".mat")
+
+# ---------------------------------------------------------------------
+# TIME encoding (independent of matplotlib's date epoch)
+# ---------------------------------------------------------------------
+
+def _decoded_time(ds):
+    return xr.coding.times.decode_cf_datetime(
+        ds.TIME.values, ds.TIME.attrs["units"])
+
+
+def test_mat_to_xr_1D_sets_time_units(tmp_path):
+    path = str(tmp_path / "test.mat")
+    _make_struct_matfile(path, extra_vars={"TEMP": np.array([2.0, 1.0, 3.0])})
+    ds = matfile.mat_to_xr_1D(path)
+    assert ds.TIME.attrs["units"] == "days since 1970-01-01"
+    assert _decoded_time(ds)[0] == np.datetime64("2021-01-01")
+
+
+def test_mat_to_xr_2D_sets_time_units(tmp_path):
+    path = str(tmp_path / "test2d.mat")
+    savemat(path, {"mystruct": {
+        "time": datetime_to_matlab_datenum(
+            [datetime(2021, 1, 1), datetime(2021, 1, 2)]),
+        "PRES": np.array([10.0, 20.0, 30.0]),
+        "TEMP": np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
+    }})
+    ds = matfile.mat_to_xr_2D(path)
+    assert ds.TIME.attrs["units"] == "days since 1970-01-01"
+    assert _decoded_time(ds)[0] == np.datetime64("2021-01-01")
+
+
+def test_mat_to_xr_1D_time_does_not_depend_on_matplotlib_epoch(tmp_path):
+    """TIME used to be made with matplotlib's date2num, whose epoch is a
+    matplotlib setting. Changing that setting must not change TIME."""
+    import matplotlib
+    path = str(tmp_path / "test.mat")
+    _make_struct_matfile(path, extra_vars={"TEMP": np.array([2.0, 1.0, 3.0])})
+    reference = matfile.mat_to_xr_1D(path).TIME.values
+    with matplotlib.rc_context({"date.epoch": "2000-01-01T00:00:00"}):
+        ds = matfile.mat_to_xr_1D(path)
+    np.testing.assert_array_equal(ds.TIME.values, reference)
+    assert _decoded_time(ds)[0] == np.datetime64("2021-01-01")

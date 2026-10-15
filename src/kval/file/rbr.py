@@ -23,7 +23,6 @@ directory of this project.
 import pyrsktools
 import xarray as xr
 import pandas as pd
-from matplotlib.dates import date2num, num2date
 from kval.file._variable_defs import RBR_name_map, RBR_units_map
 from kval.util import time
 from datetime import datetime
@@ -65,8 +64,10 @@ def read_rsk(
         ds_rsk = rsk_to_xr(rskdata, keep_total_pres=keep_total_pres)
 
         # Add a history attribute with some basic info
-        first_date = num2date(ds_rsk.TIME.min()).strftime("%Y-%m-%d")
-        last_date = num2date(ds_rsk.TIME.max()).strftime("%Y-%m-%d")
+        first_date = time.numeric_time_to_datestring(
+            ds_rsk.TIME.values.min(), ds_rsk.TIME.units, out_fmt="%Y-%m-%d")
+        last_date = time.numeric_time_to_datestring(
+            ds_rsk.TIME.values.max(), ds_rsk.TIME.units, out_fmt="%Y-%m-%d")
         now_date = pd.Timestamp.now().strftime("%Y-%m-%d")
 
         ds_rsk.attrs["history"] = (
@@ -207,9 +208,13 @@ def rsk_to_xr(rskdata, keep_total_pres: bool = False) -> xr.Dataset:
     # Change names
     ds_rsk = ds_rsk.rename_vars(filtered_RBR_name_map)
 
-    # Convert TIME to Python epoch format and update attributes
-    ds_rsk["TIME"] = ("TIME", date2num(ds_rsk["TIME"].values))
-    ds_rsk["TIME"].attrs["units"] = "days since 1970-01-01"
+    # Convert TIME to CF numeric time (days since 1970-01-01) and update
+    # attributes. (Not matplotlib's date2num, whose epoch is a matplotlib
+    # setting that can differ from the units written here.)
+    time_units = "days since 1970-01-01"
+    ds_rsk["TIME"] = ("TIME", time.datetime_to_numeric_time(
+        ds_rsk["TIME"].values, units=time_units))
+    ds_rsk["TIME"].attrs["units"] = time_units
     ds_rsk["TIME"].attrs["axis"] = "T"
 
     ds_rsk.attrs["source_file"] = os.path.basename(rskdata.filename)

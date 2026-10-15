@@ -15,7 +15,6 @@ import pandas as pd
 import os
 import gsw
 import matplotlib.pyplot as plt
-from matplotlib.dates import date2num, num2date
 from matplotlib.dates import DateFormatter, HourLocator
 import matplotlib as mpl
 
@@ -1386,23 +1385,29 @@ def adjust_PSAL_from_CNDC_TEMP(
     ds1 = append_processing_history(ds1, 'PSAL', comment, deep_copy=False)
 
     if plot:
+        # Plot everything against the same datetime64 time axis (decoded
+        # from TIME's own units if TIME is numeric). Only TIME is passed,
+        # so this doesn't copy the data variables.
+        t_plot = time_as_datetime(
+            xr.Dataset(coords={'TIME': ds.TIME})).TIME.values
+
         fig, ax = plt.subplots(3, 1, sharex=True)
-        ax[0].plot(num2date(ds.TIME.values), CNDC_scaled, color='tab:orange',
+        ax[0].plot(t_plot, CNDC_scaled, color='tab:orange',
                    label='Scaled CNDC')
-        ax[0].plot(ds.TIME, TEMP_scaled, alpha=0.6, lw=1,
+        ax[0].plot(t_plot, TEMP_scaled, alpha=0.6, lw=1,
                    label='Scaled TEMP')
-        ax[0].plot(ds.TIME.values[reject_sal], CNDC_scaled.values[reject_sal],
+        ax[0].plot(t_plot[reject_sal], CNDC_scaled.values[reject_sal],
                    'or', ms=3, label='PSAL rejected')
 
-        ax[1].plot(ds.TIME, np.abs(CNDC_scaled - TEMP_scaled),
+        ax[1].plot(t_plot, np.abs(CNDC_scaled - TEMP_scaled),
                    label='|Scaled CNDC - Scaled TEMP|')
-        ax[1].plot(ds.TIME.values[reject_sal],
+        ax[1].plot(t_plot[reject_sal],
                    np.abs(CNDC_scaled - TEMP_scaled).values[reject_sal],
                    'or', ms=3, label='PSAL rejected')
         ax[1].axhline(max_diff, linestyle=':', color='k', label='max_diff')
 
-        ax[2].plot(ds.TIME, ds.PSAL, 'k', alpha=0.7, label='Original')
-        ax[2].plot(ds.TIME, PSAL_, color='tab:orange', label='Updated')
+        ax[2].plot(t_plot, ds.PSAL, 'k', alpha=0.7, label='Original')
+        ax[2].plot(t_plot, PSAL_, color='tab:orange', label='Updated')
         ax[2].set_ylabel('PSAL')
 
         for axn in ax:

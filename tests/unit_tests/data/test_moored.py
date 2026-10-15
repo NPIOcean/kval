@@ -1181,6 +1181,34 @@ def test_adjust_PSAL_from_CNDC_TEMP_same_result_for_S_m_and_mS_cm(make_ctd_ds):
     np.testing.assert_allclose(a.PSAL.values, b.PSAL.values, rtol=1e-9)
 
 
+@pytest.mark.parametrize("as_datetime", [False, True])
+def test_adjust_PSAL_from_CNDC_TEMP_plot_lines_share_the_data_time_axis(
+        make_ctd_ds, as_datetime):
+    """All plotted lines must sit on the data's own dates, whether TIME is
+    numeric (CF) or datetime64, and whatever matplotlib's date epoch is."""
+    import matplotlib
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    ds = make_ctd_ds(n=500)
+    if as_datetime:
+        ds = xr_funcs.time_as_datetime(ds)
+    t_data = xr_funcs.time_as_datetime(ds).TIME.values
+    with matplotlib.rc_context({"date.epoch": "2000-01-01T00:00:00"}):
+        adjust_PSAL_from_CNDC_TEMP(ds, max_diff=100, plot=True)
+        fig = plt.gcf()
+        for axn in fig.axes:
+            for line in axn.get_lines():
+                x = line.get_xdata()
+                if len(x) == 0 or line.get_linestyle() == ':':
+                    continue  # skip empty lines and the axhline
+                x = np.asarray(x)
+                if not np.issubdtype(x.dtype, np.datetime64):
+                    x = pd.to_datetime(mdates.num2date(x)).tz_localize(
+                        None).values
+                assert x.min() >= t_data.min() and x.max() <= t_data.max()
+        plt.close(fig)
+
+
 def _history_text(ds, var):
     return " ".join(str(v) for v in ds[var].attrs.values())
 

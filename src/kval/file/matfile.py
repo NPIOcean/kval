@@ -16,10 +16,12 @@ import xarray as xr
 from scipy.io import matlab
 import numpy as np
 import warnings
-from matplotlib.dates import date2num
 from kval.util import time
 from typing import Any
 import os
+
+# Units of the numeric TIME coordinate produced by the mat_to_xr functions
+_TIME_UNITS = "days since 1970-01-01"
 
 def mat_to_xr_1D(
     matfile: str,
@@ -72,7 +74,8 @@ def mat_to_xr_1D(
     # (Attempt to) parse time
     try:
         time_stamp = _parse_time(data_dict, time_name=time_name)
-        time_num = date2num(time_stamp)
+        time_num = time.datetime_to_numeric_time(
+            time_stamp, units=_TIME_UNITS)
 
         # Remove time variable if we successfully parsed time
         data_dict.pop(time_name)
@@ -84,6 +87,7 @@ def mat_to_xr_1D(
 
     # Collect in an xr Dataset
     ds = xr.Dataset(coords={"TIME": time_num})
+    ds["TIME"].attrs["units"] = _TIME_UNITS
 
     # Add data variables
     for varnm in data_dict:
@@ -161,7 +165,8 @@ def mat_to_xr_2D(
     # (Attempt to) parse time
     try:
         time_stamp = _parse_time(data_dict, time_name=time_name)
-        time_num = date2num(time_stamp)
+        time_num = time.datetime_to_numeric_time(
+            time_stamp, units=_TIME_UNITS)
 
         # Remove time variable if we successfully parsed time
         data_dict.pop(time_name)
@@ -182,6 +187,7 @@ def mat_to_xr_2D(
     ds = xr.Dataset(
         coords={"TIME": time_num, dim2_name_out: data_dict[dim2_name_in]}
     )
+    ds["TIME"].attrs["units"] = _TIME_UNITS
 
     # Add data variables
     # (Assigning the coordinates by looking at the dimensionality of the fields)

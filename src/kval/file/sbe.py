@@ -48,7 +48,6 @@ import matplotlib.pyplot as plt
 import re
 import os
 from itertools import zip_longest
-from matplotlib.dates import num2date
 import warnings
 from kval.util import internals
 # KEY FUNCTIONS
@@ -702,8 +701,9 @@ def read_csv(filename: str) -> xr.Dataset:
 
     # Make a string for history
     history_lines = [
-        f"{num2date(ds.TIME.min()).strftime('%Y-%m-%d')} - "
-        f"{num2date(ds.TIME.max()).strftime('%Y-%m-%d')}: Data collection.\n"]
+        f"{time.numeric_time_to_datestring(ds.TIME.values.min(), ds.TIME.units, out_fmt='%Y-%m-%d')} - "
+        f"{time.numeric_time_to_datestring(ds.TIME.values.max(), ds.TIME.units, out_fmt='%Y-%m-%d')}"
+        ": Data collection.\n"]
 
     # Add conversion date line only if it's not empty
     if meta_dict['conv_date']:
@@ -2352,9 +2352,11 @@ def _modify_moored(ds, hdict):
     # To reflect a *range* rather than a time point..
     if "history" in ds.attrs:
         sample_dates = (
-            num2date(ds.TIME[0]).strftime("%Y-%m-%d")
+            time.numeric_time_to_datestring(
+                ds.TIME.values[0], ds.TIME.units, out_fmt="%Y-%m-%d")
             + " - "
-            + num2date(ds.TIME[-1]).strftime("%Y-%m-%d")
+            + time.numeric_time_to_datestring(
+                ds.TIME.values[-1], ds.TIME.units, out_fmt="%Y-%m-%d")
             + ":"
         )
         original_date = ds.history.split()[0]

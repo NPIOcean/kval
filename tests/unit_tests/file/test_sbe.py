@@ -268,3 +268,34 @@ def test_read_SBE_proc_steps_lowpass_time_constant_without_decimals():
     lines = _BASE + ["# filter_low_pass_tc_A = 1",
                      "# filter_low_pass_A_vars = c0S/m"]
     assert "time constant 1.0" in _proc_steps(lines).attrs["SBE_processing"]
+
+# ===================================================================
+# History dates (independent of matplotlib's date epoch)
+# ===================================================================
+
+def _first_last_dates(ds):
+    t = xr.coding.times.decode_cf_datetime(ds.TIME.values, ds.TIME.units)
+    return (np.datetime_as_string(t.min(), unit='D'),
+            np.datetime_as_string(t.max(), unit='D'))
+
+
+def test_read_csv_history_dates_do_not_depend_on_matplotlib_epoch():
+    """The "Data collection" dates in the history attribute used to come
+    from matplotlib's num2date, which ignores TIME's units and uses
+    matplotlib's own epoch setting."""
+    import matplotlib
+    filename = 'tests/test_data/sbe_files/sbe56/SBE56-1232_test.csv'
+    with matplotlib.rc_context({"date.epoch": "2000-01-01T00:00:00"}):
+        ds = sbe.read_csv(filename)
+    first, last = _first_last_dates(ds)
+    assert ds.attrs['history'].startswith(
+        f"{first} - {last}: Data collection.")
+
+
+def test_read_cnv_moored_history_dates_do_not_depend_on_matplotlib_epoch():
+    import matplotlib
+    filename = 'tests/test_data/sbe_files/sbe37/cnv/test_sbe37.cnv'
+    with matplotlib.rc_context({"date.epoch": "2000-01-01T00:00:00"}):
+        ds = sbe.read_cnv(filename)
+    first, last = _first_last_dates(ds)
+    assert ds.attrs['history'].startswith(f"{first} - {last}:")

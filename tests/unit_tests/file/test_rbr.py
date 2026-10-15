@@ -112,3 +112,25 @@ def test_read(rbr_file):
 
     # Check if the TIME variable has the correct type
     assert ds_rsk['TIME'].dtype == 'float64', "TIME variable type is incorrect"
+
+
+@pytest.mark.parametrize("rbr_file", ["solo_example.rsk"], indirect=True)
+def test_read_rsk_time_does_not_depend_on_matplotlib_epoch(rbr_file):
+    """TIME (and the history dates) used to be made with matplotlib's
+    date2num/num2date, whose epoch is a matplotlib setting. Changing that
+    setting must not change TIME, and the history dates must match the
+    data."""
+    import matplotlib
+    import numpy as np
+    reference = read_rsk(rbr_file).TIME.values
+    with matplotlib.rc_context({"date.epoch": "2000-01-01T00:00:00"}):
+        ds_rsk = read_rsk(rbr_file)
+    np.testing.assert_array_equal(ds_rsk.TIME.values, reference)
+    assert ds_rsk.TIME.attrs["units"] == "days since 1970-01-01"
+
+    t = xr.coding.times.decode_cf_datetime(
+        ds_rsk.TIME.values, ds_rsk.TIME.units)
+    first = np.datetime_as_string(t.min(), unit='D')
+    last = np.datetime_as_string(t.max(), unit='D')
+    assert ds_rsk.attrs["history"].startswith(
+        f"{first} - {last}: Data collection.")
