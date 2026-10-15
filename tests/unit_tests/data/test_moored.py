@@ -1558,3 +1558,45 @@ def test_drop_variables_requires_keywords(make_ctd_ds):
     with pytest.raises(TypeError):
         ctdprof.drop_variables(ds, ["TEMP"])
     assert "TEMP" not in drop_variables(ds, drop=["TEMP"], verbose=False)
+
+
+# combine_datasets: where attributes that differ between instruments go
+
+def test_combine_datasets_identity_attrs_coords_others_merged(
+        ds_instr1_combine, ds_instr2_combine):
+    ds1 = ds_instr1_combine.copy(deep=True)
+    ds2 = ds_instr2_combine.copy(deep=True)
+    ds1.attrs.update(source_file='a.cnv', instrument_model='SBE37',
+                     history='line 1\nline 2')
+    ds2.attrs.update(source_file='b.cnv', instrument_model='SBE56',
+                     history='other')
+    ds1['TEMP'].attrs.update(sensor_serial_number='111', comment='x',
+                             valid_min=-1.0, valid_max=5.0)
+    ds2['TEMP'].attrs.update(sensor_serial_number='222', comment='y',
+                             valid_min=-2.0, valid_max=4.0)
+    out = combine_datasets(ds1, ds2, interval='1h', instr_names=['A', 'B'])
+
+    # Identifying attributes: coordinates along INSTR
+    assert list(out['instrument_serial_number'].values) == ['12345', '67890']
+    assert list(out['instrument_model'].values) == ['SBE37', 'SBE56']
+    assert list(out['TEMP_sensor_serial_number'].values) == ['111', '222']
+    # Others: one attribute
+    assert 'source_file' not in out.coords
+    assert out.attrs['source_file'] == 'A: a.cnv; B: b.cnv'
+    assert out.attrs['history'] == 'A: line 1\nline 2\nB: other'
+    assert 'TEMP_comment' not in out.coords
+    assert out.TEMP.attrs['comment'] == 'A: x; B: y'
+    # Valid range: the envelope, still numeric
+    assert out.TEMP.attrs['valid_min'] == -2.0
+    assert out.TEMP.attrs['valid_max'] == 5.0
+    # Shared attributes as before
+    assert out.attrs['mooring_name'] == 'M1'
+
+
+def test_combine_datasets_merged_attr_lists_only_instruments_that_have_it(
+        ds_instr1_combine, ds_instr2_combine):
+    ds1 = ds_instr1_combine.copy(deep=True)
+    ds2 = ds_instr2_combine.copy(deep=True)
+    ds1.attrs['comment'] = 'only on A'
+    out = combine_datasets(ds1, ds2, interval='1h', instr_names=['A', 'B'])
+    assert out.attrs['comment'] == 'A: only on A'

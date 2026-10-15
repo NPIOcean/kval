@@ -1565,6 +1565,49 @@ def _split_attrs(var_attr_sets, all_labels):
     return shared, per_instr
  
  
+# Attributes that identify an instrument or sensor. When they differ between
+# the datasets combined by combine_datasets, they become coordinates along
+# INSTR (so they can be looked up per instrument). Other differing
+# attributes are merged into one attribute (see _place_varying_attrs).
+_PER_INSTR_GLOBAL_COORDS = ('instrument_serial_number', 'instrument_model')
+_PER_INSTR_VAR_COORDS = ('sensor_serial_number', 'sensor_calibration_date')
+
+
+def _place_varying_attrs(per_instr, labels, identity_keys, prefix=''):
+    """
+    Decide where each attribute that differs between instruments goes
+    (see combine_datasets).
+
+    per_instr: {attr_key: [value per instrument, None if missing]} (from
+    _split_attrs). Returns (coords, merged_attrs):
+    - coords: {coord_name: values} for the keys in `identity_keys`, named
+      prefix + key (e.g. 'TEMP_sensor_calibration_date').
+    - merged_attrs: {attr_key: value} for all other keys. valid_min and
+      valid_max become the lowest/highest value; anything else becomes a
+      string listing each instrument's value, e.g. "A1: x; A2: y" (lines
+      instead of "; " if a value spans several lines).
+    """
+    coords, merged = {}, {}
+    for key, values in per_instr.items():
+        if key in identity_keys:
+            coords[f'{prefix}{key}'] = values
+            continue
+        present = [(lbl, v) for lbl, v in zip(labels, values) if v is not None]
+        if not present:
+            continue
+        if key in ('valid_min', 'valid_max'):
+            try:
+                pick = min if key == 'valid_min' else max
+                merged[key] = pick(v for _, v in present)
+                continue
+            except TypeError:
+                pass  # not comparable: fall back to a string
+        entries = [f'{lbl}: {v}' for lbl, v in present]
+        sep = '\n' if any('\n' in str(v) for _, v in present) else '; '
+        merged[key] = sep.join(entries)
+    return coords, merged
+
+
 def combine_datasets(
     *datasets: xr.Dataset,
     interval: str,
@@ -1613,12 +1656,16 @@ def combine_datasets(
     actually has the variable is kept as a shared attribute -- instruments
     lacking the variable entirely don't count against sharing (e.g. a
     PRES.units of 'dbar' stays shared even if only one instrument has
-    PRES). Otherwise, the attribute becomes a new coordinate variable
-    along `instr_dim`:
-    - Global attrs that vary -> coordinate named after the attr key
-      itself (e.g. 'instrument_serial_number').
-    - Variable-level attrs that vary -> coordinate named
-      '{variable}_{attr_key}' (e.g. 'TEMP_sensor_calibration_date').
+    PRES). Attributes that differ are handled like this:
+    - Attributes that identify an instrument or sensor become coordinates
+      along `instr_dim`: the global 'instrument_serial_number' and
+      'instrument_model' (coordinates of the same name), and the variable
+      attributes 'sensor_serial_number' and 'sensor_calibration_date'
+      (coordinates named e.g. 'TEMP_sensor_calibration_date').
+    - valid_min / valid_max become the lowest / highest of the values.
+    - Any other attribute becomes one string listing each instrument's
+      value, e.g. source_file = "AT200: a.cnv; AT800: b.cnv" (one line per
+      instrument if a value spans several lines, e.g. history).
     The inputs' global time_coverage_* attributes are left out, since they
     describe each input's own timing rather than the common grid (use
     `add_range_attrs` to set them for the result).
@@ -1842,9 +1889,11 @@ def combine_datasets(
                 var_attr_sets.append((labels[i], orig_attrs))
  
         shared_attrs, per_instr_attrs = _split_attrs(var_attr_sets, labels)
-        data_vars_out[var] = ((instr_dim, time_dim), arr, shared_attrs)
-        for attr_key, per_instr_vals in per_instr_attrs.items():
-            coord_name = f'{var}_{attr_key}'
+        coords_var, merged = _place_varying_attrs(
+            per_instr_attrs, labels, _PER_INSTR_VAR_COORDS, prefix=f'{var}_')
+        data_vars_out[var] = ((instr_dim, time_dim), arr,
+                              {**shared_attrs, **merged})
+        for coord_name, per_instr_vals in coords_var.items():
             coords_out[coord_name] = (instr_dim, per_instr_vals)
  
     # --- Scalar (non-TIME) numeric variables: stack along INSTR only ---
@@ -1858,9 +1907,10 @@ def combine_datasets(
                 var_attr_sets.append((labels[i], dict(ds[var].attrs)))
  
         shared_attrs, per_instr_attrs = _split_attrs(var_attr_sets, labels)
-        data_vars_out[var] = ((instr_dim,), arr, shared_attrs)
-        for attr_key, per_instr_vals in per_instr_attrs.items():
-            coord_name = f'{var}_{attr_key}'
+        coords_var, merged = _place_varying_attrs(
+            per_instr_attrs, labels, _PER_INSTR_VAR_COORDS, prefix=f'{var}_')
+        data_vars_out[var] = ((instr_dim,), arr, {**shared_attrs, **merged})
+        for coord_name, per_instr_vals in coords_var.items():
             coords_out[coord_name] = (instr_dim, per_instr_vals)
  
     # --- Global attrs: shared vs per-instrument (every dataset is
@@ -1876,8 +1926,11 @@ def combine_datasets(
                      if k not in time_coverage_attrs})
         for i in range(n)]
     combined_global_attrs, per_instr_global = _split_attrs(global_attr_sets, labels)
-    for attr_key, per_instr_vals in per_instr_global.items():
-        coords_out[attr_key] = (instr_dim, per_instr_vals)
+    coords_glob, merged_glob = _place_varying_attrs(
+        per_instr_global, labels, _PER_INSTR_GLOBAL_COORDS)
+    combined_global_attrs.update(merged_glob)
+    for coord_name, per_instr_vals in coords_glob.items():
+        coords_out[coord_name] = (instr_dim, per_instr_vals)
  
     ds_out = xr.Dataset(data_vars_out, coords=coords_out, attrs=combined_global_attrs)
 
