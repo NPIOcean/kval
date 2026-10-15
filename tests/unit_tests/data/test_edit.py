@@ -649,3 +649,55 @@ def test_linear_drift_processing_history_explicit_dates_shown_plainly(mock_datas
     history = ds_out['TEMP'].attrs['processing_history']
     assert 'the first data entry' not in history
     assert 'the last data entry' not in history
+
+# ---------------------------------------------------------------------
+# remove_points_timeseries: accepted index forms
+# ---------------------------------------------------------------------
+
+def _ts(n=10):
+    return xr.Dataset({"T": ("TIME", np.arange(float(n)))},
+                      coords={"TIME": np.arange(n)})
+
+
+@pytest.mark.parametrize("inds, expected", [
+    (5, [5]),
+    ([2, 3], [2, 3]),
+    (np.array([2, 3]), [2, 3]),               # used to raise (truth value)
+    (np.where(np.arange(10) > 7), [8, 9]),    # np.where tuple
+    (slice(2, 4), [2, 3]),
+    (slice(None, 3), [0, 1, 2]),              # used to raise (TypeError)
+    (slice(8, None), [8, 9]),
+    (slice(0, 10, 3), [0, 3, 6, 9]),
+    (-1, [9]),
+    (np.arange(10) % 4 == 0, [0, 4, 8]),      # boolean mask
+    ([3, 3], [3]),
+    ([1, slice(5, 7), 9], [1, 5, 6, 9]),      # as from indices_to_slices
+])
+def test_remove_points_timeseries_index_forms(inds, expected):
+    out = edit.remove_points_timeseries(_ts(), "T", inds)
+    assert np.where(np.isnan(out["T"].values))[0].tolist() == expected
+    assert f"Removed {len(expected)} point(s)" in out["T"].attrs["processing_history"]
+
+
+@pytest.mark.parametrize("inds", [[], np.array([], dtype=int), slice(3, 3)])
+def test_remove_points_timeseries_nothing_to_remove(inds):
+    out = edit.remove_points_timeseries(_ts(), "T", inds)
+    assert not np.isnan(out["T"].values).any()
+    assert "processing_history" not in out["T"].attrs
+
+
+def test_remove_points_timeseries_bad_input_raises():
+    with pytest.raises(IndexError):
+        edit.remove_points_timeseries(_ts(), "T", [10])
+    with pytest.raises(ValueError, match="length"):
+        edit.remove_points_timeseries(_ts(), "T", np.ones(3, dtype=bool))
+    with pytest.raises(TypeError):
+        edit.remove_points_timeseries(_ts(), "T", [1.5])
+
+
+def test_remove_points_timeseries_2d_variable_masks_along_time():
+    ds = xr.Dataset({"T": (("TIME", "PRES"), np.ones((5, 3)))},
+                    coords={"TIME": np.arange(5), "PRES": [1, 2, 3]})
+    out = edit.remove_points_timeseries(ds, "T", [1])
+    assert np.isnan(out["T"].values[1]).all()
+    assert np.isfinite(np.delete(out["T"].values, 1, axis=0)).all()

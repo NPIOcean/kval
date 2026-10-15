@@ -67,6 +67,40 @@ def remove_points_profile(ds: xr.Dataset, variable: str, TIME_index: int,
     return ds
 
 
+def _index_mask(remove_inds, n):
+    """
+    Boolean mask of length `n` from an int, list/array of ints, the tuple
+    returned by np.where, a slice, a list mixing ints and slices, or a
+    boolean array of length `n`.
+    """
+    if isinstance(remove_inds, tuple) and len(remove_inds) == 1:
+        remove_inds = remove_inds[0]  # np.where(...) on 1-D data
+    if isinstance(remove_inds, slice):
+        return np.isin(np.arange(n), np.arange(n)[remove_inds])
+    if (isinstance(remove_inds, (list, tuple))
+            and any(isinstance(x, slice) for x in remove_inds)):
+        # A mix of ints and slices, e.g. from kval.util.index.indices_to_slices
+        mask = np.zeros(n, dtype=bool)
+        for item in remove_inds:
+            mask |= _index_mask(item, n)
+        return mask
+    inds = np.atleast_1d(np.asarray(remove_inds))
+    if inds.dtype == bool:
+        if inds.shape != (n,):
+            raise ValueError(
+                f"A boolean remove_inds must have length {n}, not {inds.size}.")
+        return inds.copy()
+    if inds.size == 0:
+        return np.zeros(n, dtype=bool)
+    if not np.issubdtype(inds.dtype, np.integer):
+        raise TypeError(f"remove_inds must be integer indices, got {inds.dtype}.")
+    if inds.max() >= n or inds.min() < -n:
+        raise IndexError(f"remove_inds out of range for length {n}.")
+    mask = np.zeros(n, dtype=bool)
+    mask[inds] = True
+    return mask
+
+
 def remove_points_timeseries(ds: xr.Dataset, variable: str,
                              remove_inds, time_var='TIME',
                              deep_copy = True) -> xr.Dataset:
@@ -78,8 +112,11 @@ def remove_points_timeseries(ds: xr.Dataset, variable: str,
       The dataset containing the variable to modify.
     - variable: str
       The name of the variable to modify.
-    - remove_inds: list, array-like, or slice
-      Indices of points to remove (set to NaN).
+    - remove_inds: int, list, array-like, slice or boolean mask
+      Indices of points to remove (set to NaN): e.g. 5, [2, 3], the output
+      of np.where(...), slice(None, 100), a list mixing ints and slices
+      (e.g. [3, slice(10, 20)]), or a boolean array of the same length as
+      the variable. Negative indices count from the end.
 
     Returns:
     - ds: xarray.Dataset
@@ -89,30 +126,30 @@ def remove_points_timeseries(ds: xr.Dataset, variable: str,
     if deep_copy:
         ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
+    # The dimension to remove along: `time_var` if the variable has it,
+    # otherwise the only dimension of a 1-D variable
+    var_dims = ds[variable].dims
+    if time_var in var_dims:
+        dim = time_var
+    elif len(var_dims) == 1:
+        dim = var_dims[0]
+    else:
+        raise ValueError(
+            f"'{variable}' has dimensions {var_dims} but no '{time_var}'; "
+            "pass time_var= to say which dimension the indices refer to.")
+    n = ds[variable].sizes[dim]
+    remove_bool = _index_mask(remove_inds, n)
+
     # Handle case where no points are to be removed
-    if not remove_inds:
+    if not remove_bool.any():
         return ds
 
-    # We want remove_inds to be an iterable (array)
-    if isinstance(remove_inds, slice):
-        # Convert slice to a range of indices
-        remove_inds = np.arange(remove_inds.start, remove_inds.stop)
-    elif isinstance(remove_inds, int):
-        # If it's a single integer, turn it into a list
-        remove_inds = [remove_inds]
+    # Set the selected points to NaN (the mask is labelled with the
+    # dimension so it applies along it, also for multi-dimensional variables)
+    keep = xr.DataArray(~remove_bool, dims=[dim])
+    ds[variable] = ds[variable].where(keep)
 
-    remove_inds = np.asarray(remove_inds)
-
-
-    # Create a boolean array for removal
-    remove_bool = np.zeros(len(ds[variable]), dtype=bool)
-    for remove_ind in remove_inds:
-        remove_bool[remove_ind] = True
-
-    # Use the `where` method to set the selected points to NaN
-    ds[variable] = ds[variable].where(~remove_bool)
-
-    note = f"Removed {len(remove_inds)} point(s) from the time series."
+    note = f"Removed {int(remove_bool.sum())} point(s) from the time series."
     ds = xr_funcs.append_processing_history(ds, variable, note, deep_copy=False)
 
     return ds
