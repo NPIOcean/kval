@@ -148,8 +148,11 @@ def convert_64_to_32(ds: xr.Dataset, force: bool = False, relative_tol: float = 
         # cast the variable
         ds[varnm] = arr.astype(target_dtype)
 
-        # update metadata attributes if present
-        for attr in ["valid_min", "valid_max", "valid_range", "_FillValue"]:
+        # Attributes that CF requires to have the same type as the data
+        # (2.5.1, 3.5): convert them along with it
+        for attr in ["valid_min", "valid_max", "valid_range", "_FillValue",
+                     "missing_value", "actual_range", "flag_values",
+                     "flag_masks"]:
             if attr in ds[varnm].attrs:
                 val = ds[varnm].attrs[attr]
                 if isinstance(val, (int, float, np.integer, np.floating)):

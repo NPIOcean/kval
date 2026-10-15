@@ -416,6 +416,26 @@ def test_to_netcdf_writes_int64_as_int32_and_keeps_float64(tmp_path):
     assert ds.COUNT.dtype == np.int64  # input not changed
 
 
+def test_to_netcdf_int64_to_int32_converts_type_matched_attributes(tmp_path):
+    """CF: flag_values, _FillValue, valid_* etc. must have the same type as
+    the variable, so they are converted along with it."""
+    import netCDF4
+    ds = xr.Dataset({'FLAG': ('TIME', np.array([0, 1, 4], dtype='int64'), {
+        'flag_values': np.array([0, 1, 4], dtype='int64'),
+        'flag_meanings': 'good bad missing',
+        'valid_min': np.int64(0), 'valid_max': np.int64(4),
+        'missing_value': np.int64(-1), '_FillValue': np.int64(-1)})},
+        coords={'TIME': ('TIME', np.array([0.0, 1.0, 2.0]),
+                         {'units': 'days since 2020-01-01'})})
+    dataset.to_netcdf(ds, tmp_path, 'flags.nc', verbose=False)
+    with netCDF4.Dataset(tmp_path / 'flags.nc') as nc:
+        var = nc['FLAG']
+        assert var.dtype == np.int32
+        for attr in ('flag_values', 'valid_min', 'valid_max',
+                     'missing_value', '_FillValue'):
+            assert np.asarray(var.getncattr(attr)).dtype == np.int32, attr
+
+
 def test_add_latlon_places_coords_after_time():
     """Purely cosmetic, but LATITUDE/LONGITUDE should consistently
     appear after TIME in the coords listing, not wherever they happen
