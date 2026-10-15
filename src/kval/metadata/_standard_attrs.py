@@ -109,13 +109,13 @@ standard_var_attrs = {
     "CDOM_instr": {
         "long_name": (
             "Colored dissolved organic matter (CDOM) from CTD fluorometer. "
-            "Not calibrated with water sample chlorophyll measurements."
+            "Not calibrated with water sample lab measurements."
         ),
         "processing_level": (
             "Instrument data that has been converted to physical values"),
         "QC_indicator": "unknown",
         "comment": (
-            "Nominal units are [mg m-3], but water sample calibrations are "
+            "Nominal units are [1], but water sample calibrations are "
             "necessary in order to produce realistic absolute values."),
     },
     "CDOM": {
