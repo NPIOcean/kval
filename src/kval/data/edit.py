@@ -577,6 +577,7 @@ def linear_drift(
 
 def drop_variables(
     ds: xr.Dataset,
+    *,
     drop: list[str] | None = None,
     retain: list[str] | bool | None = None,
     dims_to_check: list[str] = ["TIME"],

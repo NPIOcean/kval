@@ -8,6 +8,19 @@ import xarray as xr
 import numpy as np
 
 
+def _complete_window(data_var, dim, window_size):
+    """
+    True where the centred rolling window along `dim` lies entirely inside
+    the record (i.e. not at the edges). Computed with the same rolling call,
+    so it matches xarray's placement of odd and even windows exactly.
+    """
+    n = data_var.sizes[dim]
+    ones = xr.DataArray(np.ones(n), dims=[dim])
+    n_in_window = ones.rolling({dim: window_size}, center=True,
+                               min_periods=1).sum()
+    return n_in_window == window_size
+
+
 def rolling(ds: xr.Dataset, variable: str, dim: str,
             window_size: int, filter_type: str = 'mean',
             min_periods: bool | int = None,
@@ -34,7 +47,8 @@ def rolling(ds: xr.Dataset, variable: str, dim: str,
         rolling window.
         If `None` (default), all windows with a NaN will be set to Nan.
     - nan_edges: bool, optional
-        Whether to set edge values (half of the window length) to NaN.
+        Whether to set edge values to NaN: the points whose window extends
+        past the start or end of the record (about half a window length).
         Applies whether or not `min_periods` is set (with `min_periods=None`
         the edge windows are incomplete and already NaN).
         Defaults to `True`.
@@ -64,9 +78,8 @@ def rolling(ds: xr.Dataset, variable: str, dim: str,
 
     # Handle edge values
     if nan_edges:
-        halfwidth = int(np.ceil(window_size / 2))
-        filtered_var.isel({dim: slice(0, halfwidth)})[:] = np.nan
-        filtered_var.isel({dim: slice(-halfwidth, None)})[:] = np.nan
+        filtered_var = filtered_var.where(
+            _complete_window(data_var, dim, window_size))
 
     # Replace the variable in the original dataset with the filtered result
     ds_filt = ds.copy()
@@ -100,8 +113,9 @@ def rolling_sd(ds: xr.Dataset, variable: str, dim: str,
         a valid result. If set to `None` (default), the window will return
         NaN when there are insufficient data points (e.g., due to NaNs).
     nan_edges : bool, optional
-        If `True`, the edge values of the output (half the window length)
-        will be set to NaN, which is useful to avoid edge effects when
+        If `True`, the edge values of the output (the points whose window
+        extends past the start or end of the record, about half a window
+        length) will be set to NaN, which is useful to avoid edge effects when
         rolling. Applies whether or not `min_periods` is set.
         Defaults to `True`.
 
@@ -131,8 +145,6 @@ def rolling_sd(ds: xr.Dataset, variable: str, dim: str,
 
     # Handle edge values if required
     if nan_edges:
-        halfwidth = int(np.ceil(window_size / 2))
-        sd_var.isel({dim: slice(0, halfwidth)})[:] = np.nan
-        sd_var.isel({dim: slice(-halfwidth, None)})[:] = np.nan
+        sd_var = sd_var.where(_complete_window(data_var, dim, window_size))
 
     return sd_var

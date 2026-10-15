@@ -1108,6 +1108,7 @@ def linear_drift_factor(
 # Drop variables
 def drop_variables(
     ds: xr.Dataset,
+    *,
     drop: list[str] | None = None,
     retain: list[str] | bool | None = None,
     verbose: bool = True,
@@ -1116,17 +1117,20 @@ def drop_variables(
     """
     Drop or retain variables in an xarray Dataset based on specified criteria.
 
-    Exactly one of `drop` or `retain` can be provided. Variables without a TIME 
-    dimension are always retained. If neither is provided, the dataset is returned unchanged.
+    At most one of `drop` or `retain` can be provided, by keyword
+    (`drop_variables(ds, drop=[...])`). Variables without a TIME dimension
+    are always retained. If neither is provided, the dataset is returned
+    unchanged.
 
     Parameters
     ----------
     ds : xr.Dataset
         The dataset from which variables will be dropped.
     drop : list[str], optional
-        Variables to remove from the dataset. Overrides `retain` if provided.
+        Variables to remove from the dataset.
     retain : list[str] or bool, optional
-        Variables to keep. If True, all variables are retained. Ignored if `drop` is provided.
+        Variables to keep (all other variables with a TIME dimension are
+        dropped). If True, all variables are retained.
     verbose : bool, default=True
         If True, prints information about dropped variables.
     dims_to_check : list[str], optional

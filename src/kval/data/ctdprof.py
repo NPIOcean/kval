@@ -476,6 +476,7 @@ def metadata_auto(ds: xr.Dataset, org: str | None = None) -> xr.Dataset:
 
 def drop_variables(
     ds: xr.Dataset,
+    *,
     retain: list[str] | bool | None = None,
     drop: list[str] | None = None,
     verbose: bool = True,
@@ -484,19 +485,19 @@ def drop_variables(
     """
     Drop or retain variables from an xarray Dataset.
 
-    Allows selective removal or retention of variables in a dataset. 
-    If `retain_vars` is True, no variables are dropped. If `drop_vars` 
-    is provided, it overrides `retain_vars`.
+    Allows selective removal or retention of variables in a dataset. At most
+    one of `retain` or `drop` can be provided, by keyword
+    (`drop_variables(ds, retain=[...])`). If `retain` is True, no variables
+    are dropped.
 
     Parameters
     ----------
     ds : xr.Dataset
         Dataset from which variables will be dropped or retained.
     retain : list[str] | bool | None, default=None
-        List of variables to retain. If True, all variables are kept. Ignored
-        if `drop_vars` is specified.
+        List of variables to retain. If True, all variables are kept.
     drop : list[str] | None, default=None
-        List of variables to drop. Overrides `retain_vars` if provided.
+        List of variables to drop.
     verbose : bool, default=True
         If True, prints the list of dropped variables.
     dims_to_check : list[str], optional
@@ -509,9 +510,13 @@ def drop_variables(
     xr.Dataset
         Dataset with specified variables dropped or retained.
 
+    Raises
+    ------
+    ValueError
+        If both `retain` and `drop` are provided.
+
     Notes
     -----
-    Only one of `retain` or `drop` should be provided. 
     Variables without 'PRES' or 'NISKIN_NUMBER' dimensions are always retained.
     """
 

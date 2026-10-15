@@ -128,3 +128,13 @@ def test_despike_rolling_2d_equals_per_instrument():
         out1 = despike.despike_rolling(ds1, "T", window_size=21, n_std=4, dim="TIME")
         np.testing.assert_array_equal(np.isnan(out2["T"].values[i]),
                                       np.isnan(out1["T"].values))
+
+
+def test_despike_rolling_return_variable_only():
+    """return_ds=False, return_index=False used to return None."""
+    ds = xr.Dataset({"T": ("TIME", np.r_[np.zeros(50), 10.0, np.zeros(50)])},
+                    coords={"TIME": np.arange(101)})
+    out = despike.despike_rolling(ds, "T", window_size=11, n_std=3, dim="TIME",
+                                  min_periods=5, return_ds=False,
+                                  return_index=False)
+    assert isinstance(out, xr.DataArray)

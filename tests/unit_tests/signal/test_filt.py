@@ -157,11 +157,13 @@ def test_rolling_sd_nan_edges(sample_dataset_for_sd):
     window_size = 5
     result = filt.rolling_sd(ds, variable="signal", dim="time", window_size=window_size, nan_edges=True)
 
-    halfwidth = int(np.ceil(window_size / 2))
+    # A centred window of 5 is incomplete for the first and last 2 points
+    halfwidth = window_size // 2
 
-    # Check that the edges are NaN
+    # Check that the edges are NaN, and the next points are not
     assert result.isel(time=slice(0, halfwidth)).isnull().all(), "The first half-window should be NaN."
     assert result.isel(time=slice(-halfwidth, None)).isnull().all(), "The last half-window should be NaN."
+    assert result.isel(time=[halfwidth, -halfwidth - 1]).notnull().all()
 
 def test_rolling_sd_nan_handling(sample_dataset_for_sd):
     """Test handling of NaNs in the dataset."""
@@ -192,7 +194,8 @@ def test_rolling_sd_small_dataset():
     result = filt.rolling_sd(ds, variable="signal", dim="time", window_size=3)
 
     assert isinstance(result, xr.DataArray), "Result should be a DataArray."
-    assert result.count() == 1, "Only one valid value should be present due to the small dataset size."
+    # Window 3 on 5 points: only the first and last window are incomplete
+    assert result.count() == 3, "Only the two edge points should be NaN."
 
 # ---------------------------------------------------------------------
 # rolling_sd for multi-dimensional variables
@@ -242,3 +245,16 @@ def test_rolling_sd_all_nan_window_gives_nan_without_warning():
         warnings.simplefilter("error", RuntimeWarning)
         sd = filt.rolling_sd(ds, "T", "TIME", window_size=5, min_periods=1)
     assert np.isnan(sd.values[25])
+
+
+@pytest.mark.parametrize("window", [4, 5, 6, 7])
+def test_nan_edges_blank_exactly_the_incomplete_windows(window):
+    """Used to blank ceil(window/2) points at each end: one point too many
+    for odd windows."""
+    n = 30
+    ds = xr.Dataset({"T": ("TIME", np.arange(float(n)))},
+                    coords={"TIME": np.arange(n)})
+    full = ds["T"].rolling(TIME=window, center=True).mean()  # NaN where incomplete
+    for out in (filt.rolling(ds, "T", "TIME", window).T,
+                filt.rolling_sd(ds, "T", "TIME", window)):
+        np.testing.assert_array_equal(np.isnan(out.values), np.isnan(full.values))

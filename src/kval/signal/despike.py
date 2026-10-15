@@ -72,7 +72,7 @@ def despike_rolling(
     plot : bool, optional
         If True, plots the original data and the despiking results.
         Default is False.
-    verbise : bool, optional
+    verbose : bool, optional
         If True, print some basic info about the result of the despiking.
         Default is False.
     Returns
@@ -158,4 +158,5 @@ def despike_rolling(
     else:
         if return_index:
             return var_despiked, is_outside_criterion
+        return var_despiked
         return var_despiked

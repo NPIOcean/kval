@@ -237,3 +237,15 @@ def test_ctd_hand_remove_points_forget_selection_does_not_crash():
     editor.forget_selection(button=None)  # should not raise
     assert editor.TF_indixes_selected.shape == (5,)
     assert not editor.TF_indixes_selected.any()
+
+@pytest.mark.parametrize("exit_method", ["exit_and_apply_var", "exit_and_discard"])
+def test_moored_hand_remove_points_closes_its_own_figure(exit_method):
+    """close_everything used plt.gcf(), i.e. whatever figure was current,
+    which need not be the editor's (here: a figure made after it)."""
+    import matplotlib.pyplot as plt
+    editor = moored_hand_remove_points(_make_moored_ds(), "TEMP")
+    other_fig = plt.figure()  # now the "current" figure
+    getattr(editor, exit_method)(button=None)
+    assert not plt.fignum_exists(editor.fig.number)
+    assert plt.fignum_exists(other_fig.number)
+    plt.close(other_fig)

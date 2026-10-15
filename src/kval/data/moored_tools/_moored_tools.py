@@ -345,12 +345,14 @@ class hand_remove_points:
 
     def close_everything(self):
         """
-        Close the figure and widgets.
+        Close this tool's figure and its buttons. (The output widget is kept:
+        it shows the final "APPLIED"/"EXITED" message.)
         """
-        fig = plt.gcf()
-        fig.set_size_inches(0, 0)
+        # Close our own figure: plt.gcf() is whatever figure is "current",
+        # which need not be this one (e.g. if another plot was made since).
+        self.fig.set_size_inches(0, 0)
         self.widgets_all.close()
-        plt.close(fig)
+        plt.close(self.fig)
 
     # Set this so we don't return an object (and thereby printing a messy string)
     def __repr__(self):

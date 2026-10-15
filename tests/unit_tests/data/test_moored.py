@@ -1438,3 +1438,15 @@ def test_cndc_var_is_deprecated_but_still_accepted(make_ctd_ds, func):
 def test_processing_variable_argument_removed():
     assert list(inspect.signature(load_moored).parameters) == [
         "file", "lat", "lon"]
+
+
+def test_drop_variables_requires_keywords(make_ctd_ds):
+    """drop/retain are keyword-only: moored and ctdprof used to take them
+    in opposite order, so a positional call did opposite things."""
+    from kval.data import ctdprof
+    ds = make_ctd_ds(n=10)
+    with pytest.raises(TypeError):
+        drop_variables(ds, ["TEMP"])
+    with pytest.raises(TypeError):
+        ctdprof.drop_variables(ds, ["TEMP"])
+    assert "TEMP" not in drop_variables(ds, drop=["TEMP"], verbose=False)
