@@ -87,7 +87,7 @@ def principal_angle(
     -------
     tuple[float, float | None, float | None]
         - The principal angle, in radians by default or degrees if `in_degrees`
-          is True. Provided in the [-pi/2, pi/2] or [-180, 180] range.
+          is True. Provided in the [-pi/2, pi/2) or [-90, 90) range.
         - Standard deviation along the major axis if `return_std` is True,
           otherwise None.
         - Standard deviation along the minor axis if `return_std` is True,
@@ -95,12 +95,19 @@ def principal_angle(
 
     Notes:
     -----
-    If the mean of either `u` or `v` is non-zero, it will be removed before
-    computing the principal angle.
+    Only samples where both `u` and `v` are finite are used, and their means
+    are removed before computing the principal angle (the input arrays are
+    not modified).
     """
-    if np.nanmean(u) > 1e-7 or np.nanmean(v) > 1e-7:
-        u -= np.nanmean(u)
-        v -= np.nanmean(v)
+    u = np.asarray(u, dtype=float).ravel()
+    v = np.asarray(v, dtype=float).ravel()
+    if u.shape != v.shape:
+        raise ValueError("u and v must have the same number of elements.")
+    valid = np.isfinite(u) & np.isfinite(v)
+    if not valid.any():
+        raise ValueError("u and v have no finite values in common.")
+    u = u[valid] - np.mean(u[valid])
+    v = v[valid] - np.mean(v[valid])
 
     # Compute the principal angle using the given formula
     principal_angle_rad = 0.5 * np.arctan2(

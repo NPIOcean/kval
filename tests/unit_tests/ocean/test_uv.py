@@ -157,3 +157,52 @@ def test_principal_angle_return_std(test_vectors_pa):
         assert np.isclose(major_std, np.std(u0))
         assert np.isclose(minor_std, 0)
 
+
+
+# ---------------------------------------------------------------------
+# principal_angle: mean removal, NaNs, no side effects
+# ---------------------------------------------------------------------
+
+def _ellipse_flow(angle_deg=30.0, n=5000, seed=0):
+    """Fluctuations mostly along `angle_deg` (counter-clockwise from u)."""
+    rng = np.random.default_rng(seed)
+    a, b = rng.standard_normal(n), 0.2 * rng.standard_normal(n)
+    ang = np.radians(angle_deg)
+    return a * np.cos(ang) - b * np.sin(ang), a * np.sin(ang) + b * np.cos(ang)
+
+
+@pytest.mark.parametrize("mean_u, mean_v", [
+    (0.0, 0.0), (1.0, 1.0), (-1.0, -1.0), (-1.0, 0.5), (0.5, -2.0)])
+def test_principal_angle_independent_of_mean_flow(mean_u, mean_v):
+    """The mean used to be removed only if it was positive."""
+    u, v = _ellipse_flow()
+    reference = principal_angle(u, v, in_degrees=True)
+    result = principal_angle(u + mean_u, v + mean_v, in_degrees=True)
+    assert result == pytest.approx(reference, abs=1e-9)
+    assert result == pytest.approx(30.0, abs=1.0)
+
+
+def test_principal_angle_does_not_modify_inputs():
+    u, v = _ellipse_flow()
+    u, v = u + 1.0, v + 1.0
+    u0, v0 = u.copy(), v.copy()
+    principal_angle(u, v, return_std=True)
+    np.testing.assert_array_equal(u, u0)
+    np.testing.assert_array_equal(v, v0)
+
+
+def test_principal_angle_uses_only_samples_where_both_are_finite():
+    u, v = _ellipse_flow()
+    reference = principal_angle(u[100:], v[100:], in_degrees=True)
+    u_gap, v_gap = u.copy(), v.copy()
+    u_gap[:50] = np.nan          # gaps in only one component at a time
+    v_gap[50:100] = np.nan
+    assert principal_angle(u_gap, v_gap, in_degrees=True) == pytest.approx(
+        reference, abs=1e-9)
+
+
+def test_principal_angle_std_along_axes():
+    u, v = _ellipse_flow()
+    _, major, minor = principal_angle(u - 3.0, v + 2.0, return_std=True)
+    assert major == pytest.approx(1.0, abs=0.05)
+    assert minor == pytest.approx(0.2, abs=0.02)
