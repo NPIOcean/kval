@@ -527,6 +527,8 @@ def test_time_bounds_stored_as_float32_are_flagged(capsys):
 
 
 @pytest.mark.filterwarnings("ignore::UserWarning")
+@pytest.mark.filterwarnings(
+    "ignore:The ioos_sos checker is deprecated:DeprecationWarning")
 def test_ioos_cf_checker_accepts_time_bounds(make_ctd_ds, tmp_path):
     """Run the actual CF checker on an averaged, exported file: nothing it
     reports concerns TIME_bnds, the bounds attribute or cell_methods."""
