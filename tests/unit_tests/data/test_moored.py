@@ -1110,8 +1110,10 @@ def test_combine_datasets_grid_is_epoch_anchored(make_ctd_ds):
     a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)  # partial-bin warnings
-        c = combine_datasets(a, b, interval="1D", instr_names=["a", "b"])
-        c6 = combine_datasets(a, b, interval="6h", instr_names=["a", "b"])
+        c = xr_funcs.time_as_datetime(
+            combine_datasets(a, b, interval="1D", instr_names=["a", "b"]))
+        c6 = xr_funcs.time_as_datetime(
+            combine_datasets(a, b, interval="6h", instr_names=["a", "b"]))
     assert c.TIME.values[0] == np.datetime64("2021-11-09T00:00:00")
     assert (pd.DatetimeIndex(c.TIME.values).floor("1D") == c.TIME.values).all()
     assert c6.TIME.values[0] == np.datetime64("2021-11-09T06:00:00")
@@ -1140,7 +1142,8 @@ def test_combine_datasets_calendar_interval_raises(make_ctd_ds):
 @pytest.mark.filterwarnings("ignore::UserWarning")  # partial-bin warnings
 def test_combine_datasets_time_average_has_one_set_of_bounds(make_ctd_ds):
     a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2)
-    c = combine_datasets(a, b, interval="1D", instr_names=["a", "b"])
+    c = xr_funcs.time_as_datetime(
+        combine_datasets(a, b, interval="1D", instr_names=["a", "b"]))
     assert c.TIME_bnds.dims == ("TIME", "bnds")  # no INSTR dimension
     assert "TIME_bnds" in c.coords and c.TIME.attrs["bounds"] == "TIME_bnds"
     np.testing.assert_array_equal(c.TIME_bnds.values[:, 0], c.TIME.values)
@@ -1158,6 +1161,69 @@ def test_combine_datasets_interpolate_has_no_bounds(make_ctd_ds):
     assert "TIME_bnds" not in c.variables
     assert "bounds" not in c.TIME.attrs
     assert "cell_methods" not in c.TEMP.attrs
+
+
+@pytest.mark.filterwarnings("ignore::UserWarning")
+@pytest.mark.parametrize("method", ["time_average", "interpolate"])
+def test_combine_datasets_returns_time_in_the_input_form(make_ctd_ds, method):
+    a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2)  # numeric TIME
+    c = combine_datasets(a, b, interval="1D", method=method,
+                         instr_names=["a", "b"])
+    assert np.issubdtype(c.TIME.dtype, np.floating)
+    assert c.TIME.attrs["units"] == "days since 1970-01-01"
+    assert c.TIME.attrs["calendar"] == "standard"
+    np.testing.assert_array_equal(c.TIME.values % 1, 0)  # midnight grid
+    if method == "time_average":
+        assert np.issubdtype(c.TIME_bnds.dtype, np.floating)
+        np.testing.assert_array_equal(c.TIME_bnds.values[:, 1] - c.TIME.values, 1.0)
+
+    # datetime64 in -> datetime64 out
+    c_dt = combine_datasets(xr_funcs.time_as_datetime(a), xr_funcs.time_as_datetime(b),
+                            interval="1D", method=method, instr_names=["a", "b"])
+    assert np.issubdtype(c_dt.TIME.dtype, np.datetime64)
+
+
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_combine_datasets_time_long_name(make_ctd_ds):
+    a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2)
+    c = combine_datasets(a, b, interval="1D", instr_names=["a", "b"])
+    assert c.TIME.attrs["long_name"] == "Time (start of averaging bin)"
+
+
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_combine_datasets_drops_inputs_time_coverage_attrs(make_ctd_ds):
+    a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2, freq="15min")
+    a.attrs.update(time_coverage_resolution="PT10M", title="T")
+    b.attrs.update(time_coverage_resolution="PT15M", title="T")
+    c = combine_datasets(a, b, interval="1D", instr_names=["a", "b"])
+    assert "time_coverage_resolution" not in c.variables
+    assert "time_coverage_resolution" not in c.attrs
+    assert c.attrs["title"] == "T"
+
+
+def test_combine_datasets_interpolate_gives_no_merge_future_warning(make_ctd_ds):
+    a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", FutureWarning)
+        combine_datasets(a, b, interval="1h", method="interpolate",
+                         instr_names=["a", "b"])
+
+
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_combine_datasets_output_can_be_conventionalized_and_exported(
+        make_ctd_ds, tmp_path):
+    """Numeric TIME in -> numeric TIME out, so adding the standard TIME
+    attributes (including 'units') does not stop the export."""
+    from kval.data.dataset import to_netcdf
+    from kval.metadata.conventionalize import add_standard_var_attrs
+    a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2)
+    c = add_standard_var_attrs(
+        combine_datasets(a, b, interval="1D", instr_names=["a", "b"]))
+    assert c.TIME.attrs["long_name"] == "Time (start of averaging bin)"
+    to_netcdf(c, tmp_path, "combined.nc", verbose=False)
+    re = xr.open_dataset(tmp_path / "combined.nc")
+    assert re.TIME.values[0] == np.datetime64("2021-11-09T00:00")
+    re.close()
 
 
 @pytest.mark.filterwarnings("ignore::UserWarning")

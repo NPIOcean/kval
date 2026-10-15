@@ -752,6 +752,35 @@ def test_time_average_cell_methods_appended_and_bounds_replaced(make_ctd_ds):
         "Time stamp at the START of each 7-day")
 
 
+@pytest.mark.filterwarnings("ignore:time_average:UserWarning")
+@pytest.mark.parametrize("label, name", [
+    ("left", "Time (start of averaging bin)"),
+    ("center", "Time (centre of averaging bin)"),
+    ("right", "Time (end of averaging bin)")])
+def test_time_average_sets_time_long_name(make_ctd_ds, label, name):
+    ds = make_ctd_ds()
+    ds["TIME"].attrs["long_name"] = "Time of measurement"
+    out = time_average(ds, "1D", label=label)
+    assert out.TIME.attrs["long_name"] == name
+
+
+@pytest.mark.filterwarnings("ignore:time_average:UserWarning")
+def test_standard_attrs_after_averaging_keep_averaged_long_name(make_ctd_ds):
+    from kval.metadata.conventionalize import add_standard_var_attrs
+    out = add_standard_var_attrs(time_average(make_ctd_ds(), "1D"))
+    assert out.TIME.attrs["long_name"] == "Time (centre of averaging bin)"
+
+
+@pytest.mark.filterwarnings("ignore:time_average:UserWarning")
+def test_time_average_removes_input_time_coverage_resolution(make_ctd_ds):
+    ds = make_ctd_ds()
+    ds.attrs["time_coverage_resolution"] = "PT10M"
+    ds.attrs["title"] = "keep me"
+    out = time_average(ds, "1D")
+    assert "time_coverage_resolution" not in out.attrs
+    assert out.attrs["title"] == "keep me"
+
+
 def test_time_as_float_encodes_bounds_with_time_units():
     t = pd.date_range("2021-01-01", periods=3)
     ds = xr.Dataset(coords={"TIME": t})

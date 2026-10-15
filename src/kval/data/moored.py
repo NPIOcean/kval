@@ -37,7 +37,8 @@ from kval.plot.tsplot import  tsplot, tsplot_pick
 
 from kval.data.edit import threshold, offset, linear_drift
 from kval.util.xr_funcs import time_average, append_processing_history, time_as_datetime, time_as_float, promote_cf_coordinates
-from kval.util.xr_funcs import _add_cell_method, _describe_interval, _time_averaging_attr
+from kval.util.xr_funcs import (_add_cell_method, _describe_interval,
+                                _time_averaging_attr, _averaged_time_long_name)
 from kval.util.netcdf import bounds_map
 if internals.is_notebook():
     from IPython.display import display
@@ -1565,6 +1566,9 @@ def combine_datasets(
       itself (e.g. 'instrument_serial_number').
     - Variable-level attrs that vary -> coordinate named
       '{variable}_{attr_key}' (e.g. 'TEMP_sensor_calibration_date').
+    The inputs' global time_coverage_* attributes are left out, since they
+    describe each input's own timing rather than the common grid (use
+    `add_range_attrs` to set them for the result).
  
     Parameters
     ----------
@@ -1599,6 +1603,9 @@ def combine_datasets(
     xr.Dataset
         Combined dataset with dimensions (`instr_dim`, `time_dim`) for
         TIME-dependent variables and (`instr_dim`,) for scalar variables.
+        `time_dim` is returned in the form it came in: numeric, in the units
+        and calendar of the first dataset, if every input dataset had
+        numeric (CF-encoded) time; otherwise datetime64.
  
     Raises
     ------
@@ -1638,6 +1645,7 @@ def combine_datasets(
  
     # --- Decode TIME to datetime64 for each dataset ---
     decoded = []
+    numeric_time_encoding = []  # (units, calendar) of each numeric input
     for ds in datasets:
         if time_dim not in ds.coords:
             raise ValueError(f"Dataset missing '{time_dim}' coordinate")
@@ -1649,6 +1657,9 @@ def combine_datasets(
                 raise ValueError(
                     f"Dataset {time_dim} is numeric but has no 'units' "
                     "attribute needed to decode to datetime")
+            numeric_time_encoding.append(
+                (ds[time_dim].attrs['units'],
+                 ds[time_dim].attrs.get('calendar', 'standard')))
             decoded.append(xr.decode_cf(ds, decode_timedelta=True))
 
     # Bounds of the inputs' own TIME (e.g. from earlier averaging) don't
@@ -1709,7 +1720,9 @@ def combine_datasets(
                 if time_dim in ds[v].dims and v not in dropped_vars
             ]
             ds_interp = ds[time_dep_vars].interp({time_dim: common_time})
-            ds_interp = ds_interp.merge(ds[time_indep_vars])
+            # (the time-independent variables come from the same dataset,
+            # so nothing can conflict; 'override' just skips the check)
+            ds_interp = ds_interp.merge(ds[time_indep_vars], compat="override")
             if dropped_vars:
                 print(f"combine_datasets: dropped non-numeric {time_dim}-"
                       f"dependent variable(s) {dropped_vars} (cannot "
@@ -1772,7 +1785,16 @@ def combine_datasets(
  
     # --- Global attrs: shared vs per-instrument (every dataset is
     # "eligible" here, so this reduces to requiring all datasets to agree) ---
-    global_attr_sets = [(labels[i], dict(decoded[i].attrs)) for i in range(n)]
+    # The inputs' time_coverage_* attributes (ACDD) describe each input's own
+    # timing, not the common grid, and would otherwise become per-instrument
+    # coordinates. Leave them out; add_range_attrs() sets them for the
+    # combined dataset.
+    time_coverage_attrs = ('time_coverage_start', 'time_coverage_end',
+                           'time_coverage_duration', 'time_coverage_resolution')
+    global_attr_sets = [
+        (labels[i], {k: v for k, v in decoded[i].attrs.items()
+                     if k not in time_coverage_attrs})
+        for i in range(n)]
     combined_global_attrs, per_instr_global = _split_attrs(global_attr_sets, labels)
     for attr_key, per_instr_vals in per_instr_global.items():
         coords_out[attr_key] = (instr_dim, per_instr_vals)
@@ -1786,9 +1808,16 @@ def combine_datasets(
         ends = (common_time + interval_td).values
         ds_out = ds_out.assign_coords(
             {bounds_name: ((time_dim, 'bnds'), np.stack([starts, ends], axis=1))})
+        ds_out[time_dim].attrs['long_name'] = _averaged_time_long_name('left')
         ds_out[time_dim].attrs['bounds'] = bounds_name
         ds_out[time_dim].attrs['time_averaging'] = _time_averaging_attr(
             'left', _describe_interval(interval, interval_td), 'left',
             bounds_name)
+
+    # Return TIME in the form it came in: numeric (in the units and calendar
+    # of the first dataset) if every input had numeric TIME, else datetime64.
+    if len(numeric_time_encoding) == n:
+        units, calendar = numeric_time_encoding[0]
+        ds_out = time_as_float(ds_out, time_dim, units=units, calendar=calendar)
 
     return ds_out

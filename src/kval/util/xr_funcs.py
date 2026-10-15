@@ -599,6 +599,13 @@ def _time_averaging_attr(label: str, interval_desc: str, closed: str,
             f"{bounds_name}.")
 
 
+def _averaged_time_long_name(label: str) -> str:
+    """long_name for the time coordinate of averaged data, e.g.
+    'Time (centre of averaging bin)'."""
+    position = {'left': 'start', 'center': 'centre', 'right': 'end'}[label]
+    return f"Time ({position} of averaging bin)"
+
+
 def _add_cell_method(existing, dim: str, method: str = 'mean') -> str:
     """
     Append e.g. 'TIME: mean' to a CF cell_methods string (CF 7.3: methods
@@ -646,9 +653,14 @@ def time_average(
     - Method: each averaged variable gets cell_methods='TIME: mean' (CF
       7.3), appended to any existing cell_methods.
     - In words: `time_dim` gets an attribute 'time_averaging', e.g. "Time
-      stamp at the CENTRE of each 1-day averaging bin. ...".
+      stamp at the CENTRE of each 1-day averaging bin. ...", and its
+      long_name is set to e.g. 'Time (centre of averaging bin)' (replacing
+      e.g. 'Time of measurement').
     - Any existing bounds variable of `time_dim` (e.g. from averaging data
       that were already averaged) is replaced.
+    - The global attribute 'time_coverage_resolution' (if any) is removed,
+      since it described the input sampling; `add_range_attrs` sets it
+      again from the averaged data.
 
     Parameters
     ----------
@@ -848,6 +860,7 @@ def time_average(
     ds_out = ds_out.assign_coords(
         {bounds_name: ((time_dim, 'bnds'), np.stack([starts, ends], axis=1))})
     ds_out[time_dim].attrs.update(time_attrs)
+    ds_out[time_dim].attrs['long_name'] = _averaged_time_long_name(label)
     ds_out[time_dim].attrs['bounds'] = bounds_name
     ds_out[time_dim].attrs['time_averaging'] = _time_averaging_attr(
         label, _describe_interval(interval, interval_td), closed, bounds_name)
@@ -856,6 +869,12 @@ def time_average(
         if var in ds_out.data_vars:
             ds_out[var].attrs['cell_methods'] = _add_cell_method(
                 ds_out[var].attrs.get('cell_methods'), time_dim, 'mean')
+
+    # A time_coverage_resolution global attribute (ACDD) describes the
+    # sampling of the input (e.g. 15 min from an instrument file), not of
+    # the averaged output. Remove it; add_range_attrs() sets it again from
+    # the averaged TIME.
+    ds_out.attrs.pop('time_coverage_resolution', None)
 
     if dropped_vars:
         print(f"time_average: dropped non-numeric {time_dim}-dependent "
