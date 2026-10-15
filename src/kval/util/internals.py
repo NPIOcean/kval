@@ -1,4 +1,6 @@
 import matplotlib as mpl
+import functools
+from matplotlib import font_manager
 import warnings
 import contextlib
 import traceback
@@ -122,3 +124,19 @@ def loud_output(output_widget):
     except Exception:
         traceback.print_exc()
         raise
+
+@functools.lru_cache(maxsize=None)
+def plot_font_family(preferred='Arial'):
+    """
+    Return `preferred` if matplotlib can find that font, else 'sans-serif'.
+
+    Passing a missing font name to matplotlib works (it falls back to its
+    default), but logs "findfont: Font family ... not found" every time a
+    text element is drawn. Resolving the name once avoids that on systems
+    without the font (common on Linux).
+    """
+    try:
+        font_manager.findfont(preferred, fallback_to_default=False)
+    except ValueError:
+        return 'sans-serif'
+    return preferred

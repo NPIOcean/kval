@@ -18,7 +18,7 @@ from kval.signal.filt import rolling
 import xarray as xr
 import pandas as pd
 
-_FONT_FAMILY = 'Arial'  # matplotlib falls back gracefully if unavailable
+_FONT_FAMILY = internals.plot_font_family('Arial')  # 'sans-serif' if Arial is missing
 
 class hand_remove_points:
     """

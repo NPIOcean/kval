@@ -28,7 +28,7 @@ from kval.util import internals
 # / fontfamily= calls work regardless of when/how the axes was made, and
 # never touch global matplotlib state.
 _TEXT_COLOR = '#404040'
-_FONT_FAMILY = 'Arial'  # matplotlib falls back gracefully if unavailable
+_FONT_FAMILY = internals.plot_font_family('Arial')  # 'sans-serif' if Arial is missing
 
 # Half-width of the axis range used when data has no spread at all
 # (see _padded_range).
