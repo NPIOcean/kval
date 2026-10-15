@@ -365,12 +365,11 @@ def _parse_time(data_dict, time_name="time"):
     try:
         time_stamps = time.matlab_datenum_to_datetime(data_dict[time_name])
         return time_stamps
-    except Exception:  # May have to build other cases here, eventually.
-        print(
-            f'Unable to parse time from the "{time_name}" variable. '
-            "(Expecting existing variable and Matlab datenum format)"
-        )
-
+    except Exception as e:  # May have to build other cases here, eventually.
+        raise ValueError(
+            f'Unable to parse time from the "{time_name}" variable '
+            "(expecting an existing variable in Matlab datenum format)."
+        ) from e
 
 
 def xr_to_mat(ds, outfile, simplify=False):

@@ -461,10 +461,8 @@ def linear_drift(
                 ref_units = ds.TIME.attrs['units']
                 calendar = ds.TIME.attrs.get('calendar', 'standard')
                 dt = pd.Timestamp(date_str)
-                encoded = xr.coding.times.encode_cf_datetime(
-                    np.array([dt.to_datetime64()]), units=ref_units, calendar=calendar
-                )[0]
-                return float(encoded[0])
+                return float(time.datetime_to_numeric_time(
+                    dt.to_datetime64(), units=ref_units, calendar=calendar))
             except Exception as e:
                 raise Exception(f'Could not parse {label}="{date_str}" using '
                                 f'TIME units "{ds.TIME.attrs.get("units")}": {e}')

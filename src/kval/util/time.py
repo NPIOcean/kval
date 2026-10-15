@@ -93,10 +93,15 @@ def datetime_to_numeric_time(
     Returns:
         np.ndarray of numeric time value(s).
     """
+    values = np.asarray(values)
+    # Normalise to a flat datetime64[ns] array (handles datetime, Timestamp
+    # and datetime64 of any resolution), encode, and restore the shape.
+    # Older xarray versions (before ~2025) only encode datetime64[ns].
+    flat = pd.to_datetime(values.ravel()).values.astype("datetime64[ns]")
     num, _, _ = xr.coding.times.encode_cf_datetime(
-        np.asarray(values), units=units, calendar=calendar, dtype=np.float64
+        flat, units=units, calendar=calendar, dtype=np.float64
     )
-    return num
+    return np.asarray(num, dtype=np.float64).reshape(values.shape)
 
 
 def numeric_time_to_datestring(

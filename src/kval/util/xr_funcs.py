@@ -116,6 +116,8 @@ def time_as_float(ds, time_dim='TIME', units=None, calendar=None):
             ds[time_dim].values, units=units, calendar=calendar,
             dtype=np.float64
         )
+        # (older xarray versions ignore dtype= and may return integers)
+        num = np.asarray(num, dtype=np.float64)
         # Keep TIME's other attributes (standard_name, axis, bounds, ...)
         time_attrs = dict(ds[time_dim].attrs)
         ds = ds.assign_coords({time_dim: num})
@@ -126,6 +128,7 @@ def time_as_float(ds, time_dim='TIME', units=None, calendar=None):
     if bnds_needs_encoding:
         bnum, _, _ = encode_cf_datetime(
             ds[bnds].values, units=units, calendar=calendar, dtype=np.float64)
+        bnum = np.asarray(bnum, dtype=np.float64)
         bnds_var = xr.Variable(ds[bnds].dims, bnum, attrs=dict(ds[bnds].attrs))
         if bnds in ds.coords:
             ds = ds.assign_coords({bnds: bnds_var})
