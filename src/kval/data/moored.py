@@ -1626,18 +1626,32 @@ def combine_datasets(
                     "attribute needed to decode to datetime")
             decoded.append(xr.decode_cf(ds, decode_timedelta=True))
  
-    # --- Common origin, so all datasets land on exactly the same grid ---
+    # --- Common grid, anchored to the Unix epoch ---
+    # Anchoring to the epoch (rather than to the earliest sample) puts the
+    # grid on natural boundaries (midnight for '1D', 00/06/12/18 for '6h'),
+    # and makes it independent of which datasets are passed in. Every
+    # dataset is binned with the same origin, so they all land on the same
+    # grid.
+    try:
+        interval_td = pd.Timedelta(interval)
+    except ValueError:
+        raise ValueError(
+            f"combine_datasets needs a fixed-duration interval; '{interval}' "
+            "is calendar-based.")
     global_min = min(ds[time_dim].values.min() for ds in decoded)
     global_max = max(ds[time_dim].values.max() for ds in decoded)
-    origin = pd.Timestamp(global_min)
+    origin = 'epoch'
  
     # Common TIME grid, spanning the combined range. Each grid point is
     # either a bin start (method='time_average', label='left') or a
     # direct interpolation point (method='interpolate') -- using the same
     # grid point convention for both keeps the two methods' outputs
-    # directly comparable for the same `interval`.
+    # directly comparable for the same `interval`. Flooring the first
+    # sample to the interval (Timestamp.floor is epoch-anchored) gives the
+    # same left edge that resample(origin='epoch') produces.
     common_time = pd.date_range(
-        start=origin, end=pd.Timestamp(global_max), freq=interval)
+        start=pd.Timestamp(global_min).floor(interval_td),
+        end=pd.Timestamp(global_max), freq=interval_td)
  
     averaged = []
     if method == 'time_average':

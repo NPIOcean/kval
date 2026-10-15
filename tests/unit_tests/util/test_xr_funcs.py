@@ -550,6 +550,41 @@ def test_time_average_day_interval_honours_origin(make_ctd_ds):
     assert out.TIME.values[1] == np.datetime64("2021-11-10T11:20:00")
 
 
+def test_time_average_default_origin_is_midnight(make_ctd_ds):
+    ds = make_ctd_ds()  # starts 2021-11-09 11:20
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        out = xr_funcs.time_as_datetime(time_average(ds, "1D", label="left"))
+    assert out.TIME.values[0] == np.datetime64("2021-11-09T00:00:00")
+    assert out.TIME.values[1] == np.datetime64("2021-11-10T00:00:00")
+
+
+def test_time_average_default_origin_aligns_multiday_bins():
+    """Datasets starting on different days share 7-day bin edges (pandas'
+    own default, origin='start_day', would not)."""
+    def mk(start):
+        t = pd.date_range(start, periods=30 * 24, freq="1h")
+        return xr.Dataset({"TEMP": ("TIME", np.ones(len(t)))},
+                          coords={"TIME": t})
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        a = time_average(mk("2021-11-09"), "7D", label="left")
+        b = time_average(mk("2021-11-12"), "7D", label="left")
+    shared = np.intersect1d(a.TIME.values, b.TIME.values)
+    assert len(shared) >= 3
+    assert a.TIME.values[0] == np.datetime64("2021-11-04")
+    assert b.TIME.values[0] == np.datetime64("2021-11-11")
+
+
+def test_time_average_calendar_interval_default_origin_does_not_warn():
+    ds = xr.Dataset({"TEMP": ("TIME", np.arange(90.0))},
+                    coords={"TIME": pd.date_range("2021-01-01", periods=90)})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        out = time_average(ds, "MS", label="left")
+    assert out.TIME.values[0] == np.datetime64("2021-01-01")
+
+
 def test_time_average_1D_and_24h_agree(make_ctd_ds):
     ds = make_ctd_ds()
     with warnings.catch_warnings():

@@ -1095,14 +1095,46 @@ def test_combine_datasets_1D_interval_is_not_all_nan(make_ctd_ds):
     assert np.isfinite(c.TEMP.sel(INSTR="b").values).all()
 
 
-def test_combine_datasets_min_fraction_drops_incomplete_last_bin(make_ctd_ds):
+def test_combine_datasets_min_fraction_drops_incomplete_edge_bins(make_ctd_ds):
     a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2)
     c = combine_datasets(a, b, interval="1D", instr_names=["a", "b"],
                          min_fraction=0.9)
-    # The common grid starts at the first sample, so only the last bin
-    # (44 of 144 samples) is incomplete.
+    # Bins are midnight-aligned and the data run 11:20 -> 07:10, so both the
+    # first (76 of 144 samples) and last (44 of 144) bins are incomplete.
     t = c.TEMP.sel(INSTR="a").values
-    assert np.isfinite(t[:-1]).all() and np.isnan(t[-1])
+    assert np.isnan(t[0]) and np.isnan(t[-1])
+    assert np.isfinite(t[1:-1]).all()
+
+
+def test_combine_datasets_grid_is_epoch_anchored(make_ctd_ds):
+    a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)  # partial-bin warnings
+        c = combine_datasets(a, b, interval="1D", instr_names=["a", "b"])
+        c6 = combine_datasets(a, b, interval="6h", instr_names=["a", "b"])
+    assert c.TIME.values[0] == np.datetime64("2021-11-09T00:00:00")
+    assert (pd.DatetimeIndex(c.TIME.values).floor("1D") == c.TIME.values).all()
+    assert c6.TIME.values[0] == np.datetime64("2021-11-09T06:00:00")
+
+
+def test_combine_datasets_grid_does_not_depend_on_other_inputs(make_ctd_ds):
+    """Adding an instrument that starts earlier must not move the bin
+    edges, so the other instruments' means are unchanged."""
+    a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2)
+    early = make_ctd_ds(start="2021-11-05 03:07:13.5", seed=3)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        c2 = combine_datasets(a, b, interval="1D", instr_names=["a", "b"])
+        c3 = combine_datasets(early, a, b, interval="1D",
+                              instr_names=["early", "a", "b"])
+    sub = c3.TEMP.sel(INSTR="a", TIME=c2.TIME)
+    np.testing.assert_array_equal(sub.values, c2.TEMP.sel(INSTR="a").values)
+
+
+def test_combine_datasets_calendar_interval_raises(make_ctd_ds):
+    a, b = make_ctd_ds(seed=1), make_ctd_ds(seed=2)
+    with pytest.raises(ValueError, match="fixed-duration"):
+        combine_datasets(a, b, interval="MS")
 
 
 def test_combine_datasets_min_fraction_requires_time_average(make_ctd_ds):

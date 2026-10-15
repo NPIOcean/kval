@@ -462,7 +462,7 @@ def time_average(
     ds: xr.Dataset,
     interval: str = '1D',
     label: str = 'center',
-    origin: str | None = None,
+    origin: str | None = 'epoch',
     time_dim: str = 'TIME',
     min_fraction: float | None = None,     
     **resample_kwargs,
@@ -489,13 +489,17 @@ def time_average(
           or 'YE', since those don't have a fixed duration to center within).
         - 'left': the start of the bin (xarray's default resample behavior).
         - 'right': the end of the bin.
-    origin : str, optional
-        A timestamp (e.g. '2020-01-01 00:00') at which to anchor the bin
-        edges, if you want bins to start at a specific time rather than the
-        default alignment. Passed through to xr.Dataset.resample. Only has
-        an effect for fixed-frequency ("Tick-like") intervals (e.g. '1D',
-        '6h'); it is silently ignored by xarray for calendar-based intervals
-        (e.g. 'ME', 'YE').
+    origin : str or None, default='epoch'
+        Where to anchor the bin edges. The default 'epoch' (1970-01-01
+        00:00) puts daily bins on midnight, 6-hourly bins on 00/06/12/18,
+        and so on, and makes the bin edges independent of the data: two
+        datasets averaged separately share the same edges at every
+        fixed-duration interval, including multi-day ones like '7D'.
+        Can be any value pandas accepts for `origin` (e.g. a timestamp such
+        as '2020-01-01 03:00', or 'start_day'); None leaves it to pandas.
+        Only used for fixed-duration intervals (e.g. '1D', '6h'); for
+        calendar-based intervals (e.g. 'ME', 'YE') the bins follow the
+        calendar and the default is not passed on.
     time_dim : str, default='TIME'
         Name of the time dimension/coordinate to resample along.
     min_fraction : float in (0, 1], optional
@@ -553,11 +557,6 @@ def time_average(
     # for 'center' we resample as 'left' and shift the result afterward
     resample_label = 'left' if label == 'center' else label
 
-    resample_kwargs_full = dict(label=resample_label)
-    if origin is not None:
-        resample_kwargs_full['origin'] = origin
-    resample_kwargs_full.update(resample_kwargs)
-
     # --- How full is each bin? (fixed-duration intervals only) ---
     try:
         interval_td = pd.Timedelta(interval)
@@ -577,6 +576,14 @@ def time_average(
     # longer line up with the origin that combine_datasets relies on (all-NaN
     # result). A fixed nanosecond frequency behaves the same in pandas 2 and 3.
     resample_freq = interval if interval_td is None else f"{interval_td.value}ns"
+
+    resample_kwargs_full = dict(label=resample_label)
+    # origin only applies to fixed-duration intervals. For calendar-based
+    # ones pandas ignores it and warns, so don't forward the *default* there
+    # (an origin the caller chose explicitly is still passed, warning and all).
+    if origin is not None and (interval_td is not None or origin != 'epoch'):
+        resample_kwargs_full['origin'] = origin
+    resample_kwargs_full.update(resample_kwargs)
 
     bin_fraction = None
     tidx = pd.DatetimeIndex(ds[time_dim].values)
