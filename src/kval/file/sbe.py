@@ -612,7 +612,7 @@ def read_header(filename: str) -> dict:
         return hdict
 
 
-def read_csv(filename: str) -> xr.Dataset:
+def read_csv(filename: str, date_format: str | None = None) -> xr.Dataset:
     """
     Read a Seabird .csv file, often output from SBE56 sensors, and convert it
     to an xarray Dataset (preserving metadata from the header).
@@ -621,6 +621,14 @@ def read_csv(filename: str) -> xr.Dataset:
     -----------
     filename : str
         The path to the .csv file to read.
+    date_format : {'YMD', 'DMY', 'MDY'} or None, default None
+        Order of year, month and day in the "Date" column. By default this
+        is worked out from the file: year-first dates (e.g. 2022-08-08) are
+        unambiguous, and for dates like 28-08-2013 the order follows from
+        any day or month value above 12 in the column. If every value is
+        12 or less the order cannot be told from the file; the dates are
+        then read day-first (DMY) and a warning is given. Pass this
+        argument to state the order explicitly.
 
     Returns:
     --------
@@ -673,10 +681,9 @@ def read_csv(filename: str) -> xr.Dataset:
     df = pd.read_csv(filename, header=start_line)
 
     # Convert "Date" and "Time" strings to datetime
-    # (Suppress UserWarning for date parsing)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=UserWarning)
-        df['TIME'] = pd.to_datetime(df['Date'] + ' ' + df['Time'])
+    df['TIME'] = _parse_sbe56_csv_time(
+        df['Date'], df['Time'], date_format=date_format,
+        filename=os.path.basename(filename))
 
 
     # Set datetime to index
@@ -731,6 +738,62 @@ def read_csv(filename: str) -> xr.Dataset:
 
 
 
+
+
+def _parse_sbe56_csv_time(dates, times, date_format=None, filename=''):
+    """
+    Combine the "Date" and "Time" columns of an SBE56 .csv file into
+    datetime64 values, with the order of year/month/day decided explicitly
+    (see `read_csv`) rather than guessed by pandas from the first row.
+    """
+    d = dates.astype(str).str.strip()
+    t = times.astype(str).str.strip()
+
+    year_first = d.str.fullmatch(r"\d{4}[-/.]\d{1,2}[-/.]\d{1,2}").all()
+    year_last = d.str.fullmatch(r"\d{1,2}[-/.]\d{1,2}[-/.]\d{4}").all()
+    if not (year_first or year_last):
+        raise ValueError(
+            f"{filename}: unrecognised format in the Date column (first "
+            f"value: {d.iloc[0]!r}). Expected e.g. 2022-08-08 or 28-08-2013.")
+    parts = d.str.split(r"[-/.]", regex=True, expand=True).astype(int)
+
+    if date_format is not None:
+        date_format = date_format.upper()
+        if date_format not in ("YMD", "DMY", "MDY"):
+            raise ValueError("date_format must be 'YMD', 'DMY' or 'MDY'.")
+        if (date_format == "YMD") != bool(year_first):
+            raise ValueError(
+                f"{filename}: date_format={date_format!r} does not match the "
+                f"Date column (first value: {d.iloc[0]!r}).")
+        order = date_format
+    elif year_first:
+        order = "YMD"
+    else:
+        first_above_12 = bool((parts[0] > 12).any())
+        second_above_12 = bool((parts[1] > 12).any())
+        if first_above_12 and second_above_12:
+            raise ValueError(
+                f"{filename}: the Date column has values above 12 in both "
+                "the first and the second field, so the dates cannot be "
+                "read consistently.")
+        if second_above_12:
+            order = "MDY"
+        else:
+            order = "DMY"
+            if not first_above_12:
+                warnings.warn(
+                    f"{filename}: the order of day and month in the Date "
+                    f"column cannot be told from the file (e.g. "
+                    f"{d.iloc[0]!r}; no value above 12). Reading the dates "
+                    "as day-month-year. If they are month-day-year, use "
+                    "kval.file.sbe.read_csv(file, date_format='MDY').",
+                    UserWarning, stacklevel=3)
+
+    field = {"Y": order.index("Y"), "M": order.index("M"), "D": order.index("D")}
+    date = pd.to_datetime(pd.DataFrame({
+        "year": parts[field["Y"]], "month": parts[field["M"]],
+        "day": parts[field["D"]]}))
+    return (date + pd.to_timedelta(t)).values
 
 
 def to_netcdf(

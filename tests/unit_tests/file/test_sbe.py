@@ -299,3 +299,81 @@ def test_read_cnv_moored_history_dates_do_not_depend_on_matplotlib_epoch():
         ds = sbe.read_cnv(filename)
     first, last = _first_last_dates(ds)
     assert ds.attrs['history'].startswith(f"{first} - {last}:")
+
+
+# ===================================================================
+# read_csv: order of day/month/year in the Date column
+# ===================================================================
+
+_SBE56_CSV = 'tests/test_data/sbe_files/sbe56/SBE05602355_NABOS-test.csv'
+
+
+def _write_sbe56_csv(path, dates, times=None):
+    """An SBE56 .csv with the header of a real file and the given dates."""
+    with open(_SBE56_CSV, encoding='latin-1') as f:
+        header = [line for line in f.read().splitlines() if line.startswith('%')]
+    times = times or ['12:00:00'] * len(dates)
+    rows = [f'"{d}","{t}",0.1' for d, t in zip(dates, times)]
+    with open(path, 'w', encoding='latin-1') as f:
+        f.write('\n'.join(header + ['"Date","Time","Temperature"'] + rows) + '\n')
+    return str(path)
+
+
+def _decoded_times(ds):
+    return xr.coding.times.decode_cf_datetime(ds.TIME.values, ds.TIME.units)
+
+
+def test_read_csv_real_files_dates():
+    ds = sbe.read_csv('tests/test_data/sbe_files/sbe56/SBE56-1232_test.csv')
+    assert _decoded_times(ds)[0] == np.datetime64('2022-08-08T22:00:00')
+    ds = sbe.read_csv(_SBE56_CSV)  # day-first, starts 28-08-2013
+    assert _decoded_times(ds)[0] == np.datetime64('2013-08-28T12:00:00')
+
+
+def test_read_csv_day_first_with_small_days_is_not_read_month_first(tmp_path):
+    """Used to be read as 9 Jan - 2 Feb (month-first), silently."""
+    path = _write_sbe56_csv(tmp_path / 'SBE05602355_a.csv',
+                            ['01-09-2013', '02-09-2013'])
+    with pytest.warns(UserWarning, match='cannot be told from the file'):
+        ds = sbe.read_csv(path)
+    np.testing.assert_array_equal(
+        _decoded_times(ds),
+        np.array(['2013-09-01T12:00', '2013-09-02T12:00'], dtype='datetime64[ns]'))
+
+
+def test_read_csv_day_first_past_day_12_reads_and_does_not_crash(tmp_path):
+    dates = [f'{d:02d}-09-2013' for d in range(1, 20)]
+    path = _write_sbe56_csv(tmp_path / 'SBE05602355_b.csv', dates)
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', UserWarning)  # not ambiguous: no warning
+        ds = sbe.read_csv(path)
+    t = _decoded_times(ds)
+    assert t[0] == np.datetime64('2013-09-01T12:00')
+    assert t[-1] == np.datetime64('2013-09-19T12:00')
+
+
+def test_read_csv_month_first_is_detected(tmp_path):
+    path = _write_sbe56_csv(tmp_path / 'SBE05602355_c.csv',
+                            ['09-12-2013', '09-13-2013'])
+    ds = sbe.read_csv(path)
+    assert _decoded_times(ds)[0] == np.datetime64('2013-09-12T12:00')
+
+
+def test_read_csv_explicit_date_format(tmp_path):
+    path = _write_sbe56_csv(tmp_path / 'SBE05602355_d.csv',
+                            ['01-09-2013', '02-09-2013'])
+    ds = sbe.read_csv(path, date_format='MDY')
+    assert _decoded_times(ds)[0] == np.datetime64('2013-01-09T12:00')
+    with pytest.raises(ValueError, match='does not match'):
+        sbe.read_csv(path, date_format='YMD')
+
+
+@pytest.mark.parametrize('dates, match', [
+    (['13-01-2013', '01-13-2013'], 'both the first and the second field'),
+    (['Sep 1 2013', 'Sep 2 2013'], 'unrecognised format'),
+])
+def test_read_csv_unreadable_dates_raise(tmp_path, dates, match):
+    path = _write_sbe56_csv(tmp_path / 'SBE05602355_e.csv', dates)
+    with pytest.raises(ValueError, match=match):
+        sbe.read_csv(path)
