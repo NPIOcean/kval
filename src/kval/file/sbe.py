@@ -48,6 +48,7 @@ import matplotlib.pyplot as plt
 import re
 import os
 from itertools import zip_longest
+from datetime import datetime
 import warnings
 from kval.util import internals
 # KEY FUNCTIONS
@@ -384,8 +385,10 @@ def read_header(filename: str) -> dict:
                         if serial_no.startswith(instr_key):
                             serial_no = serial_no[len(instr_key):]
 
-                    # Remove leading zeros
-                    serial_no = str(int(serial_no))
+                    # Remove leading zeros (serial numbers that are not
+                    # plain numbers are kept as they are)
+                    if serial_no.isdigit():
+                        serial_no = str(int(serial_no))
 
                     hdict["instrument_serial_number"] = serial_no
 
@@ -703,7 +706,7 @@ def read_csv(filename: str, date_format: str | None = None) -> xr.Dataset:
 
     # Set TIME metadata
     ds['TIME'] = time.dt64_to_datenum(ds['TIME'], epoch = '1970-01-01')
-    ds['TIME'].attrs['units'] = 'Days since 1970-01-01'
+    ds['TIME'].attrs['units'] = 'days since 1970-01-01'
 
     # Set TEMP metadata
     ds['TEMP'].attrs['units'] = 'degree_Celsius'
@@ -994,7 +997,7 @@ def _read_btl_column_data_xr(source_file, header_info, verbose=False):
     # pandas >=3.0 Copy-on-Write, setting .attrs on a DataFrame column
     # (a pandas Series) is silently dropped, so it must be set here instead.
     ds["TIME_SAMPLE"].attrs = {
-        "units": f"Days since {epoch}",
+        "units": f"days since {epoch}",
         "long_name": "Time stamp of bottle closing",
         "coverage_content_type": "coordinate",
         "SBE_source_variable": time_name,
@@ -1578,6 +1581,27 @@ def _assign_specified_lat_lon_station(ds, lat, lon, station):
     return ds
 
 
+def _reference_start_time(header_info, start_time_NMEA=False):
+    """
+    The start time from the header, and which header line it came from.
+
+    Default: the "start_time" line. With start_time_NMEA=True: the
+    "NMEA UTC" line if present, otherwise the "start_time" line.
+
+    Raises a ValueError if neither is available: sample times (from timeJ
+    or timeS) and profile times are all counted from this start time.
+    """
+    if start_time_NMEA and isinstance(header_info.get("NMEA_time"), datetime):
+        return header_info["NMEA_time"], '"NMEA UTC" header line'
+    if isinstance(header_info.get("start_time"), datetime):
+        return header_info["start_time"], '"start_time" header line'
+    raise ValueError(
+        "Did not find a start time in the header of "
+        f"{header_info.get('source_file', 'the file')} (no valid "
+        '"start_time" or "NMEA UTC" line); it is needed to compute the '
+        "sample/profile times.")
+
+
 def _add_start_time(ds, header_info, start_time_NMEA=False):
     """
     Add a start_time attribute.
@@ -1594,36 +1618,13 @@ def _add_start_time(ds, header_info, start_time_NMEA=False):
     - The "NMEA UTC" is not always present.
 
     Important to get right since this is used for assigning
-    a time stamp to profiles.
+    a time stamp to profiles. Raises a ValueError if no start time is
+    found (see _reference_start_time).
     """
-
-    if start_time_NMEA:
-        try:
-            ds.attrs["start_time"] = time.datetime_to_ISO8601(
-                header_info["NMEA_time"]
-            )
-            ds.attrs["start_time_source"] = '"NMEA UTC" header line'
-
-        except (KeyError, TypeError, ValueError, AttributeError):
-            try:
-                ds.attrs["start_time"] = time.datetime_to_ISO8601(
-                    header_info["start_time"]
-                )
-                ds.attrs["start_time_source"] = '"start_time" header line'
-
-            except (KeyError, TypeError, ValueError, AttributeError):
-                raise Warning(
-                    "Did not find a start time!"
-                    ' (no "start_time" or NMEA UTC" header lines).'
-                )
-    else:
-        ds.attrs["start_time"] = time.datetime_to_ISO8601(
-            header_info["start_time"]
-        )
-        ds.attrs["start_time_source"] = '"start_time" header line'
-
+    start_time, source = _reference_start_time(header_info, start_time_NMEA)
+    ds.attrs["start_time"] = time.datetime_to_ISO8601(start_time)
+    ds.attrs["start_time_source"] = source
     return ds
-
 
 def _add_time_dim_profile(
     ds,
@@ -1658,7 +1659,7 @@ def _add_time_dim_profile(
         start_time_num = time.ISO8601_to_datenum(ds.attrs["start_time"])
         ds = ds.assign_coords({"TIME": [start_time_num]})
         ds.TIME.attrs = {
-            "units": f"Days since {epoch} 00:00",
+            "units": f"days since {epoch} 00:00",
             "standard_name": "time",
             "long_name": "Start time of profile",
             "comment": f"Source: {ds.start_time_source}",
@@ -2301,10 +2302,7 @@ def _convert_time_from_elapsed(
     (_DSE: time since epoch)
     """
 
-    if start_time_NMEA:
-        ref_time = header_info["NMEA_time"]
-    else:
-        ref_time = header_info["start_time"]
+    ref_time, _ = _reference_start_time(header_info, start_time_NMEA)
 
     start_time_DSE = (ref_time - pd.Timestamp(epoch)) / pd.to_timedelta(
         1, unit="D"
@@ -2315,7 +2313,7 @@ def _convert_time_from_elapsed(
     time_stamp_DSE = start_time_DSE + elapsed_time_days
 
     ds["TIME_SAMPLE"] = time_stamp_DSE
-    ds.TIME_SAMPLE.attrs["units"] = f"Days since {epoch} 00:00:00"
+    ds.TIME_SAMPLE.attrs["units"] = f"days since {epoch} 00:00:00"
     ds = ds.drop_vars("TIME_ELAPSED")
 
     return ds
@@ -2325,8 +2323,9 @@ def _convert_time_from_juld(
     ds, header_info, epoch="1970-01-01", start_time_NMEA=False
 ):
     """
-    Convert TIME_ELAPSED (sec)
-    to TIME (days since 1970-01-01)
+    Convert TIME_JULD (Julian days from timeJ: day of the year, 1.0 = 1 Jan
+    00:00 of the start year, continuing past 365/366 into later years)
+    to TIME_SAMPLE (days since 1970-01-01).
 
     Only sensible reference I could fnd is here;
     https://search.r-project.org/CRAN/refmans/oce/html/read.ctd.sbe.html
@@ -2334,27 +2333,55 @@ def _convert_time_from_juld(
     (_DSE: time since epoch)
     """
 
-    if start_time_NMEA:
-        ref_time = header_info["NMEA_time"]
-    else:
-        ref_time = header_info["start_time"]
+    ref_time, _ = _reference_start_time(header_info, start_time_NMEA)
 
-    year_start = ref_time.replace(month=1, day=1, hour=0, minute=0, second=0)
-    time_stamp = pd.to_datetime(
+    year_start = pd.Timestamp(ref_time.year, 1, 1)
+    time_stamp = _round_sbe_times(pd.to_datetime(
         ds.TIME_JULD - 1,
         origin=year_start,
         unit="D",
         yearfirst=True,
-    ).round("1s")
+    ))
     time_stamp_DSE = (time_stamp - pd.Timestamp(epoch)) / pd.to_timedelta(
         1, unit="D"
     )
 
     ds["TIME_SAMPLE"] = (("scan_count"), time_stamp_DSE)
-    ds.TIME_SAMPLE.attrs["units"] = f"Days since {epoch} 00:00:00"
+    ds.TIME_SAMPLE.attrs["units"] = f"days since {epoch} 00:00:00"
     ds = ds.drop_vars("TIME_JULD")
 
     return ds
+
+
+def _round_sbe_times(time_stamp):
+    """
+    Remove floating-point noise from times computed from timeJ.
+
+    timeJ is written with a limited number of decimals (6 decimals of a day
+    is ~0.09 s), and converting it gives values like 22:05:00.000000256.
+    Instruments sampling at whole-second intervals record on whole seconds,
+    so those times are rounded to the nearest second. Anything else (faster
+    sampling, or non-integer intervals such as 1.5 s) is only rounded to the
+    nearest millisecond, as is any record where rounding to whole seconds
+    would make two consecutive timestamps equal.
+    """
+    t = pd.DatetimeIndex(time_stamp)
+    t_ms = t.round("1ms")
+    if len(t) < 2:
+        return t_ms
+    steps = np.diff(t.asi8) / 1e9  # seconds
+    steps = steps[np.isfinite(steps) & (steps > 0)]
+    if steps.size == 0:
+        return t_ms
+    median_step = np.median(steps)
+    whole_seconds = (median_step >= 0.9
+                     and abs(median_step - np.round(median_step)) < 0.1)
+    if whole_seconds:
+        t_s = t.round("1s")
+        merged = (np.diff(t_ms.asi8) > 0) & (np.diff(t_s.asi8) == 0)
+        if not merged.any():
+            return t_s
+    return t_ms
 
 
 def _modify_moored(ds, hdict):

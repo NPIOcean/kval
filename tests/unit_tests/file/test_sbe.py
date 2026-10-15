@@ -421,3 +421,78 @@ def test_cnv_column_reader_keeps_every_data_row(path):
 def test_read_cnv_profile_keeps_shallowest_bin():
     ds = sbe.read_cnv('tests/test_data/sbe_files/sbe911plus/dml_2020/sta013_01.cnv')
     assert float(ds.PRES.min()) == 4.0  # first data line is the 4 dbar bin
+
+
+# ===================================================================
+# timeJ rounding, start time, serial numbers
+# ===================================================================
+
+import pandas as pd
+
+
+def _timej_times(step_s, n=200, start='2021-03-01 12:00:00', decimals=6):
+    """Times as they come out of a .cnv timeJ column: true sample times,
+    written as Julian days with `decimals` decimals, converted back."""
+    true = pd.date_range(start, periods=n, freq=pd.Timedelta(seconds=step_s))
+    year_start = pd.Timestamp(true[0].year, 1, 1)
+    juld = np.round((true - year_start) / pd.Timedelta('1D') + 1, decimals)
+    return true, pd.to_datetime(juld - 1, origin=year_start, unit='D')
+
+
+@pytest.mark.parametrize('step_s', [1, 10, 15, 600])
+def test_round_sbe_times_whole_second_sampling_is_exact(step_s):
+    true, raw = _timej_times(step_s)
+    np.testing.assert_array_equal(sbe._round_sbe_times(raw), true)
+
+
+@pytest.mark.parametrize('step_s', [0.25, 0.5, 1.5])
+def test_round_sbe_times_keeps_sub_second_and_fractional_steps(step_s):
+    """Used to round everything to whole seconds: 4 Hz sampling collapsed
+    onto duplicate timestamps, and 1.5 s steps became 1 s / 2 s steps."""
+    true, raw = _timej_times(step_s)
+    out = sbe._round_sbe_times(raw)
+    assert (np.diff(out.asi8) > 0).all()  # strictly increasing
+    # within the precision of 6-decimal timeJ (~0.09 s)
+    assert np.abs((out - true).total_seconds()).max() < 0.05
+
+
+def test_round_sbe_times_falls_back_if_seconds_would_merge_samples():
+    t = pd.to_datetime(['2021-01-01 00:00:00.000', '2021-01-01 00:00:01.000',
+                        '2021-01-01 00:00:01.400', '2021-01-01 00:00:02.000',
+                        '2021-01-01 00:00:03.000'])
+    out = sbe._round_sbe_times(t)
+    assert (np.diff(out.asi8) > 0).all()
+
+
+def test_reference_start_time_nmea_falls_back_to_start_time():
+    st = pd.Timestamp('2021-01-05 15:58:23')
+    t, source = sbe._reference_start_time({'start_time': st, 'NMEA_time': None},
+                                          start_time_NMEA=True)
+    assert t == st and 'start_time' in source
+
+
+def test_missing_start_time_gives_clear_error():
+    """Used to raise `Warning(...)` as an exception, or an AttributeError."""
+    with pytest.raises(ValueError, match='Did not find a start time'):
+        sbe._reference_start_time({'start_time': None, 'NMEA_time': None})
+    ds = xr.Dataset()
+    with pytest.raises(ValueError, match='Did not find a start time'):
+        sbe._add_start_time(ds, {'start_time': None, 'NMEA_time': None},
+                            start_time_NMEA=True)
+
+
+def test_read_header_non_numeric_serial_number(tmp_path):
+    """int() on the serial number used to crash the read."""
+    src = 'tests/test_data/sbe_files/sbe56/AMU22_SBE56-1225_test.cnv'
+    with open(src, encoding='latin-1') as f:
+        text = f.read()
+    path = tmp_path / 'serial.cnv'
+    with open(path, 'w', encoding='latin-1') as f:
+        f.write(text.replace("SerialNumber='05611225'", "SerialNumber='0561A225'"))
+    assert sbe.read_header(str(path))['instrument_serial_number'] == 'A225'
+    assert sbe.read_header(src)['instrument_serial_number'] == '1225'
+
+
+def test_cnv_time_units_lower_case():
+    ds = sbe.read_cnv('tests/test_data/sbe_files/sbe37/cnv/test_sbe37.cnv')
+    assert ds.TIME.attrs['units'] == 'days since 1970-01-01 00:00:00'
