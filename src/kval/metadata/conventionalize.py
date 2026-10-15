@@ -637,6 +637,48 @@ def add_standard_var_attrs(
     return ds
 
 
+def standard_var_attr(varnm, attr):
+    """
+    The standard value of attribute `attr` for a variable called `varnm`
+    (from _standard_attrs.standard_var_attrs), or None if there is none.
+    An entry for the full name is used if there is one; otherwise the name
+    is matched as in add_standard_var_attrs: a trailing sensor digit and
+    any "_suffix" are ignored, so "TEMP1" uses the entry for "TEMP".
+    """
+    for name in _standard_name_candidates(varnm):
+        if name in _standard_attrs.standard_var_attrs:
+            return _standard_attrs.standard_var_attrs[name].get(attr)
+    return None
+
+
+def _standard_name_candidates(varnm):
+    """'CHLA1_fluorescence' -> ['CHLA1_fluorescence', 'CHLA']; the full name
+    first (the table has entries like "CHLA_fluorescence"), then the name
+    as add_standard_var_attrs matches it."""
+    core_name = varnm[:-1] if varnm[-1:].isdigit() else varnm
+    core_name = core_name.split("_")[0]
+    return [varnm] if core_name == varnm else [varnm, core_name]
+
+
+def is_standard_valid_limit(varnm, attr, value):
+    """
+    True if `value` of `attr` ("valid_min" or "valid_max") is the generic
+    limit from kval's table of standard attributes (see standard_var_attr),
+    i.e. a "sensible range" value rather than one based on the data (e.g.
+    set by threshold()).
+    """
+    for name in _standard_name_candidates(varnm):
+        standard = _standard_attrs.standard_var_attrs.get(name, {}).get(attr)
+        if standard is None:
+            continue
+        try:
+            if np.isclose(float(value), float(standard), rtol=1e-6, atol=0):
+                return True
+        except (TypeError, ValueError):
+            pass
+    return False
+
+
 def add_standard_glob_attrs_org(ds, override=False, org=None):
     """
     Adds standard organization-specific global attributes for a dataset,

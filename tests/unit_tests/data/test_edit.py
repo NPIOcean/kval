@@ -701,3 +701,63 @@ def test_remove_points_timeseries_2d_variable_masks_along_time():
     out = edit.remove_points_timeseries(ds, "T", [1])
     assert np.isnan(out["T"].values[1]).all()
     assert np.isfinite(np.delete(out["T"].values, 1, axis=0)).all()
+
+
+# ---------------------------------------------------------------------
+# linear_drift: valid_min/valid_max
+
+def _drift_ds(valid_min, valid_max, name="TEMP"):
+    times = pd.date_range("2024-01-01", periods=11, freq="D")
+    ds = xr.Dataset({name: ("TIME", np.linspace(1.0, 2.0, 11))},
+                    coords={"TIME": times})
+    ds[name].attrs.update(units="degree_Celsius", valid_min=valid_min,
+                          valid_max=valid_max)
+    return ds
+
+
+def test_linear_drift_widens_data_based_valid_limits():
+    """valid_min/valid_max used to be left as they were, so values could
+    end up outside them after the drift."""
+    ds = _drift_ds(0.5, 2.5)
+    out = edit.linear_drift(ds, "TEMP", end_val=1.0)  # offset 0 -> 1
+    assert out.TEMP.attrs["valid_min"] == pytest.approx(0.5)
+    assert out.TEMP.attrs["valid_max"] == pytest.approx(3.5)
+    out = edit.linear_drift(ds, "TEMP", end_val=-1.0)  # offset 0 -> -1
+    assert out.TEMP.attrs["valid_min"] == pytest.approx(-0.5)
+    assert out.TEMP.attrs["valid_max"] == pytest.approx(2.5)
+
+
+def test_linear_drift_factor_widens_data_based_valid_limits():
+    ds = _drift_ds(-1.0, 2.5)
+    out = edit.linear_drift(ds, "TEMP", end_val=2.0, factor=True)  # 1 -> 2
+    assert out.TEMP.attrs["valid_min"] == pytest.approx(-2.0)
+    assert out.TEMP.attrs["valid_max"] == pytest.approx(5.0)
+    assert float(out.TEMP.min()) >= out.TEMP.attrs["valid_min"]
+    assert float(out.TEMP.max()) <= out.TEMP.attrs["valid_max"]
+
+
+def test_linear_drift_leaves_generic_valid_limits():
+    """The standard 'sensible range' limits (-3, 40 for TEMP) stay."""
+    ds = _drift_ds(-3.0, 40.0)
+    out = edit.linear_drift(ds, "TEMP", end_val=1.0)
+    assert out.TEMP.attrs["valid_min"] == -3.0
+    assert out.TEMP.attrs["valid_max"] == 40.0
+    # Also with a sensor number in the name
+    ds = _drift_ds(-3.0, 40.0, name="TEMP1")
+    out = edit.linear_drift(ds, "TEMP1", end_val=1.0)
+    assert out.TEMP1.attrs["valid_max"] == 40.0
+
+
+def test_linear_drift_without_valid_limits_adds_none():
+    ds = _drift_ds(0.0, 1.0)
+    del ds.TEMP.attrs["valid_min"], ds.TEMP.attrs["valid_max"]
+    out = edit.linear_drift(ds, "TEMP", end_val=1.0)
+    assert "valid_min" not in out.TEMP.attrs
+    assert "valid_max" not in out.TEMP.attrs
+
+
+def test_linear_drift_keeps_float32_valid_limits():
+    ds = _drift_ds(np.float32(0.5), np.float32(2.5))
+    out = edit.linear_drift(ds, "TEMP", end_val=1.0)
+    assert isinstance(out.TEMP.attrs["valid_max"], np.float32)
+    assert out.TEMP.attrs["valid_max"] == pytest.approx(3.5)

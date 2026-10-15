@@ -254,6 +254,9 @@ def to_csv(ds: xr.Dataset, outfile: str) -> None:
     outfile : str
         Output CSV file path. '.csv' will be appended if missing.
 
+    TIME can be numeric (with a "units" attribute) or datetime64; times are
+    written as UTC (YYYY-MM-DD hh:mm:ss).
+
     Returns
     -------
     None
@@ -279,9 +282,12 @@ def to_csv(ds: xr.Dataset, outfile: str) -> None:
     with open(outfile, "w") as f:
         for time_ in ds.TIME.values:
             ds_prof = ds.sel(TIME=time_)
-            time_str = pd.Timestamp(
-                time.numeric_time_to_datetime(time_, ds.TIME.units).item()
-            ).strftime("%Y-%m-%d %H:%M:%S")
+            if np.issubdtype(ds.TIME.dtype, np.datetime64):
+                time_dt = pd.Timestamp(time_)
+            else:
+                time_dt = pd.Timestamp(
+                    time.numeric_time_to_datetime(time_, ds.TIME.units).item())
+            time_str = time_dt.strftime("%Y-%m-%d %H:%M:%S")
             print("#" * 88, file=f)
             print(
                 f"#####  {ds_prof.STATION.values:<8} ###  {time_str}  "
@@ -305,6 +311,34 @@ def to_csv(ds: xr.Dataset, outfile: str) -> None:
 # (deleted old locatl functions (threshold, offset), now importing from universal ones in edit.py)
 
 # APPLYING CORRECTIONS ETC
+
+def _calibrated_valid_limits(attrs, name_in, name_out, A, B):
+    """
+    valid_min/valid_max for a variable calibrated as A * <name_in> + B
+    (updates `attrs`, copied from <name_in>, in place).
+
+    - Generic limits (the "sensible range" values from kval's standard
+      attributes) are replaced by the standard ones for <name_out>, or
+      removed if there are none.
+    - Data-based limits (e.g. set with threshold()) are converted with the
+      calibration (with min and max swapped if A < 0).
+    """
+    old = {attr: attrs.pop(attr) for attr in ("valid_min", "valid_max")
+           if attr in attrs}
+    for attr, value in old.items():
+        if conventionalize.is_standard_valid_limit(name_in, attr, value):
+            standard = conventionalize.standard_var_attr(name_out, attr)
+            if standard is not None:
+                attrs[attr] = standard
+        else:
+            new_attr = attr
+            if A < 0:
+                new_attr = "valid_max" if attr == "valid_min" else "valid_min"
+            new_value = A * float(value) + B
+            attrs[new_attr] = (type(value)(new_value)
+                               if isinstance(value, np.floating)
+                               else new_value)
+
 
 def calibrate_chl(
     ds: xr.Dataset,
@@ -339,6 +373,12 @@ def calibrate_chl(
         Print messages about the calibration process if True.
     remove_uncal : bool, default=False
         Remove the uncalibrated variable from the dataset if True.
+
+    valid_min/valid_max of the new variable: limits based on the data
+    (e.g. set with threshold()) are converted with the calibration; the
+    generic "sensible range" limits from kval's standard attributes are
+    replaced by the standard ones for `chl_name_out` (or left out if there
+    are none).
 
     Returns
     -------
@@ -378,6 +418,8 @@ def calibrate_chl(
     ds[chl_name_out].attrs = {
         key: item for key, item in ds[chl_name_in].attrs.items()
     }
+    _calibrated_valid_limits(ds[chl_name_out].attrs, chl_name_in,
+                             chl_name_out, A, B)
 
     # Add suitable attributes
     new_attrs = {

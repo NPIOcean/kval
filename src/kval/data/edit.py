@@ -448,6 +448,11 @@ def linear_drift(
     Returns:
         xr.Dataset: A new dataset with the drift applied to the specified
         variable.
+
+    valid_min/valid_max: limits that are based on the data (e.g. set with
+    threshold()) are widened so that every value that was within them is
+    still within them after the drift. The generic "sensible range" limits
+    from kval's standard attributes are left as they are.
     """
 
     ds = ds.copy(deep=True)  # Make sure we're not modifying the input ds
@@ -548,6 +553,10 @@ def linear_drift(
 
     ds_out[variable].attrs = variable_data.attrs  # restore attrs dropped by the arithmetic above
 
+    # Widen data-based valid_min/valid_max so that they still hold after
+    # the drift; leave the generic ones from kval's standard attributes.
+    _widen_valid_limits(ds_out[variable], variable, drift_val, factor)
+
     # Add note to processing_history attribute
     if 'units' in ds_out.TIME.attrs:
         start_str = time.numeric_time_to_datestring(t_start, ds_out.TIME.units) if not is_datetime else str(t_start)
@@ -573,6 +582,40 @@ def linear_drift(
     ds_out = xr_funcs.append_processing_history(ds_out, variable, note, deep_copy=False)
 
     return ds_out
+
+
+def _widen_valid_limits(da, varnm, drift_val, factor):
+    """
+    Update data-based valid_min/valid_max of `da` (in place) after a
+    drift correction with drift values `drift_val` (offsets, or factors if
+    `factor`): the new limits are the lowest/highest value the old limits
+    can take with any of the drift values, so all values that were within
+    the old limits are within the new ones.
+
+    Generic limits (the "sensible range" values from kval's standard
+    attributes, see conventionalize.is_standard_valid_limit) are left
+    as they are.
+    """
+    from kval.metadata import conventionalize  # avoid import cycle at load
+
+    drift_val = np.asarray(drift_val, dtype=float)
+    drift_val = drift_val[np.isfinite(drift_val)]
+    if drift_val.size == 0:
+        return
+    for attr, pick in (("valid_min", np.min), ("valid_max", np.max)):
+        if attr not in da.attrs:
+            continue
+        old = da.attrs[attr]
+        if conventionalize.is_standard_valid_limit(varnm, attr, old):
+            continue
+        if factor:
+            candidates = float(old) * drift_val
+        else:
+            candidates = float(old) + drift_val
+        new = pick(candidates)
+        # Keep a numpy float type (e.g. float32) if the old limit had one
+        da.attrs[attr] = (type(old)(new) if isinstance(old, np.floating)
+                          else float(new))
 
 
 def drop_variables(

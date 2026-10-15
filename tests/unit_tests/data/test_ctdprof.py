@@ -125,3 +125,78 @@ def test_ctd_can_reach_dataset_functions(small_ctd_profile_ds, func, expected_va
     assert expected_var in result
     assert np.all(np.isfinite(result[expected_var].values))
  
+
+
+# ---------------------------------------------------------------------
+# calibrate_chl: valid_min/valid_max
+
+def _chl_ds(valid_min, valid_max):
+    ds = xr.Dataset({"CHLA_fluorescence": ("PRES", [0.1, 0.5, 2.0])},
+                    coords={"PRES": [1.0, 2.0, 3.0]})
+    ds.CHLA_fluorescence.attrs.update(units="mg m-3", valid_min=valid_min,
+                                      valid_max=valid_max)
+    return ds
+
+
+def test_calibrate_chl_converts_data_based_valid_limits():
+    """The limits of the uncalibrated variable used to be copied as they
+    were."""
+    out = ctdprof.calibrate_chl(_chl_ds(0.0, 3.0), A=2.0, B=0.5,
+                                verbose=False)
+    assert out.CHLA.attrs["valid_min"] == pytest.approx(0.5)
+    assert out.CHLA.attrs["valid_max"] == pytest.approx(6.5)
+
+
+def test_calibrate_chl_negative_slope_swaps_valid_limits():
+    out = ctdprof.calibrate_chl(_chl_ds(0.0, 3.0), A=-1.0, B=10.0,
+                                verbose=False)
+    assert out.CHLA.attrs["valid_min"] == pytest.approx(7.0)
+    assert out.CHLA.attrs["valid_max"] == pytest.approx(10.0)
+
+
+def test_calibrate_chl_generic_valid_limits_become_the_standard_ones():
+    from kval.metadata import _standard_attrs
+    std = _standard_attrs.standard_var_attrs["CHLA"]
+    out = ctdprof.calibrate_chl(_chl_ds(-1.9, 100.0), A=2.0, B=0.5,
+                                verbose=False)
+    assert out.CHLA.attrs["valid_min"] == std["valid_min"]
+    assert out.CHLA.attrs["valid_max"] == std["valid_max"]
+    # The input variable is not changed
+    assert out.CHLA_fluorescence.attrs["valid_max"] == 100.0
+
+
+def test_calibrate_chl_generic_valid_limits_dropped_without_standard():
+    out = ctdprof.calibrate_chl(_chl_ds(-1.9, 100.0), A=2.0, B=0.5,
+                                chl_name_out="MY_CHL", verbose=False)
+    assert "valid_min" not in out.MY_CHL.attrs
+    assert "valid_max" not in out.MY_CHL.attrs
+
+
+# ---------------------------------------------------------------------
+# to_csv
+
+def _csv_ds(datetime_time):
+    times = np.array(["2024-05-01T10:00:00", "2024-05-02T11:30:00"],
+                     dtype="datetime64[ns]")
+    ds = xr.Dataset(
+        {"TEMP": (("TIME", "PRES"), [[1.0, 2.0], [3.0, 4.0]]),
+         "STATION": ("TIME", ["st01", "st02"]),
+         "LATITUDE": ("TIME", [70.0, 71.0]),
+         "LONGITUDE": ("TIME", [10.0, 11.0])},
+        coords={"TIME": times, "PRES": [1.0, 2.0]})
+    if not datetime_time:
+        ds = ds.assign_coords(TIME=(times - np.datetime64("1970-01-01"))
+                              / np.timedelta64(1, "D"))
+        ds.TIME.attrs["units"] = "days since 1970-01-01"
+    return ds
+
+
+@pytest.mark.parametrize("datetime_time", [True, False])
+def test_to_csv_numeric_and_datetime_time(tmp_path, datetime_time):
+    """datetime64 TIME used to raise AttributeError (needed TIME.units)."""
+    outfile = str(tmp_path / "out")
+    ctdprof.to_csv(_csv_ds(datetime_time), outfile)
+    text = open(outfile + ".csv").read()
+    assert "2024-05-01 10:00:00" in text
+    assert "2024-05-02 11:30:00" in text
+    assert "st02" in text
