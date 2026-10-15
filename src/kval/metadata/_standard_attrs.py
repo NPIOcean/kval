@@ -118,6 +118,20 @@ standard_var_attrs = {
             "Nominal units are [mg m-3], but water sample calibrations are "
             "necessary in order to produce realistic absolute values."),
     },
+    "CDOM": {
+        "standard_name": "concentration_of_colored_dissolved_organic_matter_in_sea_water",
+        "units": "1",
+        "radiation_wavelength": ""
+        "long_name": (
+            "Colored dissolved organic matter (CDOM) from CTD fluorometer. "
+        ),
+        "comment": (
+           "Also commonly known as Chromophoric Dissolved Organic Matter (CDOM). "
+           "Fluorescence intensity is normalised to the integrated Raman scattering peak "
+           "of pure water from excitation at 350 nm, and therefore reported in Raman Units. "
+           "The wavelengths that fluorescence is measured at will depend on the sensor used "
+           "and is stated as a radiation_wavelength attribute (eg. 'Ex350nm Em460nm')."),
+    },
     "PRES": {
         "standard_name": "sea_water_pressure",
         "units": "decibar",
