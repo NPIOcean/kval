@@ -80,7 +80,37 @@ ___
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10360162.svg)](https://doi.org/10.5281/zenodo.10360162)
 
-About the latest release, `0.5.1`:
+
+About the latest release, `0.6.0`:
+
+
+> ***NOTE*** 0.6 changes some behaviour and defaults. Results can differ slightly from 0.5. 
+
+**New**
+- Time averaging function now records what it did in a CF-compatible format (`TIME_bnds`, `cell_methods`), with optional sample counts, standard deviations and medians.
+- `combine_datasets` works with calendar intervals; `dataset_size(ds)` shows how large a dataset is.
+
+**Fixes**
+- `.cnv` files could lose their first data row; SBE56 `.csv` dates could be read month-first - both fixed
+- Fixes to RBR reading, despiking of 2-D data, `principal_angle`, `psd`, magnetic declination and ACDD metadata (`geospatial_bounds`), plus many smaller ones.
+
+**Breaking changes**
+- `drop_variables` takes `retain`/`drop` by name only.
+- Daily averaging bins run midnight to midnight; `combine_datasets` keeps TIME in its input form.
+- float64 is kept; int64 is written as int32.
+
+**Dependencies**
+- Requires `pandas>=2.2`; `glob2` and `xlrd` are no longer needed; `kval.util.era5` is removed.
+
+`kval` is in active development.
+
+
+
+
+
+## Past releases
+
+About release, `0.5.1`:
 
 > ***NOTE*** 0.5 introduces **breaking changes** from 0.4. Existing code may need updating. See *Breaking changes* below.
 
@@ -115,10 +145,6 @@ About the latest release, `0.5.1`:
 - Renamed arguments: `var_name`/`varnm` → `variable`, and `D` → `ds`. Affects code that passes these as keyword arguments.
 - The `PROCESSING` variable has been removed. Processing steps are now recorded in a `processing_history` attribute.
 - Metadata functions no longer assume NPI-specific attributes.
-
-`kval` is in active development.
-
-## Past releases
 
 
 About release, `0.4.3`:

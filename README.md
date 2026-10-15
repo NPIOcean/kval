@@ -30,42 +30,26 @@ ___
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10360162.svg)](https://doi.org/10.5281/zenodo.10360162)
 
-About the latest release, `0.5.1`:
+About the latest release, `0.6.0`:
 
 
-> ***NOTE*** 0.5 introduces **breaking changes** from 0.4. Existing code may need updating. See *Breaking changes* below.
-
-*(0.5.0 was immediately superseded by 0.5.1 after finding some errors)*
+> ***NOTE*** 0.6 changes some behaviour and defaults. Results can differ slightly from 0.5. 
 
 **New**
-- `kval.plot.tsplot`: T-S diagram plotting.
-- `moored.plot` works on 2D variables.
-- Function for combining moored datasets, and time averaging (`xr_funcs.time_average`).
-- Other minor support functions.
+- Time averaging function now records what it did in a CF-compatible format (`TIME_bnds`, `cell_methods`), with optional sample counts, standard deviations and medians.
+- `combine_datasets` works with calendar intervals; `dataset_size(ds)` shows how large a dataset is.
 
 **Fixes**
-- Interactive plots no longer go blank when called more than once in the same notebook. This was caused by a bug in `ipykernel` 7 ([ipykernel#1564](https://github.com/ipython/ipykernel/issues/1564)), so `kval` now requires `ipykernel<7`.
-- Interactive hand edits are now applied correctly, and interactive figures display consistently.
-- Better drift correction (non-uniform time steps) and time utilities (fractional seconds).
-- Various fixes to SBE and RBR file reading, CF-compliance checking (now CF-1.11), and metadata.
-- Time coordinates are never converted to 32-bit (`convert_64_to_32`), and the compliance check flags 32-bit time.
-- Refactoring and cleaning up of the code.
-- Minor fixes/improvements to despiking and time averaging functions. 
-- Extended pytest coverage.
-
-**Dependencies**
-- Temporary caps: `ipykernel<7` and `matplotlib<3.11`. These will be relaxed when the upstream issues are resolved.
-- Now requires `compliance-checker>=6.1`; `gsw` and `netcdf4` are listed explicitly.
+- `.cnv` files could lose their first data row; SBE56 `.csv` dates could be read month-first - both fixed
+- Fixes to RBR reading, despiking of 2-D data, `principal_angle`, `psd`, magnetic declination and ACDD metadata (`geospatial_bounds`), plus many smaller ones.
 
 **Breaking changes**
-- Python 3.10 is no longer supported (now 3.11–3.13).
-- Renamed modules:
-  - `kval.data.ctd` → `kval.data.ctdprof`
-  - `kval.maps` → `kval.plot`
-  - `kval.metadata.check_conventions` → `kval.metadata.compliance`
-- Renamed arguments: `var_name`/`varnm` → `variable`, and `D` → `ds`. Affects code that passes these as keyword arguments.
-- The `PROCESSING` variable has been removed. Processing steps are now recorded in a `processing_history` attribute.
-- Metadata functions no longer assume NPI-specific attributes.
+- `drop_variables` takes `retain`/`drop` by name only.
+- Daily averaging bins run midnight to midnight; `combine_datasets` keeps TIME in its input form.
+- float64 is kept; int64 is written as int32.
+
+**Dependencies**
+- Requires `pandas>=2.2`; `glob2` and `xlrd` are no longer needed; `kval.util.era5` is removed.
 
 `kval` is in active development.
 
