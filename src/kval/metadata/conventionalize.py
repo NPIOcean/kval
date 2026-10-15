@@ -187,8 +187,12 @@ def add_range_attrs(ds, vertical_var=None, time_coverage_from_bounds=False):
       specifies: a POINT for a single position, otherwise a POLYGON
       (or a LINESTRING if only one of latitude and longitude varies).
     - The vertical range is that of the vertical variable, in its units
-      (e.g. PRES in dbar, which ACDD allows). geospatial_bounds_vertical_crs
-      is not set, since geospatial_bounds has no vertical coordinate.
+      (e.g. PRES in dbar, which ACDD allows).
+    - geospatial_bounds_vertical_crs is set to EPSG:5831 (instantaneous
+      depth below sea level), which the IOOS checker asks for. Strictly,
+      ACDD defines it as the CRS of Z coordinates in geospatial_bounds,
+      which kval writes without Z; for pressure in dbar it is an
+      approximation (1 dbar is about 1 m).
     - Requires vertical coordinate variable (see above) for vertical range attributes.
     """
 
@@ -228,10 +232,9 @@ def add_range_attrs(ds, vertical_var=None, time_coverage_from_bounds=False):
             ds.attrs["geospatial_vertical_max"] = np.round(np.nanmax(vertical_var_da.values), 3)
             ds.attrs["geospatial_vertical_units"] = vertical_var_da.units
             ds.attrs["geospatial_vertical_positive"] = "down"
-            # geospatial_bounds_vertical_crs is not set: in ACDD it is the
-            # CRS of the Z coordinates in geospatial_bounds, which has none
-            # here (2-D). (It used to be set to EPSG:5831, depth in metres,
-            # even when the vertical range was pressure in dbar.)
+            # Asked for by the IOOS checker. EPSG:5831 = instantaneous depth
+            # below sea level (m); approximate for pressure in dbar.
+            ds.attrs["geospatial_bounds_vertical_crs"] = "EPSG:5831"
 
     except (AttributeError, KeyError, ValueError) as e:
         print(

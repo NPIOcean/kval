@@ -686,12 +686,10 @@ def test_add_range_attrs_after_kval_time_average():
     assert out.attrs["time_coverage_end"] == "2024-03-04T00:00:00Z"
 
 
-def test_add_range_attrs_does_not_set_vertical_crs():
-    """geospatial_bounds is 2-D, so ACDD's geospatial_bounds_vertical_crs
-    (the CRS of its Z coordinates) does not apply. It used to be set to
-    EPSG:5831 (depth in m), also for a vertical range in dbar."""
+def test_add_range_attrs_sets_vertical_crs():
+    """The IOOS checker asks for geospatial_bounds_vertical_crs."""
     ds = create_basic_ds(vertical_var="PRES")
     ds["PRES"].attrs["units"] = "dbar"
     out = conventionalize.add_range_attrs(ds)
     assert out.attrs["geospatial_vertical_units"] == "dbar"
-    assert "geospatial_bounds_vertical_crs" not in out.attrs
+    assert out.attrs["geospatial_bounds_vertical_crs"] == "EPSG:5831"
