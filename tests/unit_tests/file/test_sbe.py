@@ -2,7 +2,7 @@ import numpy as np
 import xarray as xr
 import pytest
 from kval.file import sbe
-import glob2
+import glob
 import os
 
 # The SBE loader warns when it drops a column it cannot read as float
@@ -23,12 +23,12 @@ def file_list_test_cnvs_single():
               'pirata_ctd', 'troll_transect_22_23']
 
     # Grab the first .cnv file for each of these cruises
-    flist_cnv_profile = [glob2.glob(f'{test_data_dir}sbe911plus/{cruise}/*.cnv')[0] for cruise in cruises]
+    flist_cnv_profile = [glob.glob(f'{test_data_dir}sbe911plus/{cruise}/*.cnv')[0] for cruise in cruises]
 
 
 
-    flist_cnv_sbe37 = glob2.glob(test_data_dir + 'sbe37/cnv/*cnv')
-    flist_cnv_sbe56 = glob2.glob(test_data_dir + 'sbe56/*cnv')
+    flist_cnv_sbe37 = glob.glob(test_data_dir + 'sbe37/cnv/*cnv')
+    flist_cnv_sbe56 = glob.glob(test_data_dir + 'sbe56/*cnv')
 
 
     flist_cnv = flist_cnv_profile + flist_cnv_sbe37 + flist_cnv_sbe56
@@ -46,7 +46,7 @@ def file_list_test_btls_single():
     cruises =['dml_2020', 'kongsfjorden_ctds', 'troll_transect_22_23']
 
     # Grab the first .btl file for each of these cruises
-    flist_cnv = [glob2.glob(f'{test_data_dir}{cruise}/*.btl')[0] for cruise in cruises]
+    flist_cnv = [glob.glob(f'{test_data_dir}{cruise}/*.btl')[0] for cruise in cruises]
 
     return flist_cnv
 
@@ -80,8 +80,8 @@ def test_read_csv_valid_file():
     # Test reading all valid CSV files in the directory
     test_data_dir = 'tests/test_data/sbe_files/sbe56/'
 
-    # Use glob2 to find all CSV files in the directory
-    csv_files = glob2.glob(os.path.join(test_data_dir, '*.csv'))
+    # Find all CSV files in the directory
+    csv_files = glob.glob(os.path.join(test_data_dir, '*.csv'))
 
     for filename in csv_files:
         # Check that the function does not raise an error and returns an xarray Dataset
@@ -402,7 +402,7 @@ def _cnv_data_lines(path):
     return [line for line in lines[end + 1:] if line.strip()]
 
 
-_ALL_CNVS = sorted(glob2.glob('tests/test_data/sbe_files/**/*.cnv'))
+_ALL_CNVS = sorted(glob.glob('tests/test_data/sbe_files/**/*.cnv', recursive=True))
 
 
 @pytest.mark.parametrize('path', _ALL_CNVS, ids=os.path.basename)

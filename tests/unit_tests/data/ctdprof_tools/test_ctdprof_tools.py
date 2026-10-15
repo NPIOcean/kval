@@ -132,3 +132,32 @@ class TestDatasetsFromBtllist:
         assert isinstance(profile_datasets, list)
         assert len(profile_datasets) == len(btl_files)
         assert all(isinstance(d, xr.Dataset) for d in profile_datasets)
+
+# --- join_cruise / join_cruise_btl given a directory path (str) ---
+
+def _write_profiles(tmp_path, kind):
+    if kind == 'cnv':
+        files = tools._cnv_files_from_path(DML_2020_DIR)
+        datasets = tools._datasets_from_cnvlist(files, verbose=False)
+    else:
+        files = tools._btl_files_from_path(DML_2020_DIR)
+        datasets = tools._datasets_from_btllist(files, verbose=False)
+    for nn, ds in enumerate(datasets):
+        ds.to_netcdf(tmp_path / f'profile_{nn}.nc')
+    return len(datasets)
+
+
+@pytest.mark.parametrize('trailing_slash', [True, False])
+def test_join_cruise_from_directory_path(tmp_path, trailing_slash):
+    """A path used to raise TypeError ('str' object does not support item
+    assignment) whenever it contained a '/'."""
+    n = _write_profiles(tmp_path, 'cnv')
+    path = str(tmp_path) + ('/' if trailing_slash else '')
+    ds = tools.join_cruise(path, verbose=False)
+    assert ds.sizes['TIME'] == n
+
+
+def test_join_cruise_btl_from_directory_path(tmp_path):
+    n = _write_profiles(tmp_path, 'btl')
+    ds = tools.join_cruise_btl(str(tmp_path) + '/', verbose=False)
+    assert ds.sizes['TIME'] == n

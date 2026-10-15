@@ -1,6 +1,6 @@
 import xarray as xr
 import pytest
-import glob2
+import glob
 import numpy as np
 from kval.data import ctdprof 
 from kval.data.ctdprof import (
@@ -37,7 +37,7 @@ def flist_list_test_cnvs():
               'pirata_ctd', 'troll_transect_22_23']
 
     # Grab the first .cnv file for each of these cruises
-    flists_cnv = [glob2.glob(f'{test_data_dir}{cruise}/*.cnv') for cruise in cruises] 
+    flists_cnv = [glob.glob(f'{test_data_dir}{cruise}/*.cnv') for cruise in cruises]
 
     return flists_cnv
 

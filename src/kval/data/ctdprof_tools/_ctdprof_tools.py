@@ -16,7 +16,7 @@ from kval.util import xr_funcs
 import numpy as np
 import xarray as xr
 from tqdm.notebook import tqdm
-import glob2
+import glob
 import re
 import pandas as pd
 import cftime
@@ -47,10 +47,10 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
     # Grab the input data on the form of a list of xr.Datasets
     # (1) Load all from path if we are given a path.
     if isinstance(nc_files, str):
-        for nn in np.arange(len(nc_files)):
-            if nc_files[nn].endswith('/'):
-                nc_files[nn] = nc_files[nn][:-1]
-        file_list = glob2.glob(f'{nc_files}/*.nc')
+        # (This used to loop over the characters of the path and try to
+        # assign to them, which raised TypeError for any path with a '/'.)
+        nc_files = nc_files.rstrip('/')
+        file_list = sorted(glob.glob(f'{nc_files}/*.nc'))
 
         # Note: We don't decode CF since we want time as a numerical variable.
         prog_bar_msg_1 = 'Loading profiles from netcdf files'
@@ -60,6 +60,7 @@ def join_cruise(nc_files, bins_dbar = 1, verbose = True,
             ds_loaded = xr_funcs.promote_cf_coordinates(ds_loaded)
             ns_input += [ds_loaded]
         n_profs = len(ns_input)
+        nc_files = ns_input  # (used as the list of profiles below)
 
         valid_nc_files = True
         if verbose:
@@ -299,10 +300,8 @@ def join_cruise_btl(datasets, verbose = True,
     # Grab the input data on the form of a list of xr.Datasets
     # (1) Load all from path if we are given a path.
     if isinstance(datasets, str):
-        for nn in np.arange(len(datasets)):
-            if datasets[nn].endswith('/'):
-                datasets[nn] = datasets[nn][:-1]
-        file_list = glob2.glob(f'{datasets}/*.nc')
+        datasets = datasets.rstrip('/')
+        file_list = sorted(glob.glob(f'{datasets}/*.nc'))
 
         # Note: We don't decode CF since we want time as a numerical variable.
         prog_bar_msg_1 = 'Loading profiles from netcdf files'
@@ -312,6 +311,7 @@ def join_cruise_btl(datasets, verbose = True,
             ds_loaded = xr_funcs.promote_cf_coordinates(ds_loaded)
             ns_input += [ds_loaded]
         n_profs = len(ns_input)
+        datasets = ns_input  # (used as the list of profiles below)
 
         valid_nc_files = True
         if verbose:
@@ -577,7 +577,7 @@ def _cnv_files_from_path(path):
     '''
     if not path.endswith('/'):
         path += '/'
-    cnv_list = glob2.glob(f'{path}*.cnv')
+    cnv_list = glob.glob(f'{path}*.cnv')
     return cnv_list
 
 
@@ -592,7 +592,7 @@ def _btl_files_from_path(path):
         list[str]: Sorted list of full paths to .btl files.
     """
     path = Path(path)  # ensure Path object
-    btl_list = sorted(glob2.glob(str(path / '*.btl')))
+    btl_list = sorted(glob.glob(str(path / '*.btl')))
     return btl_list
 
 

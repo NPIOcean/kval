@@ -23,7 +23,6 @@ dependencies = [
   "numpy>=1.23",
   "pandas>=2.2.0",  # "ME", "YE" etc. frequency aliases (time_average)
   "gsw>=3.6",
-  "glob2>=0.7",
   "cartopy>=0.21.1",
   "cftime>=1.6.2",
   "scipy>=1.11.3",
