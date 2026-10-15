@@ -121,7 +121,7 @@ standard_var_attrs = {
     "CDOM": {
         "standard_name": "concentration_of_colored_dissolved_organic_matter_in_sea_water",
         "units": "1",
-        "radiation_wavelength": ""
+        "radiation_wavelength": "",
         "long_name": (
             "Colored dissolved organic matter (CDOM) from CTD fluorometer. "
         ),
