@@ -377,3 +377,47 @@ def test_read_csv_unreadable_dates_raise(tmp_path, dates, match):
     path = _write_sbe56_csv(tmp_path / 'SBE05602355_e.csv', dates)
     with pytest.raises(ValueError, match=match):
         sbe.read_csv(path)
+
+
+def test_read_cnv_header_with_blank_line(tmp_path):
+    """A blank line in the .cnv header used to raise IndexError."""
+    src = 'tests/test_data/sbe_files/sbe37/cnv/test_sbe37.cnv'
+    with open(src, encoding='latin-1') as f:
+        lines = f.read().splitlines(True)
+    reference = sbe.read_cnv(src)
+    lines.insert(3, '\n')
+    path = tmp_path / 'blank_line_in_header.cnv'
+    with open(path, 'w', encoding='latin-1') as f:
+        f.write(''.join(lines))
+    ds = sbe.read_cnv(str(path))
+    np.testing.assert_array_equal(ds.TIME.values, reference.TIME.values)
+    np.testing.assert_array_equal(ds.TEMP.values, reference.TEMP.values)
+
+
+def _cnv_data_lines(path):
+    """The data lines of a .cnv file (everything after *END*)."""
+    with open(path, encoding='latin-1') as f:
+        lines = f.read().splitlines()
+    end = next(i for i, line in enumerate(lines) if line.startswith('*END*'))
+    return [line for line in lines[end + 1:] if line.strip()]
+
+
+_ALL_CNVS = sorted(glob2.glob('tests/test_data/sbe_files/**/*.cnv'))
+
+
+@pytest.mark.parametrize('path', _ALL_CNVS, ids=os.path.basename)
+def test_cnv_column_reader_keeps_every_data_row(path):
+    """The first data row used to be read as a header row and dropped
+    (e.g. the shallowest bin of a bin-averaged profile)."""
+    data_lines = _cnv_data_lines(path)
+    header_info = sbe.read_header(path)
+    ds = sbe._read_column_data_xr(path, header_info)
+    assert ds.sizes['scan_count'] == len(data_lines)
+    first_values = [float(v) for v in data_lines[0].split()]
+    first_col = header_info['col_names'][0]
+    assert float(ds[first_col].values[0]) == pytest.approx(first_values[0])
+
+
+def test_read_cnv_profile_keeps_shallowest_bin():
+    ds = sbe.read_cnv('tests/test_data/sbe_files/sbe911plus/dml_2020/sta013_01.cnv')
+    assert float(ds.PRES.min()) == 4.0  # first data line is the 4 dbar bin

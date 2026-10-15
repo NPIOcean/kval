@@ -513,7 +513,10 @@ def read_header(filename: str) -> dict:
             # Read the line containing the header information string
             # (and stop reading the file after that)
 
-            if line.split()[0] == "Bottle" and filename.endswith(".btl"):
+            # (check the file type first: line.split() is empty for a blank
+            # line, which can occur in a .cnv header)
+            if (filename.endswith(".btl") and line.split()
+                    and line.split()[0] == "Bottle"):
                 # Grab the header names
                 hdict["col_names"] = line.split()
 
@@ -841,9 +844,15 @@ def _read_column_data_xr(source_file, header_info):
     (By way of a pandas DataFrame)
 
     """
+    # The data start on the line after "*END*". Skip the header by line
+    # count with header=None: passing header=<line> together with names=
+    # makes pandas treat that line as a header row and drop it (this used to
+    # lose the first data row), and pandas counts only non-blank lines for
+    # `header` but all lines for `skiprows`.
     df = pd.read_csv(
         source_file,
-        header=header_info["hdr_end_line"] + 1,
+        skiprows=header_info["hdr_end_line"] + 1,
+        header=None,
         sep="\\s+",
         encoding="latin-1",
         names=header_info["col_names"],
