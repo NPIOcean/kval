@@ -486,10 +486,17 @@ def inspect_time_series(ds: xr.Dataset) -> None:
             colors = {instr: color_cycle[i % len(color_cycle)]
                      for i, instr in enumerate(instr_values)}
 
+            # Thin, transparent lines for dense records (so the
+            # instruments can be seen through each other); bolder lines
+            # for sparse ones (e.g. daily means), which are otherwise
+            # hard to see.
+            dense = da.sizes['TIME'] > 2000
+            raw_alpha, raw_lw = (0.5, 0.8) if dense else (0.9, 1.5)
+
             for instr in instr_values:
                 da_i = da.sel(INSTR=instr)
-                ax.plot(da_i.TIME, da_i, color=colors[instr], alpha=0.5,
-                       linewidth=0.8, label=str(instr))
+                ax.plot(da_i.TIME, da_i, color=colors[instr],
+                       alpha=raw_alpha, linewidth=raw_lw, label=str(instr))
 
                 if hourly_apply:
                     try:
