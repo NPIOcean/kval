@@ -134,3 +134,56 @@ def test_read_rsk_time_does_not_depend_on_matplotlib_epoch(rbr_file):
     last = np.datetime_as_string(t.max(), unit='D')
     assert ds_rsk.attrs["history"].startswith(
         f"{first} - {last}: Data collection.")
+
+
+# ---------------------------------------------------------------------
+# Sampling schedules and calibration dates (no .rsk files needed)
+# ---------------------------------------------------------------------
+
+import numpy as np
+from types import SimpleNamespace
+from pyrsktools import datatypes as rsk_dt
+from kval.file import rbr
+
+
+@pytest.mark.parametrize("schedule, resolution, words", [
+    (rsk_dt.ContinuousInfo(1, 1, 2000), 2.0, "Continuous sampling - one measurement every 2 sec"),
+    (rsk_dt.AverageInfo(1, 1, 1000, 600000, 60), 600.0, "One average of 60 samples"),
+    (rsk_dt.BurstInfo(1, 1, 125, 3600000, 1024), None, "Burst sampling - 1024 samples at 0.125 sec"),
+    (rsk_dt.WaveInfo(1, 1, 250, 1800000, 2048), None, "Wave sampling - 2048 samples"),
+    (rsk_dt.TideInfo(1, 1, 1000, 600000, 60), None, "Tide sampling - 60 samples"),
+    (rsk_dt.DirectionalInfo(1, 1, 0, 1000, 10000, 0.0, 0.0), None, "Directional sampling"),
+    (SimpleNamespace(), None, "not recognised"),
+])
+def test_describe_schedule_all_rbr_schedule_types(schedule, resolution, words):
+    """Only continuous and average schedules used to be handled; anything
+    else crashed with UnboundLocalError."""
+    res, text = rbr._describe_schedule(schedule)
+    assert res == resolution
+    assert words in text
+
+
+def test_build_cal_dates_maps_by_channel_order():
+    """Calibrations refer to channels by channelOrder. The dates used to be
+    looked up by channelID, which need not be the same number."""
+    channels = [
+        SimpleNamespace(channelID=3, longName="conductivity", isDerived=0, channelOrder=1),
+        SimpleNamespace(channelID=5, longName="temperature", isDerived=0, channelOrder=2),
+        SimpleNamespace(channelID=7, longName="pressure", isDerived=0, channelOrder=3),
+        SimpleNamespace(channelID=9, longName="salinity", isDerived=1, channelOrder=None),
+    ]
+    instrument_channels = [SimpleNamespace(channelID=c.channelID, channelOrder=c.channelOrder)
+                           for c in channels if c.channelOrder is not None]
+    calibrations = [
+        SimpleNamespace(channelOrder=1, tstamp=np.datetime64("2020-01-01")),
+        SimpleNamespace(channelOrder=2, tstamp=np.datetime64("2021-02-02")),
+        SimpleNamespace(channelOrder=3, tstamp=np.datetime64("2022-03-03")),
+    ]
+    expected = {"conductivity": "2020-01-01", "temperature": "2021-02-02",
+                "pressure": "2022-03-03"}
+    rskdata = SimpleNamespace(channels=channels, calibrations=calibrations,
+                              instrumentChannels=instrument_channels)
+    assert rbr._build_cal_dates(rskdata) == expected
+    # Same result from Channel.channelOrder alone (no instrumentChannels)
+    rskdata = SimpleNamespace(channels=channels, calibrations=calibrations)
+    assert rbr._build_cal_dates(rskdata) == expected

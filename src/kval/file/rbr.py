@@ -130,25 +130,11 @@ def rsk_to_xr(rskdata, keep_total_pres: bool = False) -> xr.Dataset:
     ds_rsk.attrs["instrument_serial_number"] = rskdata.instrument.serialID
 
     # Sampling scheme and time coverage resolution
-    # (Stored a bit strangely in the rskdata object. Times often in ms.)
-    if type(rskdata.scheduleInfo) == pyrsktools.datatypes.ContinuousInfo:
-        time_res_seconds = rskdata.scheduleInfo.samplingPeriod / 1000
-        sampling_str = (
-            f"Continuous sampling - one measurement every "
-            f"{_format_seconds(time_res_seconds)}"
+    time_res_seconds, sampling_str = _describe_schedule(rskdata.scheduleInfo)
+    if time_res_seconds is not None:
+        ds_rsk.attrs["time_coverage_resolution"] = time.seconds_to_ISO8601(
+            time_res_seconds
         )
-    if type(rskdata.scheduleInfo) == pyrsktools.datatypes.AverageInfo:
-        time_res_seconds = rskdata.scheduleInfo.repetitionPeriod / 1000
-        sampling_period_seconds = rskdata.scheduleInfo.samplingPeriod / 1000
-        sampling_str = (
-            f"One average of {rskdata.scheduleInfo.samplingCount} samples "
-            f"collected at {_format_seconds(sampling_period_seconds)} "
-            f"intervals stored for every {_format_seconds(time_res_seconds)}."
-        )
-
-    ds_rsk.attrs["time_coverage_resolution"] = time.seconds_to_ISO8601(
-        time_res_seconds
-    )
     ds_rsk.attrs["sampling_details"] = sampling_str
 
     # Add calibration dates:
@@ -172,8 +158,8 @@ def rsk_to_xr(rskdata, keep_total_pres: bool = False) -> xr.Dataset:
         # Calibration data of T/C sensors
         ds_rsk["salinity"].attrs["sensor_calibration_date"] = (
             f"{ds_rsk.temperature.sensor_calibration_date} (TEMP), "
-            f"{ds_rsk.conductivity.sensor_calibration_date} (CNDC),"
-        )
+            f"{ds_rsk.conductivity.sensor_calibration_date} (CNDC)"
+            )
 
     # Drop the total pressure if we have sea pressure
     # (and have not set keep_total_pres=True)
@@ -222,6 +208,43 @@ def rsk_to_xr(rskdata, keep_total_pres: bool = False) -> xr.Dataset:
     return ds_rsk
 
 
+def _describe_schedule(schedule):
+    """
+    Describe an RBR sampling schedule (pyrsktools *Info object; periods are
+    in milliseconds).
+
+    Returns (time_res_seconds, sampling_str). time_res_seconds is the
+    regular interval between stored samples, or None when the stored
+    samples are not regularly spaced (burst-type schedules) or the schedule
+    type is not recognised.
+    """
+    dt = pyrsktools.datatypes
+    if isinstance(schedule, dt.ContinuousInfo):
+        res = schedule.samplingPeriod / 1000
+        return res, (f"Continuous sampling - one measurement every "
+                     f"{_format_seconds(res)}")
+    if isinstance(schedule, dt.AverageInfo):
+        res = schedule.repetitionPeriod / 1000
+        return res, (
+            f"One average of {schedule.samplingCount} samples collected at "
+            f"{_format_seconds(schedule.samplingPeriod / 1000)} intervals "
+            f"stored for every {_format_seconds(res)}.")
+    for cls, mode in (("BurstInfo", "Burst"), ("WaveInfo", "Wave"),
+                      ("TideInfo", "Tide")):
+        if hasattr(dt, cls) and isinstance(schedule, getattr(dt, cls)):
+            return None, (
+                f"{mode} sampling - {schedule.samplingCount} samples at "
+                f"{_format_seconds(schedule.samplingPeriod / 1000)} "
+                f"intervals, repeated every "
+                f"{_format_seconds(schedule.repetitionPeriod / 1000)}.")
+    if hasattr(dt, "DirectionalInfo") and isinstance(schedule, dt.DirectionalInfo):
+        return None, (
+            f"Directional sampling - every "
+            f"{_format_seconds(schedule.fastPeriod / 1000)} (fast) or "
+            f"{_format_seconds(schedule.slowPeriod / 1000)} (slow).")
+    return None, f"Sampling schedule not recognised ({type(schedule).__name__})."
+
+
 def _format_seconds(seconds: float) -> str:
     """
     Format a duration in seconds as a human-readable string, choosing
@@ -248,13 +271,27 @@ def _build_cal_dates(rskdata):
         dict: A dictionary where keys are channel long names and values are
               calibration dates in 'YYYY-MM-DD' format.
     """
-    # Create a mapping from channelID to longName for channels
-    # where isDerived=0
+    # Calibrations refer to channels by their position on the instrument
+    # (channelOrder), not by channelID. Map channelOrder -> longName for
+    # measured (non-derived) channels, via the instrumentChannels table
+    # (channelOrder <-> channelID) where available, else via the
+    # channelOrder that newer pyrsktools versions also store on each channel.
     channel_id_to_longname = {
         channel.channelID: channel.longName
         for channel in rskdata.channels
         if channel.isDerived == 0
     }
+    order_to_longname = {}
+    for ic in getattr(rskdata, "instrumentChannels", None) or []:
+        if ic.channelID in channel_id_to_longname:
+            order_to_longname[ic.channelOrder] = channel_id_to_longname[ic.channelID]
+    if not order_to_longname:
+        order_to_longname = {
+            channel.channelOrder: channel.longName
+            for channel in rskdata.channels
+            if channel.isDerived == 0
+            and getattr(channel, "channelOrder", None) is not None
+        }
 
     # Initialize the dictionary to hold calibration dates
     cal_dates = {}
@@ -262,7 +299,7 @@ def _build_cal_dates(rskdata):
     # Populate the cal_dates dictionary with calibration dates
     for calibration in rskdata.calibrations:
         # Get the long name of the channel associated with the calibration
-        long_name = channel_id_to_longname.get(calibration.channelOrder)
+        long_name = order_to_longname.get(calibration.channelOrder)
 
         if long_name:
             # Convert numpy.datetime64 to a Python datetime object
