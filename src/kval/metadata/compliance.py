@@ -244,7 +244,9 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
     NOTE: We should add new checks here as we think of useful ones.
 
     Checks:
-        1. Variable data types — warns if any are int64 or float64.
+        1. Variable data types — warns about int64 variables whose values do
+           not fit in int32 (kval's to_netcdf writes other int64 as int32).
+           float64 is fine.
         2. Attribute placeholders — warns if any global or variable attributes
            contain 'TBW'.
         3. Fill values — warns if any data variable is missing _FillValue or
@@ -282,19 +284,26 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
     vars_relevant = [v for v in ds.variables if v not in skip_vars]
     data_vars_relevant = [v for v in ds.data_vars if v not in skip_vars]
 
-    # 1. dtype check
-    # Time variables are exempt: they must stay 64-bit (see convert_64_to_32).
-    bad_types = [v for v in ds.variables
-                 if ds[v].dtype in (np.int64, np.float64)
-                 and not _time.is_time_like(v, ds[v], ds)]
-    if bad_types:
+    # 1. Integer types. float64 is fine (CF, netCDF-4). int64 is written as
+    # int32 by kval's to_netcdf, except where the values do not fit in
+    # int32: those are flagged. Time variables are exempt (see
+    # convert_64_to_32).
+    int32_info = np.iinfo(np.int32)
+    too_big = [v for v in ds.variables
+               if ds[v].dtype == np.int64
+               and not _time.is_time_like(v, ds[v], ds)
+               and ds[v].size
+               and (ds[v].values.min() < int32_info.min
+                    or ds[v].values.max() > int32_info.max)]
+    if too_big:
         problems.append(
-            f"{warn} 64-bit types (32-bit is recommended):\n{', '.join(bad_types)}\n   {arrow} "
-            "Suggestion: use kval.conventionalize.convert_64_to_32(ds)"
+            f"{warn} int64 variables with values outside the int32 range "
+            f"(will be written as int64):\n{', '.join(too_big)}\n   {arrow} "
+            "Some tools do not read int64; consider another type or scaling."
         )
         issues += 1
     else:
-        passed.append(f"{check} No 64-bit variable types")
+        passed.append(f"{check} Integer variables fit in 32 bits")
 
 
     # 1b. numeric time stored with too little resolution (e.g. float32)

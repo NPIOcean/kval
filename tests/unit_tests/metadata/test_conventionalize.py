@@ -693,3 +693,11 @@ def test_add_range_attrs_sets_vertical_crs():
     out = conventionalize.add_range_attrs(ds)
     assert out.attrs["geospatial_vertical_units"] == "dbar"
     assert out.attrs["geospatial_bounds_vertical_crs"] == "EPSG:5831"
+
+
+def test_convert_64_to_32_floats_false_only_converts_integers():
+    ds = xr.Dataset({"N": ("x", np.arange(3, dtype="int64")),
+                     "T": ("x", np.array([1.5, 2.5, 3.5]))})
+    out = conventionalize.convert_64_to_32(ds, floats=False)
+    assert out.N.dtype == np.int32
+    assert out.T.dtype == np.float64

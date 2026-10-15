@@ -62,7 +62,7 @@ def add_latlon(ds, lon=None, lat=None, suppress_latlon_warning=False):
     ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     if lat is not None:
-        ds['LATITUDE'] = ((), np.float32(lat), {
+        ds['LATITUDE'] = ((), np.float64(lat), {
                 "standard_name": "latitude",
                 "units": "degree_north",
                 "long_name": "latitude",
@@ -72,7 +72,7 @@ def add_latlon(ds, lon=None, lat=None, suppress_latlon_warning=False):
         warnings.warn('No latitude value provided -- LATITUDE not set.')
 
     if lon is not None:
-        ds['LONGITUDE'] = ((), np.float32(lon), {
+        ds['LONGITUDE'] = ((), np.float64(lon), {
                 "standard_name": "longitude",
                 "units": "degree_east",
                 "long_name": "longitude",
@@ -547,6 +547,11 @@ def to_netcdf(
     - convention_check: If True, check file conventions.
     - add_to_history: If True, update the history attribute.
     - verbose: If True, print information about the export process.
+
+    int64 variables are written as int32 if their values fit (time
+    variables are never changed). Float variables are written as they are;
+    use kval.metadata.conventionalize.convert_64_to_32 first to write
+    float64 as float32 (smaller files).
     """
 
     ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
@@ -583,6 +588,11 @@ def to_netcdf(
             print(f'Updated history attribute. Current content:\n---')
             print(ds.attrs['history'])
             print('---')
+
+    # int64 is written as int32 (some tools handle int64 poorly, and netCDF-3
+    # has no int64). A variable with values outside the int32 range is kept
+    # as int64, with a warning. Floats are written as they are.
+    ds = conventionalize.convert_64_to_32(ds, floats=False)
 
     # CF 2.5.1: coordinate variables must not carry a _FillValue. xarray adds
     # one to every float variable by default, so strip and suppress it here.

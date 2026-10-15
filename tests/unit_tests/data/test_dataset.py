@@ -386,13 +386,34 @@ def test_add_latlon_zero_values_are_not_dropped():
     assert float(result.LONGITUDE) == 0.0
 
 
-def test_add_latlon_forces_float32():
+def test_add_latlon_forces_float64():
     """Integer input (e.g. lat=82) previously inferred as int64; now
-    explicitly cast to float32 regardless of input type."""
+    explicitly cast to float64 regardless of input type. (It was float32,
+    which made e.g. 81.4105 show up as 81.4104995727539 in attributes.)"""
     ds = xr.Dataset({'TEMP': ('TIME', np.array([1.0]))}, coords={'TIME': [0]})
     result = dataset.add_latlon(ds, lon=30, lat=82)  # plain ints
-    assert result.LATITUDE.dtype == np.float32
-    assert result.LONGITUDE.dtype == np.float32
+    assert result.LATITUDE.dtype == np.float64
+    assert result.LONGITUDE.dtype == np.float64
+    result = dataset.add_latlon(ds, lon=31.2433, lat=81.4105)
+    assert float(result.LATITUDE) == 81.4105
+    assert float(result.LONGITUDE) == 31.2433
+
+
+def test_to_netcdf_writes_int64_as_int32_and_keeps_float64(tmp_path):
+    import netCDF4
+    ds = xr.Dataset({'COUNT': ('TIME', np.array([1, 2, 3], dtype='int64')),
+                     'BIG': ('TIME', np.array([1, 2, 2**40], dtype='int64')),
+                     'TEMP': ('TIME', np.array([1.0, 2.0, 3.0]))},
+                    coords={'TIME': ('TIME', np.array([0.0, 1.0, 2.0]),
+                                     {'units': 'days since 2020-01-01'})})
+    with pytest.warns(UserWarning, match="overflow"):
+        dataset.to_netcdf(ds, tmp_path, 'out.nc', verbose=False)
+    with netCDF4.Dataset(tmp_path / 'out.nc') as nc:
+        assert nc['COUNT'].dtype == np.int32
+        assert nc['BIG'].dtype == np.int64      # does not fit in int32
+        assert nc['TEMP'].dtype == np.float64   # floats written as they are
+        assert nc['TIME'].dtype == np.float64
+    assert ds.COUNT.dtype == np.int64  # input not changed
 
 
 def test_add_latlon_places_coords_after_time():

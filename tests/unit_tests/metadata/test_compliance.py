@@ -71,13 +71,26 @@ def test_compliant_dataset_reports_zero_issues(capsys):
     assert "All checks passed (0 issues)" in out
 
 
-def test_64bit_dtype_is_flagged(capsys):
+def test_float64_is_not_flagged(capsys):
+    """float64 is fine (CF, netCDF-4); it used to be flagged as an issue."""
     ds = _make_compliant_ds()
     ds["TEMP"] = ds["TEMP"].astype("float64")
     compliance_checks_custom(ds)
     out = capsys.readouterr().out
-    assert "64-bit types" in out
-    assert "TEMP" in out
+    assert "All checks passed (0 issues)" in out
+
+
+def test_int64_is_flagged_only_if_it_does_not_fit_in_int32(capsys):
+    ds = _make_compliant_ds()
+    ds["COUNT"] = ("TIME", np.ones(ds.sizes["TIME"], dtype="int64"),
+                   {"long_name": "count", "units": "1"})
+    compliance_checks_custom(ds)
+    assert "outside the int32 range" not in capsys.readouterr().out
+    ds["COUNT"][0] = 2**40
+    compliance_checks_custom(ds)
+    out = capsys.readouterr().out
+    assert "outside the int32 range" in out
+    assert "COUNT" in out
 
 
 def test_TBW_placeholder_attribute_is_flagged(capsys):

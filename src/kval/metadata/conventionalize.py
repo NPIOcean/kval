@@ -43,10 +43,17 @@ def nans_to_fill_value(ds: xr.Dataset, fill_value: float = -9999.0) -> xr.Datase
 
 
 def convert_64_to_32(ds: xr.Dataset, force: bool = False, relative_tol: float = 1e-7,
-                     step_tol: float = 0.01) -> xr.Dataset:
+                     step_tol: float = 0.01, floats: bool = True) -> xr.Dataset:
     """
     Convert float64 and int64 variables (including coords) in an xarray.Dataset
     to float32 and int32, updating related metadata attributes (valid_min, valid_max, valid_range).
+
+    Optional: float64 is fine in CF and netCDF-4, and kval's to_netcdf writes
+    floats as they are (only int64 is written as int32, using this function
+    with floats=False). Use this to make a dataset smaller.
+
+    floats : bool, default True
+        If False, only int64 variables are converted (to int32).
 
     Safeguards (a variable that fails either is kept at 64 bit, with a warning):
 
@@ -106,7 +113,7 @@ def convert_64_to_32(ds: xr.Dataset, force: bool = False, relative_tol: float = 
             continue
 
         # Determine the new dtype
-        if dtype == np.float64:
+        if dtype == np.float64 and floats:
             rel_diff = max_relative_diff(arr.values)
             target_dtype = np.float32
 
