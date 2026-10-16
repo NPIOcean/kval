@@ -20,7 +20,7 @@ def set_attr_textbox(ds, attr, rows=1, cols=50, initial_value = None):
         ds (xr.Dataset): The dataset to update with the entered text for the attribute.
         attr (str): The attribute name.
         rows (int): The number of rows for the text box (default is 1).
-        cols (int): The number of columns for the text box (default is 50).
+        cols (int): Not used at the moment (kept so existing calls work).
 
     Returns:
         xr.Dataset: The updated dataset with the entered text for the attribute.
@@ -40,8 +40,9 @@ def set_attr_textbox(ds, attr, rows=1, cols=50, initial_value = None):
         ' global attribute:'
     )
     prompt2 = '(Click "Submit" button to apply to dataset)'
-    text_input = widgets.Textarea(rows=rows, cols=cols, 
-                                  value = initial_value)
+    # (`cols` is not passed on: Textarea has no such option, and it was
+    # always ignored. The box has the default width.)
+    text_input = widgets.Textarea(rows=rows, value=initial_value)
     
     # Create a button widget
     enter_button = widgets.Button(description="Submit")
@@ -69,7 +70,7 @@ def set_var_attr_textbox(ds, varnm, attr, rows=1, cols=50, initial_value = None)
         varnm (str): The variable name.
         attr (str): The attribute name.
         rows (int): The number of rows for the text box (default is 1).
-        cols (int): The number of columns for the text box (default is 50).
+        cols (int): Not used at the moment (kept so existing calls work).
 
     Returns:
         xr.Dataset: The updated dataset with the entered text for the attribute.
@@ -89,8 +90,9 @@ def set_var_attr_textbox(ds, varnm, attr, rows=1, cols=50, initial_value = None)
     )
     prompt2 = '(Click "Submit" button to apply to dataset)'
 
-    text_input = widgets.Textarea(rows=rows, cols=cols, 
-                                  value = initial_value)
+    # (`cols` is not passed on: Textarea has no such option, and it was
+    # always ignored. The box has the default width.)
+    text_input = widgets.Textarea(rows=rows, value=initial_value)
     
     # Create a button widget
     enter_button = widgets.Button(description="Submit")
@@ -140,8 +142,8 @@ def set_attr_pulldown(ds, attr, options_with_comments, initial_value = None):
 
         allowed_options, option_comments = zip(*options_with_comments)
 
-        dropdown = widgets.Dropdown(options=allowed_options, value=initial_value, 
-            style={'description_width': 'initial', 'width': '700px'})
+        dropdown = widgets.Dropdown(options=allowed_options, value=initial_value,
+            style={'description_width': 'initial'})
         
         dropdown_label = widgets.HTML(f"Attribute: <b style='color: blue;'>{attr}</b>")
         comment_box = widgets.Textarea(value='', disabled=True, layout=widgets.Layout(width='700px'))
@@ -165,7 +167,7 @@ def set_attr_pulldown(ds, attr, options_with_comments, initial_value = None):
         vbox.children += (submit_button,)
 
     else:
-        dropdown = widgets.Dropdown(options=options_with_comments, value=None, style={'description_width': 'initial', 'width': '300px'})
+        dropdown = widgets.Dropdown(options=options_with_comments, value=None, style={'description_width': 'initial'})
         dropdown_label = widgets.HTML(f"Attribute: <b style='color: blue;'>{attr}</b>")
         submit_button = widgets.Button(description="Submit")
         submit_button.on_click(on_button_click)
@@ -210,10 +212,8 @@ def set_var_attr_pulldown(ds, varnm, attr, options_with_comments, initial_value 
     if options_with_comments and all(isinstance(opt, list) for opt in options_with_comments):
         allowed_options, option_comments = zip(*options_with_comments)
 
-        dropdown = widgets.Dropdown(options=allowed_options, value=initial_value, 
-            style={'description_width': 'initial', 'width': '700px'}, 
-
-                                  initial_value = initial_value)
+        dropdown = widgets.Dropdown(options=allowed_options, value=initial_value,
+            style={'description_width': 'initial'})
         dropdown_label = widgets.HTML(f"Attribute: <b style='color: blue;'>{attr}</b>")
         comment_box = widgets.Textarea(value='', disabled=True, layout=widgets.Layout(width='700px'))
         comment_box_label = widgets.Label("Description:")
@@ -236,7 +236,7 @@ def set_var_attr_pulldown(ds, varnm, attr, options_with_comments, initial_value 
         vbox.children += (submit_button,)
 
     else:
-        dropdown = widgets.Dropdown(options=options_with_comments, value=None, style={'description_width': 'initial', 'width': '300px'})
+        dropdown = widgets.Dropdown(options=options_with_comments, value=None, style={'description_width': 'initial'})
         dropdown_label = widgets.HTML(f"Attribute: <b style='color: blue;'>{attr}</b>")
         submit_button = widgets.Button(description="Submit")
         submit_button.on_click(on_button_click)

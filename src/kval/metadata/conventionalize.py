@@ -29,7 +29,10 @@ def nans_to_fill_value(ds: xr.Dataset, fill_value: float = -9999.0) -> xr.Datase
 
     CF boundary variables (e.g. TIME_bnds) are left alone: they must not
     have a _FillValue.
+
+    Returns a new dataset; `ds` itself keeps its NaNs.
     """
+    ds = ds.copy(deep=True)  # Make sure we're not modifying the input ds
     bounds = netcdf.bounds_vars(ds)
     for var_name in ds.data_vars:
         if var_name in bounds:
@@ -204,7 +207,9 @@ def add_range_attrs(ds, vertical_var=None, time_coverage_from_bounds=False):
       which kval writes without Z; for pressure in dbar it is an
       approximation (1 dbar is about 1 m).
     - Requires vertical coordinate variable (see above) for vertical range attributes.
+    - Returns a new dataset; `ds` itself is not modified.
     """
+    ds = ds.copy(deep=True)  # Make sure we're not modifying the input ds
 
     # Lateral geospatial attributes
     try:
@@ -303,8 +308,10 @@ def add_now_as_date_created(
             Defaults to "%d %b %Y" (e.g., "01 Aug 2025").
 
     Returns:
-        xr.Dataset: The input Dataset with updated global attribute "date_created".
+        xr.Dataset: A copy of the Dataset with the global attribute
+        "date_created" set.
     """
+    ds = ds.copy(deep=True)  # Make sure we're not modifying the input ds
     now_time = pd.Timestamp.now()
     now_date_str = now_time.strftime(datefmt)
 
@@ -534,7 +541,7 @@ def add_standard_var_attrs(
     Parameters:
     -----------
     ds : xr.Dataset
-        The xarray Dataset to modify.
+        The xarray Dataset.
     override : bool, optional
         If True, existing variable attributes will be overwritten. Defaults to
         False.
@@ -545,8 +552,10 @@ def add_standard_var_attrs(
     Returns:
     --------
     ds : xr.Dataset
-        The modified xarray Dataset with updated variable attributes.
+        A copy of the Dataset with updated variable attributes (`ds` itself
+        is not modified).
     """
+    ds = ds.copy(deep=True)  # Make sure we're not modifying the input ds
 
     # CF boundary variables (e.g. TIME_bnds) inherit their attributes from
     # the variable they belong to and should not have their own (CF 7.1).
@@ -867,9 +876,35 @@ def add_gmdc_keywords_moor(ds, reset=None, override=False):
 
 def set_var_attr(ds, variable, attr):
     """
-    Set variable attributes for a dataset or data frame.
+    Set a variable attribute interactively (widget in a Jupyter notebook).
 
-    Using interactive widgets.
+    Returns a copy of `ds`. The value is written to that copy when you click
+    "Submit", i.e. after this function has returned, so assign the result:
+    `ds = set_var_attr(ds, 'TEMP', 'comment')`. `ds` itself is not modified.
+    """
+    ds = ds.copy(deep=True)  # Make sure we're not modifying the input ds
+    _set_var_attr_widget(ds, variable, attr)
+    return ds
+
+
+def set_glob_attr(ds, attr):
+    """
+    Set a global attribute interactively (widget in a Jupyter notebook).
+
+    Returns a copy of `ds`. The value is written to that copy when you click
+    "Submit", i.e. after this function has returned, so assign the result:
+    `ds = set_glob_attr(ds, 'summary')`. `ds` itself is not modified.
+    """
+    ds = ds.copy(deep=True)  # Make sure we're not modifying the input ds
+    _set_glob_attr_widget(ds, attr)
+    return ds
+
+
+def _set_var_attr_widget(ds, variable, attr):
+    """
+    Show the widget for one variable attribute; writes into `ds` itself
+    (in place) when "Submit" is clicked. Internal: the widget callback must
+    act on the object the caller keeps.
     """
 
     # Check if the attribute already exists in ds
@@ -899,12 +934,11 @@ def set_var_attr(ds, variable, attr):
 
     return ds
 
-def set_glob_attr(ds, attr):
+def _set_glob_attr_widget(ds, attr):
     """
-    Set global attributes for a  dataset or data frame.
-
-    Using interactive widgets.
-
+    Show the widget for one global attribute; writes into `ds` itself
+    (in place) when "Submit" is clicked. Internal: the widget callback must
+    act on the object the caller keeps.
     """
 
     option_dict = _standard_attrs.global_attrs_options
@@ -936,8 +970,13 @@ def set_glob_attr(ds, attr):
 
 def add_missing_glob(ds):
     """
-    Prompts the user to fill in information for missing global attrubtes
+    Prompts the user to fill in information for missing variable attributes
+    (one widget per missing attribute).
+
+    Returns a copy of `ds`; the values are written to it as "Submit" is
+    clicked in each widget. `ds` itself is not modified.
     """
+    ds = ds.copy(deep=True)  # Make sure we're not modifying the input ds
 
     var_attrs_dict_ref = _standard_attrs.variable_attrs_necessary.copy()
 
@@ -963,7 +1002,7 @@ def add_missing_glob(ds):
             any_missing = False
             for var_attr in _attrs_dict_ref_var:
                 if var_attr not in ds[varnm].attrs:
-                    set_var_attr(ds, varnm, var_attr)
+                    _set_var_attr_widget(ds, varnm, var_attr)
                     any_missing = True
 
             if not any_missing:

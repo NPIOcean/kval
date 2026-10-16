@@ -761,3 +761,17 @@ def test_linear_drift_keeps_float32_valid_limits():
     out = edit.linear_drift(ds, "TEMP", end_val=1.0)
     assert isinstance(out.TEMP.attrs["valid_max"], np.float32)
     assert out.TEMP.attrs["valid_max"] == pytest.approx(3.5)
+
+
+def test_replace_with_scalar_lat_lon_coords(ds_1d):
+    """Used to raise ValueError ("Could not automatically create PandasIndex
+    for coord 'LATITUDE'") for datasets with scalar LATITUDE/LONGITUDE
+    coordinates, as made by add_latlon."""
+    ds = ds_1d.assign_coords(LATITUDE=78.0, LONGITUDE=10.0)
+    ds_new = edit.replace(ds, 'TEMP1', 'TEMP2', TIME=[3, 4])
+    np.testing.assert_allclose(ds_new['TEMP1'].isel(TIME=[3, 4]),
+                               ds['TEMP2'].isel(TIME=[3, 4]))
+    # Other points and the input are untouched
+    np.testing.assert_allclose(ds_new['TEMP1'].isel(TIME=[0, 5]),
+                               ds['TEMP1'].isel(TIME=[0, 5]))
+    assert float(ds_new.LATITUDE) == 78.0

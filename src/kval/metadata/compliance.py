@@ -357,7 +357,7 @@ def compliance_checks_custom(ds: xr.Dataset) -> None:
     if bad_fill:
         problems.append(
             f"{warn} Suspicious/missing _FillValue (including NaNs, which are discouraged):\n{', '.join(bad_fill)}\n   "
-            f"{arrow} Suggestion: use kval.conventionalize.nans_to_fill_value(ds)"
+            f"{arrow} Suggestion: ds = kval.metadata.conventionalize.nans_to_fill_value(ds)"
         )
         issues += 1
     else:

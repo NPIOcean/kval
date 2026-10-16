@@ -361,8 +361,12 @@ def replace(
     # Build indexer for .loc
     # Need to treat the single- and multiple-index cases differently
     # (type issue)
+    # Only the target's dimensions: other coordinates (e.g. scalar LATITUDE
+    # and LONGITUDE) have no index and make .loc fail.
     loc_index = {}
     for coord_key in source_data.coords:
+        if coord_key not in dims:
+            continue
         if source_data[coord_key].data.ndim == 0:
             loc_index[coord_key] = source_data[coord_key].data.item()
         else:

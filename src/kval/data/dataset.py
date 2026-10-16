@@ -542,7 +542,7 @@ def to_netcdf(
 
     Parameters:
     - ds: The xarray.Dataset to export.
-    - path: Directory where the file will be saved.
+    - path: Directory where the file will be saved (must exist).
     - file_name: Name of the NetCDF file.
     - convention_check: If True, check file conventions.
     - add_to_history: If True, update the history attribute.
@@ -557,6 +557,13 @@ def to_netcdf(
     ds = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
     path = Path(path)
+
+    # Check this first: netCDF reports a missing directory as a
+    # PermissionError, which below is taken to mean "file already exists"
+    if not path.is_dir():
+        raise FileNotFoundError(
+            f"Directory '{path}' does not exist. Create it first, or check "
+            "the path.")
 
     ds = add_now_as_date_created(ds)
     ds = conventionalize.reorder_attrs(ds)
@@ -601,6 +608,10 @@ def to_netcdf(
     try:
         ds.to_netcdf(file_path, encoding=coord_encoding)
     except PermissionError:
+        # Typically: the file exists and is open elsewhere (e.g. with
+        # xr.open_dataset in the same notebook). Anything else: re-raise.
+        if not file_path.exists():
+            raise
         user_input = input(f"The file {file_path} already exists. Overwrite? (y/n): ")
         if user_input.lower() in ['yes', 'y']:
             os.remove(file_path)
@@ -608,6 +619,7 @@ def to_netcdf(
             print(f"File {file_path} overwritten.")
         else:
             print("Operation canceled. File not overwritten.")
+            return
 
     if verbose:
         print(f'Exported NetCDF file as: {file_path}')

@@ -290,9 +290,11 @@ def test_original_dataset_not_modified():
     ds = xr.Dataset()
     ds_copy = ds.copy(deep=True)
     ds_out = conventionalize.add_now_as_date_created(ds)
-    # Since xarray datasets are mutable, ds will be modified in place
-    # But we can check ds and ds_out are same object
-    assert ds is ds_out
+    # Returns a new dataset; the input is left as it was
+    assert ds_out is not ds
+    xr.testing.assert_identical(ds, ds_copy)
+    assert "date_created" not in ds.attrs
+    assert "date_created" in ds_out.attrs
 
 # --- Tests for add_standard_glob_attrs_org ---
 
@@ -701,3 +703,92 @@ def test_convert_64_to_32_floats_false_only_converts_integers():
     out = conventionalize.convert_64_to_32(ds, floats=False)
     assert out.N.dtype == np.int32
     assert out.T.dtype == np.float64
+
+
+# Functions that return a dataset must not modify the one passed in
+
+def _small_moored_ds():
+    ds = xr.Dataset(
+        {"TEMP": ("TIME", np.array([1.0, np.nan, 3.0]), {"units": "degC"}),
+         "PRES": ("TIME", np.array([10.0, 10.1, 10.2]), {"units": "dbar"})},
+        coords={"TIME": ("TIME", [0.0, 1.0, 2.0],
+                         {"units": "days since 1970-01-01"}),
+                "LATITUDE": ((), 78.0, {"units": "degree_north"}),
+                "LONGITUDE": ((), 10.0, {"units": "degree_east"})},
+        attrs={"title": "test"})
+    return ds
+
+
+@pytest.mark.parametrize("func, kwargs", [
+    (conventionalize.nans_to_fill_value, {}),
+    (conventionalize.add_now_as_date_created, {}),
+    (conventionalize.add_range_attrs, {}),
+    (conventionalize.add_standard_var_attrs, {}),
+])
+def test_dataset_functions_leave_input_unchanged(func, kwargs):
+    """These used to change the caller's dataset (nans_to_fill_value
+    replaced its NaNs with -9999)."""
+    ds = _small_moored_ds()
+    ref = ds.copy(deep=True)
+    out = func(ds, **kwargs)
+    assert out is not ds
+    xr.testing.assert_identical(ds, ref)
+    for name in ds.variables:
+        assert ds[name].attrs == ref[name].attrs
+
+
+def test_nans_to_fill_value_returns_filled_copy():
+    ds = _small_moored_ds()
+    out = conventionalize.nans_to_fill_value(ds)
+    assert out.TEMP.values[1] == -9999.0
+    assert out.TEMP.attrs["_FillValue"] == -9999.0
+    assert np.isnan(ds.TEMP.values[1])
+    assert "_FillValue" not in ds.TEMP.attrs
+
+
+def _capture_widgets(monkeypatch):
+    from kval.util import user_input
+    boxes = []
+    monkeypatch.setattr(user_input, "display", boxes.append)
+    monkeypatch.setattr(user_input, "clear_output", lambda *a, **k: None)
+    return boxes
+
+
+def _type_and_submit(box, value):
+    text = [c for c in box.children if type(c).__name__ == "Textarea"][0]
+    button = [c for c in box.children if type(c).__name__ == "Button"][0]
+    text.value = value
+    button.click()
+
+
+@pytest.mark.parametrize("which", ["glob", "var"])
+def test_set_attr_widgets_edit_returned_copy_only(monkeypatch, which):
+    """Simulates typing and clicking "Submit" after the function has
+    returned, as in a notebook. The value used to go into the input."""
+    boxes = _capture_widgets(monkeypatch)
+    ds = _small_moored_ds()
+    if which == "glob":
+        out = conventionalize.set_glob_attr(ds, "comment")
+        get = lambda d: d.attrs.get("comment")
+    else:
+        out = conventionalize.set_var_attr(ds, "TEMP", "comment")
+        get = lambda d: d.TEMP.attrs.get("comment")
+    _type_and_submit(boxes[-1], "typed")
+    assert get(out) == "typed"
+    assert get(ds) is None
+
+
+def test_add_missing_glob_fills_returned_copy(monkeypatch):
+    """Several widgets at once: all values must end up in the one returned
+    dataset (so the internal helper has to stay in place)."""
+    boxes = _capture_widgets(monkeypatch)
+    ds = xr.Dataset({"TEMP": ("PRES", [1.0, 2.0], {"units": "degC"})},
+                    coords={"PRES": ("PRES", [1.0, 2.0])})
+    out = conventionalize.add_missing_glob(ds)
+    assert len(boxes) > 1
+    for i, box in enumerate(boxes):
+        if any(type(c).__name__ == "Textarea" for c in box.children):
+            _type_and_submit(box, f"value {i}")
+    typed = {k: v for k, v in out.TEMP.attrs.items() if str(v).startswith("value ")}
+    assert len(typed) >= 1
+    assert not any(str(v).startswith("value ") for v in ds.TEMP.attrs.values())

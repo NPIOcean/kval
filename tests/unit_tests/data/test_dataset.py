@@ -459,3 +459,36 @@ def test_cndc_factor_to_mS_cm_recognised_units():
 def test_cndc_factor_to_mS_cm_unrecognised_units_raise():
     with pytest.raises(ValueError, match="conductivity units"):
         dataset._cndc_factor_to_mS_cm("uS/cm")
+
+def test_to_netcdf_missing_directory_raises(mock_dataset, tmp_path):
+    """A missing directory used to trigger the "file already exists,
+    overwrite?" prompt; answering "n" then reported a successful export."""
+    missing = tmp_path / "does_not_exist"
+    with patch('builtins.input') as mock_input:
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            dataset.to_netcdf(mock_dataset, str(missing), file_name='x')
+    mock_input.assert_not_called()
+    assert not missing.exists()
+
+
+def test_to_netcdf_declined_overwrite_does_not_report_export(
+        mock_dataset, tmp_path):
+    """File open elsewhere -> prompt; answering "n" must not print
+    "Exported NetCDF file" or run the convention check on the old file."""
+    import xarray as xr
+    file_path = tmp_path / 'held.nc'
+    dataset.to_netcdf(mock_dataset, str(tmp_path), file_name='held',
+                      verbose=False)
+    held = xr.open_dataset(file_path)  # keeps the file open
+    try:
+        with patch('builtins.input', return_value='n'), \
+             patch('builtins.print') as mock_print, \
+             patch('kval.data.dataset.compliance.compliance_checks_ioos') as chk:
+            dataset.to_netcdf(mock_dataset, str(tmp_path), file_name='held',
+                              convention_check=True)
+    finally:
+        held.close()
+    printed = " ".join(str(c.args[0]) for c in mock_print.call_args_list if c.args)
+    assert "not overwritten" in printed
+    assert "Exported NetCDF file" not in printed
+    chk.assert_not_called()
