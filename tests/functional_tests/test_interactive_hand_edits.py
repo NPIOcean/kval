@@ -249,3 +249,116 @@ def test_moored_hand_remove_points_closes_its_own_figure(exit_method):
     assert not plt.fignum_exists(editor.fig.number)
     assert plt.fignum_exists(other_fig.number)
     plt.close(other_fig)
+
+
+# ---------------------------------------------------------------------
+# edit.threshold_edit (via moored.threshold_pick): what "Apply" does must
+# match the preview (keep lower <= value <= upper), and nothing may be
+# written unless the cut is actually applied.
+# ---------------------------------------------------------------------
+
+def _threshold_widget(monkeypatch, values):
+    """Open the threshold widget on a small dataset; return (ds_in, ds_out,
+    widgets) where widgets has the sliders, Apply button and info text."""
+    import ipywidgets as w
+    import matplotlib.pyplot as plt
+    from kval.data import edit, moored
+
+    shown = []
+    monkeypatch.setattr(edit, "display", lambda x, *a, **k: shown.append(x))
+    monkeypatch.setattr(edit, "clear_output", lambda *a, **k: None)
+    monkeypatch.setattr(plt, "show", lambda *a, **k: None)
+
+    ds = xr.Dataset(
+        {"TEMP": ("TIME", np.asarray(values, dtype=float), {"units": "degC"})},
+        coords={"TIME": ("TIME", np.arange(len(values), dtype=float),
+                         {"units": "days since 1970-01-01"})})
+    ds_out = moored.threshold_pick(ds)
+
+    def walk(x):
+        yield x
+        for c in getattr(x, "children", ()) or ():
+            yield from walk(c)
+    found = [y for s in shown for y in walk(s)]
+    sliders = [x for x in found if isinstance(x, w.FloatSlider)]
+    lower = [s for s in sliders if s.description.startswith("Lower")][0]
+    upper = [s for s in sliders if s.description.startswith("Upper")][0]
+    apply = [x for x in found if isinstance(x, w.Button)
+             and x.description.startswith("Apply")][0]
+    info = [x for x in found if isinstance(x, w.Text)
+            and not isinstance(x, w.FloatText)][0]
+    return ds, ds_out, lower, upper, apply, info
+
+
+def test_threshold_widget_equal_sliders_apply_what_preview_shows(monkeypatch):
+    """Used to write valid_min/valid_max and then fail inside the widget
+    (threshold refused min == max), so the data were never cut."""
+    import matplotlib.pyplot as plt
+    values = [1.0, 2.0, 3.0, 3.0, 4.0, 5.0]
+    ds, ds_out, lower, upper, apply, info = _threshold_widget(monkeypatch, values)
+    lower.value = 3.0
+    upper.value = 3.0
+    apply.click()
+    plt.close("all")
+
+    kept = ds_out.TEMP.values[~np.isnan(ds_out.TEMP.values)]
+    np.testing.assert_array_equal(kept, [3.0, 3.0])     # 3.0 <= v <= 3.0
+    assert ds_out.TEMP.attrs["valid_min"] == 3.0
+    assert ds_out.TEMP.attrs["valid_max"] == 3.0
+    assert "processing_history" in ds_out.TEMP.attrs
+    assert "Removed 4" in info.value
+    # Input untouched
+    np.testing.assert_array_equal(ds.TEMP.values, values)
+    assert "valid_min" not in ds.TEMP.attrs
+
+
+def test_threshold_widget_crossed_sliders_change_nothing(monkeypatch):
+    import matplotlib.pyplot as plt
+    values = [1.0, 2.0, 3.0, 4.0, 5.0]
+    ds, ds_out, lower, upper, apply, info = _threshold_widget(monkeypatch, values)
+    lower.value = 4.0
+    upper.value = 2.0
+    apply.click()
+    plt.close("all")
+
+    np.testing.assert_array_equal(ds_out.TEMP.values, values)
+    assert "valid_min" not in ds_out.TEMP.attrs
+    assert "valid_max" not in ds_out.TEMP.attrs
+    assert "processing_history" not in ds_out.TEMP.attrs
+    assert "Nothing applied" in info.value
+
+
+def test_threshold_widget_one_sided_cut_sets_only_that_limit(monkeypatch):
+    """Lower slider at the bottom: only valid_max is set, and the history
+    says "above" (both limits used to be passed on)."""
+    import matplotlib.pyplot as plt
+    values = [1.0, 2.0, 3.0, 4.0, 5.0]
+    ds, ds_out, lower, upper, apply, info = _threshold_widget(monkeypatch, values)
+    upper.value = 4.0
+    apply.click()
+    plt.close("all")
+
+    np.testing.assert_array_equal(ds_out.TEMP.values, [1.0, 2.0, 3.0, 4.0, np.nan])
+    assert ds_out.TEMP.attrs["valid_max"] == 4.0
+    assert "valid_min" not in ds_out.TEMP.attrs
+    assert "above 4.0" in ds_out.TEMP.attrs["processing_history"]
+    assert "Removed 1" in info.value
+
+
+def test_threshold_widget_cutting_everything_works(monkeypatch):
+    """Both sliders at a value no data point has: everything removed, as
+    the preview shows; the widget must not crash on the all-NaN variable.
+    (The sliders cannot go below the lowest data value, so at the bottom
+    they would keep that value.)"""
+    import matplotlib.pyplot as plt
+    values = [3.0, 4.0, 5.0]
+    ds, ds_out, lower, upper, apply, info = _threshold_widget(monkeypatch, values)
+    lower.value = 3.5
+    upper.value = 3.5
+    apply.click()
+    plt.close("all")
+    assert int(ds_out.TEMP.count()) == 0
+    assert "Removed 3" in info.value
+    # Moving a slider afterwards must not raise either
+    upper.value = upper.max
+    plt.close("all")

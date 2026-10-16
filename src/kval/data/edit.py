@@ -248,9 +248,9 @@ def threshold(ds: xr.Dataset, variable: str,
 
     ds_new = ds.copy(deep=True) # Make sure we're not modifying the input ds
 
-    if max_val is not None and min_val is not None and max_val <= min_val:
-        raise ValueError(f'Threshold editing: max_val ({max_val}) must be '
-                         f'greater than min_val ({min_val}).')
+    if max_val is not None and min_val is not None and max_val < min_val:
+        raise ValueError(f'Threshold editing: max_val ({max_val}) must not be '
+                         f'smaller than min_val ({min_val}).')
 
     if max_val is not None:
         ds_new[variable] = ds_new[variable].where(ds_new[variable] <= max_val)
@@ -999,6 +999,11 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
         except Exception:
             pass
 
+        if int(ds[variable].count()) == 0:
+            clear_output(wait=True)
+            cut_info_text.value = f'{variable} has no valid data left.'
+            return
+
         with plt.ioff():
             fig = plt.figure(figsize=(6, 3))
             ax0 = plt.subplot2grid((1, 1), (0, 0))
@@ -1057,8 +1062,12 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
 
     def apply_cut(_):
         """
-        Apply the threshold cut to the selected variable. Makes suitable
-        changes to the metadata (variable attributes)
+        Apply the threshold cut to the selected variable, exactly as the
+        preview shows it: keep lower <= value <= upper. valid_min/valid_max
+        and the processing history are set by `threshold`, only for the
+        limits that cut something, and only once the cut is applied. The
+        outcome is shown in the info line (errors in widget callbacks are
+        otherwise not shown at all).
 
         Parameters:
         - _: Unused parameter.
@@ -1073,56 +1082,58 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
 
         variable = variable_dropdown.value
 
+        if int(ds[variable].count()) == 0:
+            cut_info_text.value = (
+                f'Nothing applied: {variable} has no valid data left.')
+            return
+
         lower_floor, upper_ceil, step, oom_step = get_slider_params(ds, variable)
 
-        min_value = np.round(np.floor(min_slider.value*10**(-oom_step))
-                                     *10**(oom_step), -oom_step)
-        max_value = np.round(np.floor(max_slider.value*10**(-oom_step))
-                                     *10**(oom_step), -oom_step)
+        # Remove float noise from the slider values (they sit on the step
+        # grid). np.round, not np.floor: floor could move e.g. 5.0, stored
+        # as 4.9999..., down a whole step and cut more than the preview.
+        min_value = float(np.round(min_slider.value, -oom_step))
+        max_value = float(np.round(max_slider.value, -oom_step))
+
+        if min_value > max_value:
+            cut_info_text.value = (
+                f'Nothing applied: the lower cutoff ({min_value}) is above '
+                f'the upper cutoff ({max_value}).')
+            return
 
         var_max = float(ds[variable].max())
         var_min = float(ds[variable].min())
-        unit = ds[variable].units
 
-        if unit == '1':
-            unit=''
+        # Only the limits that actually cut something
+        cut_min = min_value if min_value > var_min else None
+        cut_max = max_value if max_value < var_max else None
 
-        if min_value<=var_min and max_value>=var_max:
-            thr = None
-        elif min_value<=var_min and max_value<var_max:
-            thr = True
-            thr_str = f'Rejected all data above {max_value} {unit}.'
-            ds[variable].attrs['valid_max'] = max_value
-        elif min_value>var_min and max_value>=var_max:
-            thr = True
-            thr_str = f'Rejected all data below {min_value} {unit}.'
-            ds[variable].attrs['valid_min'] = min_value
-        elif min_value>var_min and max_value<var_max:
-            thr = True
-            thr_str = ('Rejected all data outside ('
-                       f'{min_value}, {max_value}) {unit}.')
-            ds[variable].attrs['valid_max'] = max_value
-            ds[variable].attrs['valid_min'] = min_value
+        if cut_min is None and cut_max is None:
+            cut_info_text.value = (
+                f'Nothing applied: all {variable} values are within the range.')
+            return
 
-        if thr:
-            # Count non-nan values in the dataset
-            count_valid_before = int(ds[variable].count())
+        count_valid_before = int(ds[variable].count())
 
-            ds_thr = threshold(ds=ds.copy(deep=True), variable = variable,
-                        max_val = max_value, min_val = min_value)
-            ds[variable] = ds_thr[variable]
+        ds_thr = threshold(ds=ds, variable=variable,
+                           min_val=cut_min, max_val=cut_max)
+        ds[variable] = ds_thr[variable]
 
-            # Count non-nan values in the dataset
-            count_valid_after = int(ds[variable].count())
+        points_cut = count_valid_before - int(ds[variable].count())
 
-            # Calculate the number of points that would be dropped by the
-            # threshold cut
-            points_cut = count_valid_before - count_valid_after
-            #points_pct = points_cut / count_valid_before * 100
+        # Update plots (overwrites the info line, so set it afterwards)
+        update_plots(min_value, max_value, variable)
 
-
-            # Update plots
-            update_plots(min_value, max_value, variable)
+        unit = ds[variable].attrs.get('units', '')
+        unit = '' if unit == '1' else f' {unit}'
+        if cut_min is not None and cut_max is not None:
+            kept = f'kept {cut_min} to {cut_max}{unit}'
+        elif cut_min is not None:
+            kept = f'rejected values below {cut_min}{unit}'
+        else:
+            kept = f'rejected values above {cut_max}{unit}'
+        cut_info_text.value = (
+            f'Applied to {variable} ({kept}). Removed {points_cut} data points.')
 
 
     # Create a button to minimize the plot

@@ -775,3 +775,13 @@ def test_replace_with_scalar_lat_lon_coords(ds_1d):
     np.testing.assert_allclose(ds_new['TEMP1'].isel(TIME=[0, 5]),
                                ds['TEMP1'].isel(TIME=[0, 5]))
     assert float(ds_new.LATITUDE) == 78.0
+
+
+def test_threshold_equal_limits_keep_only_that_value():
+    """min_val == max_val is a valid (narrow) range; min_val > max_val is not."""
+    ds = xr.Dataset({"T": ("TIME", [1.0, 2.0, 2.0, 3.0])},
+                    coords={"TIME": [0, 1, 2, 3]})
+    out = edit.threshold(ds, "T", min_val=2.0, max_val=2.0)
+    np.testing.assert_array_equal(out.T.values, [np.nan, 2.0, 2.0, np.nan])
+    with pytest.raises(ValueError, match="must not be smaller"):
+        edit.threshold(ds, "T", min_val=3.0, max_val=2.0)
