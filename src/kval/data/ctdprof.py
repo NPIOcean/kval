@@ -818,19 +818,19 @@ def hand_remove_points(
     Use the interactive plot to select points for removal, then click the
     corresponding buttons for actions.
 
-    Unlike most kval functions, this modifies `ds` in place (in addition
-    to returning it), since the interactive editing session needs to act
-    on the same object the user is clicking on.
-
+    The input `ds` is not modified: the editing session works on a copy,
+    which is the dataset returned. The edits are applied to it when you
+    click "Exit and apply", i.e. after this function has returned.
     """
 
-    # Deliberately skip using a deep copy - we need to change this object in place.
-    #ds = ds.copy(deep=True) 
+    # Safe to copy: the "Exit and apply" callback edits the object it was
+    # given in place (remove_points_profile(..., deep_copy=False)), and that
+    # object is the one returned here.
+    ds = ds.copy(deep=True)
 
     hand_remove = ctd_edit.hand_remove_points(ds, variable, TIME_index)
-    ds = hand_remove.d
 
-    return ds
+    return hand_remove.ds
 
 
 def apply_threshold(ds: xr.Dataset) -> xr.Dataset:

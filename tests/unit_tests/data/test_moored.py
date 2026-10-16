@@ -1574,3 +1574,51 @@ def test_plot_hourly_controls_only_for_sub_daily_data(freq, hourly_shown):
               if hasattr(box, "children")]
     assert ("Hourly mean" in labels) == hourly_shown
     assert "Daily mean" in labels
+
+
+# hand_remove_points: returns the edited copy, leaves the input unchanged
+
+def test_hand_remove_points_returns_edited_copy(monkeypatch):
+    """hand_remove_points used to edit the input in place. Simulates
+    selecting points and clicking "Exit and apply" after the function has
+    returned, as happens in a notebook. Also guards the deep_copy=False in
+    the apply callback: if that copies, the returned dataset gets no edits."""
+    import matplotlib.pyplot as plt
+    from kval.data import moored
+    from kval.data.moored_tools import _moored_tools
+
+    # Outside a notebook kval calls plt.show(), which warns with the
+    # non-interactive test backend; nothing needs to be shown here.
+    monkeypatch.setattr(plt, "show", lambda *a, **k: None)
+    editors = []
+    Editor = _moored_tools.hand_remove_points
+
+    class CapturingEditor(Editor):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            editors.append(self)
+
+    monkeypatch.setattr(_moored_tools, "hand_remove_points", CapturingEditor)
+
+    ds = xr.Dataset(
+        {"PSAL": ("TIME", 34.0 + np.zeros(50), {"units": "1"}),
+         "TEMP": ("TIME", np.ones(50), {"units": "degC"})},
+        coords={"TIME": ("TIME", np.arange(50) / 24.0,
+                         {"units": "days since 1970-01-01"})})
+
+    ds_out = moored.hand_remove_points(ds, "TEMP", variable_edit="PSAL")
+
+    editor = editors[-1]
+    editor.remove_bool[[3, 4, 5]] = True
+    editor.exit_and_apply_var(None)
+    plt.close("all")
+
+    assert ds_out is not ds
+    # Input untouched
+    assert int(ds.PSAL.isnull().sum()) == 0
+    assert "manual_editing" not in ds.PSAL.attrs
+    # Edits in the returned dataset, on the edited variable only
+    assert int(ds_out.PSAL.isnull().sum()) == 3
+    assert ds_out.PSAL.isel(TIME=[3, 4, 5]).isnull().all()
+    assert int(ds_out.TEMP.isnull().sum()) == 0
+    assert ds_out.PSAL.attrs["manual_editing"].startswith("3 data points")

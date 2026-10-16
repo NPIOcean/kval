@@ -786,12 +786,12 @@ def hand_remove_points(
     variable_edit: str | None = None,
 ) -> xr.Dataset:
     """
-    Interactively remove data points from CTD profiles.
+    Interactively remove data points from a 1D moored time series.
 
     Parameters
     ----------
     ds : xr.Dataset
-        The dataset containing the CTD data.
+        The dataset containing the data.
     variable : str
         The name of the variable to visualize (e.g., 'TEMP1', 'CHLA').
     variable_edit : str or None, optional
@@ -805,21 +805,16 @@ def hand_remove_points(
 
     Examples
     --------
-    >>> ds = hand_remove_points(ds, 'TEMP1', 'StationA')
+    >>> ds = hand_remove_points(ds, 'TEMP1')
 
     Notes
     -----
     Use the interactive plot to select points for removal, then click the
     corresponding buttons for actions.
-
-    Unlike most kval functions, this modifies `ds` in place (in addition
-    to returning it), since the interactive editing session needs to act
-    on the same object the user is clicking on.
     """
 
-    # Note: deliberately *not* doing a reep copy here-
-    # we to modify it in place for this to work.
-    # ds = ds.copy(deep=True) 
+    # Using a deep copy here
+    ds = ds.copy(deep=True) 
 
     if not variable_edit:
         variable_edit = variable

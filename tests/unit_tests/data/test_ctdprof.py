@@ -200,3 +200,50 @@ def test_to_csv_numeric_and_datetime_time(tmp_path, datetime_time):
     assert "2024-05-01 10:00:00" in text
     assert "2024-05-02 11:30:00" in text
     assert "st02" in text
+
+
+# hand_remove_points: returns the edited copy, leaves the input unchanged
+
+def test_hand_remove_points_returns_edited_copy(monkeypatch):
+    """Used to raise AttributeError (returned `.d`) and edit the input
+    in place. Simulates selecting points and clicking "Exit and apply"
+    after the function has returned, as happens in a notebook."""
+    import matplotlib.pyplot as plt
+    from kval.data.ctdprof_tools import _ctdprof_edit
+
+    monkeypatch.setattr(_ctdprof_edit.internals, "check_interactive",
+                        lambda *a, **k: None)
+    # Outside a notebook kval calls plt.show(), which warns with the
+    # non-interactive test backend; nothing needs to be shown here.
+    monkeypatch.setattr(plt, "show", lambda *a, **k: None)
+    editors = []
+    Editor = _ctdprof_edit.hand_remove_points
+
+    class CapturingEditor(Editor):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            editors.append(self)
+
+    monkeypatch.setattr(_ctdprof_edit, "hand_remove_points", CapturingEditor)
+
+    ds = xr.Dataset(
+        {"TEMP": (("TIME", "PRES"), np.ones((3, 20)), {"units": "degC"}),
+         "STATION": ("TIME", ["st01", "st02", "st03"])},
+        coords={"TIME": ("TIME", [1.0, 2.0, 3.0],
+                         {"units": "days since 1970-01-01"}),
+                "PRES": ("PRES", np.arange(20.0), {"units": "dbar"})})
+
+    ds_out = ctdprof.hand_remove_points(ds, "TEMP", 1)
+
+    editor = editors[-1]
+    editor.remove_bool[[3, 4, 5]] = True
+    editor.exit_and_apply_var(None)
+    plt.close("all")
+
+    assert ds_out is not ds
+    assert int(ds.TEMP.isnull().sum()) == 0
+    assert int(ds_out.TEMP.isnull().sum()) == 3
+    assert ds_out.TEMP.isel(TIME=1, PRES=[3, 4, 5]).isnull().all()
+    assert ds_out.TEMP.isel(TIME=[0, 2]).notnull().all()
+    assert "manual_editing" in ds_out.TEMP.attrs
+    assert "manual_editing" not in ds.TEMP.attrs
