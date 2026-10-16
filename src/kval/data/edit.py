@@ -1210,8 +1210,9 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
     apply_button.on_click(apply_cut)
 
     # Text widget to display the cut information
+    # (no style: TextStyle has no `color`, so it was always ignored)
     cut_info_text = widgets.Text(value='', description='', disabled=True,
-                        layout={'width': '600px'}, style={'color': 'black'})
+                        layout={'width': '600px'})
 
     # Function to update the cut information text
     def update_cut_info_text(variable, points_cut, points_pct):
