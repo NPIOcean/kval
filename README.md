@@ -30,26 +30,29 @@ ___
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10360162.svg)](https://doi.org/10.5281/zenodo.10360162)
 
-About the latest release, `0.6.0`:
-
-
 > ***NOTE*** 0.6 changes some behaviour and defaults. Results can differ slightly from 0.5. 
 
-**New**
-- Time averaging function now records what it did in a CF-compatible format (`TIME_bnds`, `cell_methods`), with optional sample counts, standard deviations and medians.
-- `combine_datasets` works with calendar intervals; `dataset_size(ds)` shows how large a dataset is.
+___
+
+About the latest release, `0.6.1`:
+
+
+
+
+**Changes**
+- Consistent behaviour: Functions in moored, ctdprof and metadata no longer change the input dataset. Assign the result: `ds = func(ds, ...)`.
+- Interactive tools (`moored.plot`, `threshold_pick`, `tsplot_pick`, hand editing, the IOOS compliance report) now keep a static picture or text in the saved notebook, so the output is visible outside a live Jupyter session (e.g. on GitHub). This is not necessarily perfect (the best way to view notebooks is in JupyterLab), but it is better than displaying an empty or broken plot.
+    - Tested with both ipywidgets 7 and 8.
 
 **Fixes**
-- `.cnv` files could lose their first data row; SBE56 `.csv` dates could be read month-first - both fixed
-- Fixes to RBR reading, despiking of 2-D data, `principal_angle`, `psd`, magnetic declination and ACDD metadata (`geospatial_bounds`), plus many smaller ones.
+- `threshold_pick`: "Apply" now removes exactly what the preview shows; limits that cut nothing no longer add attributes.
+- `ctdprof.hand_remove_points` returned the wrong object.
+- `edit.replace` failed on datasets with scalar coordinates (e.g. LATITUDE/LONGITUDE).
+- `to_netcdf` gives a clear error when the output directory does not exist (previously reported as "file already exists").
 
-**Breaking changes**
-- `drop_variables` takes `retain`/`drop` by name only.
-- Daily averaging bins run midnight to midnight; `combine_datasets` keeps TIME in its input form.
-- float64 is kept; int64 is written as int32.
 
-**Dependencies**
-- Requires `pandas>=2.2`; `glob2` and `xlrd` are no longer needed; `kval.util.era5` is removed.
+___
+
 
 `kval` is in active development.
 
