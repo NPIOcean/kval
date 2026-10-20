@@ -266,9 +266,9 @@ def _threshold_widget(monkeypatch, values):
 
     shown = []
     monkeypatch.setattr(edit, "display", lambda x, *a, **k: shown.append(x))
-    # The widget is displayed through display_with_snapshot
-    monkeypatch.setattr(edit.internals, "display_with_snapshot",
-                        lambda x, *a, **k: shown.append(x))
+    # The widget is displayed through FigureSnapshot.display
+    monkeypatch.setattr(edit.internals.FigureSnapshot, "display",
+                        lambda self, x, *a, **k: shown.append(x))
     monkeypatch.setattr(edit, "clear_output", lambda *a, **k: None)
     monkeypatch.setattr(plt, "show", lambda *a, **k: None)
 

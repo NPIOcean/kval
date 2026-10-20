@@ -705,6 +705,9 @@ class tsplot_pick:
         self.ds = ds
         self.tsplot_kwargs = tsplot_kwargs
         self.fig = None  # tracked so _redraw can close the previous one
+        # Static picture of the current figure, saved next to the widget
+        # for viewers that can't run widgets (e.g. GitHub)
+        self.snapshot = internals.FigureSnapshot()
 
         color_options = [None] + list(ds.coords) + list(ds.data_vars)
 
@@ -765,9 +768,8 @@ class tsplot_pick:
             layout=widgets.Layout(width='620px'))
 
         self._redraw(None)
-        # Displayed after the first draw, so a picture of the figure can be
-        # attached for viewers that can't run widgets (e.g. GitHub)
-        internals.display_with_snapshot(self.widget_box, self.fig)
+        # Displayed after the first draw, so the picture starts out right
+        self.snapshot.display(self.widget_box)
 
     def _on_close(self, _):
         """Close the figure and the widget controls, to avoid leaving a
@@ -811,6 +813,7 @@ class tsplot_pick:
                 grid=self.grid_checkbox.value,
                 bins=self.bins_slider.value,
                 **self.tsplot_kwargs)
+            self.snapshot.follow(self.fig)
             # tsplot() now handles displaying the figure it creates
             # internally (see its own ioff()/display() logic) -- calling
             # plt.show() again here would duplicate it

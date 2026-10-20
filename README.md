@@ -25,7 +25,6 @@ Pip [^tag] :
 
 [^tag]: Conda is recommended for Windows users as we have experienced errors with the dependent library `compliance-checker` on Windows+pip.
 
-
 ___
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10360162.svg)](https://doi.org/10.5281/zenodo.10360162)
@@ -35,9 +34,6 @@ ___
 ___
 
 About the latest release, `0.6.1`:
-
-
-
 
 **Changes**
 - Consistent behaviour: Functions in moored, ctdprof and metadata no longer change the input dataset. Assign the result: `ds = func(ds, ...)`.
@@ -49,7 +45,6 @@ About the latest release, `0.6.1`:
 - `ctdprof.hand_remove_points` returned the wrong object.
 - `edit.replace` failed on datasets with scalar coordinates (e.g. LATITUDE/LONGITUDE).
 - `to_netcdf` gives a clear error when the output directory does not exist (previously reported as "file already exists").
-
 
 ___
 

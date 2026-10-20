@@ -135,7 +135,11 @@ class hand_remove_points:
         # Display the widgets
         display(self.widgets_all)
         display(self.output_widget)
-        internals.show_figure(self.fig)
+        # Shown with a saved picture (for e.g. GitHub) that follows the
+        # edits, rather than ipympl's picture of the first state (kept on
+        # self: matplotlib only holds draw callbacks weakly)
+        self.snapshot = internals.FigureSnapshot()
+        self.snapshot.display_figure(self.fig)
 
     def onselect(self, eclick, erelease):
         """

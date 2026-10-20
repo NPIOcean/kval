@@ -178,7 +178,11 @@ class hand_remove_points:
             widgets.VBox([self.widgets_all, self.output_widget]),
             'Interactive controls (buttons): run the notebook in Jupyter '
             'to use them.')
-        internals.show_figure(self.fig)
+        # Shown with a saved picture (for e.g. GitHub) that follows the
+        # edits, rather than ipympl's picture of the first state
+        # (kept on self: matplotlib only holds draw callbacks weakly)
+        self.snapshot = internals.FigureSnapshot()
+        self.snapshot.display_figure(self.fig)
 
     def onselect(self, eclick, erelease):
         """
@@ -583,7 +587,13 @@ def inspect_time_series(ds: xr.Dataset) -> None:
         fig.canvas.header_visible = False  # Hide the figure header
         plt.tight_layout()
 
+        # The saved picture (for e.g. GitHub) follows the new figure
+        snapshot.follow(fig)
         display(fig.canvas)
+
+    # Static picture of the current figure, saved next to the widget for
+    # viewers that can't run widgets (e.g. GitHub)
+    snapshot = internals.FigureSnapshot()
 
     # Define interaction without calling display explicitly
     interact_plot = widgets.interactive(
@@ -600,6 +610,5 @@ def inspect_time_series(ds: xr.Dataset) -> None:
     # Display controls and plot
     container = widgets.VBox([controls, interact_plot.children[-1]],
                              layout=widgets.Layout(padding='0px', margin='0px'))
-    # interactive() has already drawn the first figure; attach a picture
-    # of it for viewers that can't run widgets (e.g. GitHub)
-    internals.display_with_snapshot(container, _current_fig['fig'])
+    # interactive() has already drawn the first figure
+    snapshot.display(container)
