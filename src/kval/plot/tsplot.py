@@ -764,8 +764,10 @@ class tsplot_pick:
              self.output],
             layout=widgets.Layout(width='620px'))
 
-        display(self.widget_box)
         self._redraw(None)
+        # Displayed after the first draw, so a picture of the figure can be
+        # attached for viewers that can't run widgets (e.g. GitHub)
+        internals.display_with_snapshot(self.widget_box, self.fig)
 
     def _on_close(self, _):
         """Close the figure and the widget controls, to avoid leaving a

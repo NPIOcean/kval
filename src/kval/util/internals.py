@@ -110,6 +110,93 @@ def show_figure(fig):
         fig.canvas.draw()
 
 
+def _widget_bundle(widget):
+    """
+    The widget's display data (a dict with the widget-view mime type), or
+    None if it can't be had -- e.g. ipywidgets 7, which has no
+    _repr_mimebundle_. Callers then fall back to a plain display(widget).
+    """
+    repr_bundle = getattr(widget, '_repr_mimebundle_', None)
+    if repr_bundle is None:
+        return None
+    try:
+        bundle = repr_bundle()
+    except Exception:
+        return None
+    if not bundle or 'application/vnd.jupyter.widget-view+json' not in bundle:
+        return None
+    return dict(bundle)
+
+
+def display_with_snapshot(widget, fig=None):
+    """
+    Display an interactive widget, with a static picture of `fig` attached.
+
+    In a live notebook only the interactive widget is shown. Viewers that
+    cannot run widgets (e.g. GitHub's notebook preview) show the picture
+    instead: `fig` as it looks when the widget is first displayed. This is
+    the same fallback ipympl gives plain figures: one output holding both
+    the widget and a PNG.
+
+    If no picture can be made (no figure, or not in a notebook), this is
+    just display(widget).
+    """
+    import base64
+    import io
+    from IPython.display import display
+
+    if fig is None or not is_notebook():
+        display(widget)
+        return
+
+    bundle = _widget_bundle(widget)
+    if bundle is None:
+        display(widget)
+        return
+
+    try:
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi='figure')
+    except Exception:
+        display(bundle, raw=True)  # The widget alone, without a picture
+        return
+
+    png = base64.b64encode(buf.getvalue()).decode('ascii')
+    # Display width in CSS pixels (ipympl doubles the dpi on HiDPI screens)
+    width = int(fig.get_figwidth() * fig.dpi
+                / getattr(fig.canvas, 'device_pixel_ratio', 1))
+    bundle['image/png'] = png
+    bundle['text/html'] = (
+        f"<img src='data:image/png;base64,{png}' width={width}/>")
+    display(bundle, raw=True)
+
+
+def display_with_text(widget, text):
+    """
+    Display an interactive widget, with `text` attached as a static copy.
+
+    Like display_with_snapshot(), but for widgets that show text (e.g. a
+    report): live notebooks show the widget, viewers that cannot run
+    widgets (e.g. GitHub's notebook preview) show `text` as preformatted
+    text.
+    """
+    import html
+    from IPython.display import display
+
+    if not text or not is_notebook():
+        display(widget)
+        return
+
+    bundle = _widget_bundle(widget)
+    if bundle is None:
+        display(widget)
+        return
+
+    bundle['text/plain'] = text
+    bundle['text/html'] = f"<pre>{html.escape(text)}</pre>"
+    display(bundle, raw=True)
+
+
 
 @contextlib.contextmanager
 def loud_output(output_widget):

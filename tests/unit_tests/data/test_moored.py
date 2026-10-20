@@ -1567,7 +1567,10 @@ def test_plot_hourly_controls_only_for_sub_daily_data(freq, hourly_shown):
         if isinstance(obj, widgets.Box):  # the container, not the canvas
             shown["obj"] = obj
 
-    with mock.patch.object(_moored_tools, "display", fake_display):
+    # The container is displayed through display_with_snapshot
+    with mock.patch.object(_moored_tools, "display", fake_display), \
+            mock.patch.object(_moored_tools.internals, "display_with_snapshot",
+                              lambda obj, *a, **k: fake_display(obj)):
         _moored_tools.inspect_time_series(ds)
     controls = shown["obj"].children[0]
     labels = [box.children[0].description for box in controls.children

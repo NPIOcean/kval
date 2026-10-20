@@ -170,10 +170,15 @@ class hand_remove_points:
                                          widgets.Output(), self.buttons_container_2,
                                          self.buttons_container_3,])
 
-        # Display the widgets
-        display(self.widgets_all)
-        display(self.output_widget)
-        internals.show_figure(self.fig) 
+        # Display the widgets, as one output with a short note as its static
+        # fallback (viewers that can't run widgets, e.g. GitHub, would
+        # otherwise show "VBox(children=..." and "Output()"). The figure
+        # below carries its own picture.
+        internals.display_with_text(
+            widgets.VBox([self.widgets_all, self.output_widget]),
+            'Interactive controls (buttons): run the notebook in Jupyter '
+            'to use them.')
+        internals.show_figure(self.fig)
 
     def onselect(self, eclick, erelease):
         """
@@ -595,4 +600,6 @@ def inspect_time_series(ds: xr.Dataset) -> None:
     # Display controls and plot
     container = widgets.VBox([controls, interact_plot.children[-1]],
                              layout=widgets.Layout(padding='0px', margin='0px'))
-    display(container)
+    # interactive() has already drawn the first figure; attach a picture
+    # of it for viewers that can't run widgets (e.g. GitHub)
+    internals.display_with_snapshot(container, _current_fig['fig'])

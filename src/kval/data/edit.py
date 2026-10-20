@@ -981,6 +981,8 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
     )
 
     # Function to update plots based on variable, xvar, and max depth selection
+    current_fig = {'fig': None}  # Latest histogram, for the static snapshot
+
     def update_plots(min_value, max_value, variable):
         """
         Helper function to update plots based on variable, min, and max values.
@@ -1008,6 +1010,7 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
             fig = plt.figure(figsize=(6, 3))
             ax0 = plt.subplot2grid((1, 1), (0, 0))
             fig.canvas.header_visible = False  # Hide the figure header
+        current_fig['fig'] = fig
 
         var_range = (np.nanmin(ds[variable].values),
                      np.nanmax(ds[variable].values))
@@ -1314,5 +1317,7 @@ def threshold_edit(ds: xr.Dataset, variables: list[str]) -> None:
     ])
 
 
-    # Display the initial state of the title text
-    display(widgets_collected)
+    # Display the initial state of the title text (interactive_output has
+    # already drawn the first histogram; attach a picture of it for viewers
+    # that can't run widgets, e.g. GitHub)
+    internals.display_with_snapshot(widgets_collected, current_fig['fig'])

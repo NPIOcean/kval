@@ -27,7 +27,7 @@ import xarray as xr
 from IPython.display import display, clear_output
 import ipywidgets as widgets
 
-from kval.util import netcdf
+from kval.util import internals, netcdf
 from kval.util import time as _time
 
 # Conditional import for compliance-checker
@@ -216,6 +216,20 @@ def _compliance_checks_ioos_with_button(file):
     """
     _require_compliance_checker()
 
+    # Run the checker first and keep its report as text, so a copy can be
+    # stored with the output for viewers that can't run widgets (e.g.
+    # GitHub's notebook preview). If the checker fails, show what it
+    # printed before re-raising.
+    captured = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(captured), \
+                contextlib.redirect_stderr(captured):
+            _compliance_checks_ioos_plain(file)
+    except Exception:
+        sys.stdout.write(captured.getvalue())
+        raise
+    report = captured.getvalue()
+
     output_widget = widgets.Output()
 
     def on_button_click(b):
@@ -230,10 +244,11 @@ def _compliance_checks_ioos_with_button(file):
     close_button = widgets.Button(description="Close")
     close_button.on_click(on_button_click)
 
-    display(widgets.VBox([close_button, output_widget]))
-
     with output_widget:
-        _compliance_checks_ioos_plain(file)
+        print(report, end='')
+
+    internals.display_with_text(
+        widgets.VBox([close_button, output_widget]), report)
 
 
 def compliance_checks_custom(ds: xr.Dataset) -> None:
